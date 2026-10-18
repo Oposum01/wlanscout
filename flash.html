@@ -1,0 +1,387 @@
+<!doctype html>
+<!--
+  wlanscout+ flasher: writes the firmware to an ESP32-C5 on the
+  phone's USB-C port with esptool-js over WebUSB. Copied next to
+  the static page by tools/make_static.py --firmware, which also
+  puts the four firmware parts beside it and fills in 2.6.3.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wlanscout+ flasher</title>
+<style>
+:root {
+    --bg: #111;
+    --panel: #1b1b1b;
+    --line: #333;
+    --text: #ddd;
+    --dim: #888;
+    --ok: #8fbf8f;
+    --bad: #d08080;
+    --bar: #2f7ea6;
+}
+
+body {
+    margin: 0;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.4 system-ui, sans-serif;
+}
+
+h1 {
+    font-size: 18px;
+    margin: 0 0 4px;
+}
+
+.dim {
+    color: var(--dim);
+}
+
+.box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 12px 0;
+}
+
+button {
+    background: #2a2a2a;
+    border: 1px solid #555;
+    color: var(--text);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin: 0 6px 6px 0;
+    font-size: 15px;
+}
+
+button:disabled {
+    opacity: 0.4;
+}
+
+#bar {
+    height: 10px;
+    background: #2a2a2a;
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 8px 0;
+}
+
+#bar div {
+    height: 100%;
+    width: 0;
+    background: var(--bar);
+}
+
+#state.ok {
+    color: var(--ok);
+}
+
+#state.bad {
+    color: var(--bad);
+}
+
+pre {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: 11px;
+    margin: 0;
+    max-height: 50vh;
+    overflow: auto;
+}
+</style>
+</head>
+<body>
+
+<h1>wlanscout+ flasher <span class="dim">v2.6.3</span></h1>
+<div class="dim">
+Writes wlanscout+ to an ESP32-C5: bootloader, partition table, boot
+selection and firmware, each to its own address as the Arduino IDE
+does. Settings and the IE catalog on the board stay. Plug the board's
+USB-C port marked <b>USB</b> (not UART) into the phone. A new board
+needs no button; if it does not connect, hold BOOT while plugging it
+in.
+</div>
+
+<div class="box">
+<button id="flash">Flash firmware</button>
+<div>State: <span id="state">idle</span></div>
+<div id="bar"><div></div></div>
+<div class="dim" id="detail"></div>
+</div>
+
+<div class="box">
+<b>Log</b>
+<pre id="log"></pre>
+</div>
+
+<script type="module">
+import { ESPLoader, Transport }
+    from "https://cdn.jsdelivr.net/npm/esptool-js@0.7.0/bundle.js";
+
+const $ = id => document.getElementById(id);
+
+// The parts and where they go, as in FLASH.txt
+// Where the parts lie, next to this page or in a folder of their own
+const PARTS_DIR = "firmware/";
+
+const PARTS = [
+    { file: "wlanscout.ino.bootloader.bin", address: 0x2000 },
+    { file: "wlanscout.ino.partitions.bin", address: 0x8000 },
+    { file: "boot_app0.bin",                address: 0xe000 },
+    { file: "wlanscout.ino.bin",            address: 0x10000 }
+];
+
+function log(text)
+{
+    $("log").textContent += text + "\n";
+    $("log").scrollTop = $("log").scrollHeight;
+}
+
+function setState(text, cls)
+{
+    $("state").textContent = text;
+    $("state").className = cls || "";
+}
+
+const errText = e => (e && e.message) || String(e);
+
+/*
+ * The ESP's own USB port (USB Serial/JTAG) as a Web Serial
+ * SerialPort for esptool-js, over WebUSB. esptool-js ships a
+ * WebUSB port for CH340 bridges only, and Google's polyfill
+ * breaks on the empty packets the ESP ends its transfers with;
+ * those are skipped here.
+ */
+class EspUsbPort
+{
+    constructor(device)
+    {
+        this.device = device;
+        this.readable = null;
+        this.writable = null;
+        this.dtr = false;
+        this.rts = false;
+    }
+
+    static async request()
+    {
+        return new EspUsbPort(await navigator.usb.requestDevice(
+            { filters: [{ vendorId: 0x303a }] }));
+    }
+
+    getInfo()
+    {
+        return { usbVendorId: this.device.vendorId,
+                 usbProductId: this.device.productId };
+    }
+
+    async open()
+    {
+        const d = this.device;
+
+        if (!d.opened)
+            await d.open();
+
+        if (!d.configuration)
+            await d.selectConfiguration(1);
+
+        const ifaces = d.configuration.interfaces;
+
+        this.ctrl = ifaces.find(i => i.alternates[0].interfaceClass === 2);
+        this.data = ifaces.find(i => i.alternates[0].interfaceClass === 10);
+
+        await d.claimInterface(this.ctrl.interfaceNumber);
+        await d.claimInterface(this.data.interfaceNumber);
+
+        const eps = this.data.alternates[0].endpoints;
+
+        this.epIn = eps.find(e => e.direction === "in");
+        this.epOut = eps.find(e => e.direction === "out");
+
+        log("USB: " + (d.productName || "?") + " " +
+            d.vendorId.toString(16) + ":" + d.productId.toString(16) +
+            ", endpoints in " + this.epIn.endpointNumber +
+            " out " + this.epOut.endpointNumber);
+
+        this.closed = false;
+
+        this.readable = new ReadableStream({
+            pull: async controller =>
+            {
+                while (!this.closed)
+                {
+                    let r;
+
+                    try
+                    {
+                        r = await d.transferIn(this.epIn.endpointNumber,
+                                               this.epIn.packetSize * 64);
+                    }
+                    catch (e)
+                    {
+                        if (!this.closed)
+                            controller.error(e);
+
+                        return;
+                    }
+
+                    if (r.data && r.data.byteLength)
+                    {
+                        controller.enqueue(new Uint8Array(r.data.buffer,
+                            r.data.byteOffset, r.data.byteLength));
+                        return;
+                    }
+                }
+            }
+        });
+
+        this.writable = new WritableStream({
+            write: async chunk =>
+            {
+                await d.transferOut(this.epOut.endpointNumber, chunk);
+            }
+        });
+    }
+
+    // SET_CONTROL_LINE_STATE: bit 0 DTR, bit 1 RTS
+    async setSignals(signals)
+    {
+        if (signals.dataTerminalReady !== undefined)
+            this.dtr = signals.dataTerminalReady;
+
+        if (signals.requestToSend !== undefined)
+            this.rts = signals.requestToSend;
+
+        await this.device.controlTransferOut({
+            requestType: "class", recipient: "interface", request: 0x22,
+            value: (this.dtr ? 1 : 0) | (this.rts ? 2 : 0),
+            index: this.ctrl.interfaceNumber });
+    }
+
+    async close()
+    {
+        this.closed = true;
+        this.readable = null;
+        this.writable = null;
+
+        try
+        {
+            await this.device.close();
+        }
+        catch (e)
+        {
+        }
+    }
+}
+
+const terminal = {
+    clean() { },
+    writeLine(line) { log(line); },
+    write(text) { log(text); }
+};
+
+$("flash").onclick = async () =>
+{
+    if (!navigator.usb)
+    {
+        setState("this browser has no WebUSB (Chrome needed)", "bad");
+        return;
+    }
+
+    $("flash").disabled = true;
+    $("bar").firstElementChild.style.width = "0";
+
+    let transport = null;
+
+    try
+    {
+        setState("loading the firmware files");
+
+        const fileArray = [];
+
+        for (const part of PARTS)
+        {
+            const response = await fetch(PARTS_DIR + part.file,
+                                         { cache: "no-store" });
+
+            if (!response.ok)
+                throw new Error(part.file + ": HTTP " + response.status);
+
+            const data = new Uint8Array(await response.arrayBuffer());
+
+            log(part.file + ": " + data.length + " bytes at 0x" +
+                part.address.toString(16));
+
+            fileArray.push({ data, address: part.address });
+        }
+
+        setState("choose the board");
+
+        const port = await EspUsbPort.request();
+
+        transport = new Transport(port, false);
+
+        const loader = new ESPLoader({
+            transport,
+            baudrate: 115200,
+            terminal
+        });
+
+        setState("connecting");
+
+        const chip = await loader.main();
+
+        log("Chip: " + chip);
+        setState("writing");
+
+        const t0 = performance.now();
+
+        await loader.writeFlash({
+            fileArray,
+            flashMode: "keep",
+            flashFreq: "keep",
+            flashSize: "keep",
+            eraseAll: false,
+            compress: true,
+            reportProgress: (i, written, total) =>
+            {
+                $("bar").firstElementChild.style.width =
+                    (100 * written / total).toFixed(1) + "%";
+                $("detail").textContent = PARTS[i].file + ": " +
+                    Math.round(written / 1024) + " of " +
+                    Math.round(total / 1024) + " kB";
+            }
+        });
+
+        log("written in " +
+            ((performance.now() - t0) / 1000).toFixed(1) + " s");
+
+        await loader.after("hard_reset");
+
+        setState("done: the board restarts with wlanscout+", "ok");
+    }
+    catch (e)
+    {
+        log("ERROR: " + errText(e));
+        setState(errText(e), "bad");
+    }
+    finally
+    {
+        try
+        {
+            if (transport)
+                await transport.disconnect();
+        }
+        catch (e)
+        {
+        }
+
+        $("flash").disabled = false;
+    }
+};
+</script>
+</body>
+</html>

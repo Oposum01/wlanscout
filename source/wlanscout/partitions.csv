@@ -1,0 +1,13 @@
+# wlanscout partition table (16 MB flash), from 1.53.0 on.
+# Two 6.25 MB firmware slots for updates over the network (OTA)
+# and 3.4 MB LittleFS for the element catalog. nvs and otadata
+# sit where the former "Huge APP" table had them, so the settings
+# survive the switch. Arduino uses this file instead of the
+# Partition Scheme chosen in the Tools menu.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x640000,
+app1,     app,  ota_1,   0x650000,0x640000,
+spiffs,   data, spiffs,  0xc90000,0x360000,
+coredump, data, coredump,0xFF0000,0x10000,

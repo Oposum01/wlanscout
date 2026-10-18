@@ -1,0 +1,19 @@
+{
+ "version": "9.99.9",
+ "mode": 0,
+ "zbscan": 0,
+ "heap": 100000,
+ "oui": 40316,
+ "clients": 1,
+ "sensor": "test",
+ "scan": "ch   6",
+ "ip": "192.0.2.10",
+ "clock": 2,
+ "utc": "2026-10-11 14:22:31",
+ "tz": 120,
+ "tzlabel": "UTC+02:00",
+ "static": 0,
+ "link": 1,
+ "speed": 100,
+ "duplex": 1
+}

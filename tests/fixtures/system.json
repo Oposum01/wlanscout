@@ -1,0 +1,164 @@
+{
+ "version": "9.99.9",
+ "uptime": 235,
+ "oui": 40316,
+ "sensor": "test",
+ "sensorid": "02:00:00:00:00:FF",
+ "boot": 45,
+ "ota": {
+  "slot": "app0",
+  "size": 6553600,
+  "other": "app1",
+  "prev": "0.0.0",
+  "rollback": 1,
+  "failed": 0,
+  "pending": 0
+ },
+ "catalog": {
+  "enabled": 1,
+  "fs": 1,
+  "rows": 28,
+  "max": 256,
+  "used": 28672,
+  "total": 3538944
+ },
+ "clock": 2,
+ "utc": "2026-10-11 14:22:32",
+ "tz": 120,
+ "tzlabel": "UTC+02:00",
+ "ntpsync": "2026-10-11 14:18:42",
+ "ntpago": 230,
+ "ntpadjust": 0,
+ "ntpcount": 1,
+ "ntpinterval": 900,
+ "ntpserver": "pool.ntp.org",
+ "net": {
+  "ip": "192.0.2.10",
+  "gw": "192.0.2.1",
+  "mask": "255.255.248.0",
+  "dns": "192.0.2.1",
+  "mac": "02:00:00:00:00:FF",
+  "speed": 100,
+  "duplex": 1,
+  "link": 1,
+  "static": 0,
+  "dhcptries": 0,
+  "hostname": "wlanscout-test",
+  "dhcpstate": "running"
+ },
+ "mem": {
+  "heap": 111308,
+  "heapmin": 81452,
+  "heaptotal": 218576,
+  "block": 90100,
+  "psramtotal": 8388608,
+  "psramfree": 2915064
+ },
+ "alloc": [
+  {
+   "name": "networks",
+   "bytes": 97280,
+   "psram": 1
+  },
+  {
+   "name": "stations",
+   "bytes": 68000,
+   "psram": 1
+  },
+  {
+   "name": "assoc history",
+   "bytes": 83520,
+   "psram": 1
+  },
+  {
+   "name": "mgmt queue",
+   "bytes": 222720,
+   "psram": 1
+  },
+  {
+   "name": "data queue",
+   "bytes": 1536,
+   "psram": 1
+  },
+  {
+   "name": "ble devices",
+   "bytes": 5760,
+   "psram": 1
+  },
+  {
+   "name": "ble queue",
+   "bytes": 1792,
+   "psram": 1
+  },
+  {
+   "name": "event log",
+   "bytes": 8640,
+   "psram": 1
+  },
+  {
+   "name": "pcap ring",
+   "bytes": 3168000,
+   "psram": 1
+  },
+  {
+   "name": "beacon slots",
+   "bytes": 85760,
+   "psram": 1
+  },
+  {
+   "name": "assoc ring",
+   "bytes": 696000,
+   "psram": 1
+  },
+  {
+   "name": "pcap index",
+   "bytes": 12920,
+   "psram": 1
+  },
+  {
+   "name": "6 GHz BSS",
+   "bytes": 2720,
+   "psram": 1
+  },
+  {
+   "name": "bss names",
+   "bytes": 2304,
+   "psram": 1
+  },
+  {
+   "name": "802.15.4 nodes",
+   "bytes": 1440,
+   "psram": 1
+  },
+  {
+   "name": "energy history",
+   "bytes": 400000,
+   "psram": 1
+  }
+ ],
+ "counters": {
+  "sweeps": 157,
+  "mgmtdrops": 0,
+  "datadrops": 0,
+  "fcs": 0,
+  "selected": 41,
+  "plan": 10,
+  "fast": 1,
+  "mode": 0
+ },
+ "pcap": {
+  "count": 241,
+  "cap": 6000,
+  "total": 241,
+  "beacons": 55,
+  "beaconslots": 160,
+  "beacontotal": 10246,
+  "assoc": 0,
+  "assoccap": 300,
+  "assoctotal": 0,
+  "bytes": 40985,
+  "slot": 528,
+  "enabled": 1,
+  "mask": 15
+ }
+}

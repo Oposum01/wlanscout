@@ -1,0 +1,14604 @@
+// SPDX-License-Identifier: GPL-2.0-only WITH AdditionRef-wlanscout-linking-exception
+// SPDX-FileCopyrightText: 2026 Dr.-Ing. Simon Wunderlich Systementwicklung & Beratung
+// SPDX-FileContributor: Jan Fuchs <jf [at] simonwunderlich . de>
+
+/*
+ * index_html.h
+ *
+ * The web interface, kept out of the sketch on purpose.
+ *
+ * The Arduino builder generates function prototypes from the
+ * .ino file and inserts them before the first function it
+ * finds. With a raw string this large it eventually picked an
+ * insertion point inside the string, split it in two and left
+ * the compiler parsing JavaScript as C++. A header is never
+ * processed that way, so the problem cannot come back.
+ *
+ * Generated as part of ESP32-C5 wlanscout+, see
+ * wlanscout.ino.
+ */
+
+#ifndef INDEX_HTML_H
+#define INDEX_HTML_H
+
+#include <pgmspace.h>
+
+/*
+ * Favicon: a Wi-Fi fan in white on a light blue disc, in the
+ * same blue the interface uses for links and the current
+ * channel. SVG rather than ICO because it stays sharp at any
+ * size and costs a few hundred bytes.
+ */
+const char FAVICON_SVG[] PROGMEM = R"SVG(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<circle cx="32" cy="32" r="32" fill="#4ea3d8"/>
+<g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round">
+<path d="M7.4 29.8A30 30 0 0 1 56.6 29.8"/>
+<path d="M14.8 35.0A21 21 0 0 1 49.2 35.0"/>
+<path d="M22.2 40.1A12 12 0 0 1 41.8 40.1"/>
+</g>
+<circle cx="32" cy="47" r="4.5" fill="#ffffff"/>
+</svg>
+)SVG";
+
+const char INDEX_HTML[] PROGMEM = R"HTML(
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width,initial-scale=1">
+
+<title>ESP32-C5 wlanscout+</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #111;
+    color: #ddd;
+    font-family: Arial, sans-serif;
+}
+
+header {
+    padding: 15px 20px;
+    background: #1c1c1c;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+h1 {
+    margin: 0;
+    font-size: 21px;
+}
+
+.version {
+    color: #7a7a7a;
+    font-size: 12px;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 2px 6px;
+
+    /* Padded fields only hold their width in a fixed pitch
+       font with the spaces preserved */
+    font-family: "DejaVu Sans Mono", "Liberation Mono",
+                 Consolas, monospace;
+    white-space: pre;
+}
+
+/* The header buttons as one group, right-aligned: when they do
+   not fit beside the title they move to the next line together
+   instead of breaking up */
+.headerButtons {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+/* Short messages ("Connection lost", a refused command) on a line
+   of their own under the header, so they never squeeze it; the
+   padded fields are in the version badge */
+#status {
+    margin: 8px 15px 0 15px;
+    color: #aaa;
+    font-size: 13px;
+    font-family: "DejaVu Sans Mono", "Liberation Mono",
+                 Consolas, monospace;
+    overflow-wrap: anywhere;
+}
+
+#status:empty {
+    display: none;
+}
+
+/* Shown while the page reads a snapshot instead of the sensor */
+#snapshotBar {
+    display: none;
+    margin: 8px 15px 0 15px;
+    padding: 6px 10px;
+    border: 1px solid #8a6d2a;
+    border-radius: 4px;
+    background: #2a2210;
+    color: #e0c080;
+    font-size: 13px;
+}
+
+#snapshotBar.on {
+    display: block;
+}
+
+#snapshotBar button {
+    margin-left: 8px;
+}
+
+.section {
+    margin: 15px;
+    background: #181818;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.tab {
+    background: #222;
+    border: 1px solid #444;
+    color: #bbb;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* A label with a short form for phones */
+.narrowLabel {
+    display: none;
+}
+
+.tab.active {
+    background: #444;
+    color: white;
+}
+
+.view {
+    display: none;
+}
+
+/* Station tables: one at a time, so a growing table above does
+   not push the one under the pointer down */
+.subTabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.subTab {
+    background: #1c1c1c;
+    border: 1px solid #3a3a3a;
+    color: #aaa;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.subTab.active {
+    background: #3a3a3a;
+    color: white;
+}
+
+.stationPane {
+    display: none;
+}
+
+.stationPane.active {
+    display: block;
+}
+
+.view.active {
+    display: block;
+}
+
+.title {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.title.collapsible {
+    cursor: pointer;
+    user-select: none;
+}
+
+.title.collapsible:hover {
+    color: #fff;
+}
+
+.title .small {
+    font-weight: normal;
+    margin-left: 10px;
+}
+
+#sysTable td:first-child,
+#netTable td:first-child,
+#memTable td:first-child,
+#cntTable td:first-child {
+    color: #888;
+    width: 260px;
+}
+
+canvas {
+    width: 100%;
+    height: 300px;
+    background: #080808;
+    border: 1px solid #333;
+}
+
+#waterfall {
+    height: 450px;
+}
+
+#networkGraph {
+    height: 430px;
+    cursor: pointer;
+}
+
+#clientGraph {
+    height: 520px;
+    cursor: pointer;
+}
+
+#bleGraph {
+    height: 380px;
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+select,
+button,
+input[type=text] {
+    background: #222;
+    color: #ddd;
+    border: 1px solid #555;
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+
+button {
+    cursor: pointer;
+}
+
+button.modeBtn.active {
+    background: #1d4a63;
+    border-color: #2f7ea6;
+    color: #fff;
+}
+
+/* Page choice under the event log */
+.pager {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.pager button {
+    padding: 3px 9px;
+}
+
+.pager button.active {
+    background: #1d4a63;
+    border-color: #2f7ea6;
+    color: #fff;
+}
+
+.modeView {
+    display: none;
+}
+
+.modeView.active {
+    display: block;
+}
+
+#zbSpectrum {
+    height: 360px;
+    cursor: pointer;
+}
+
+#zbWaterfall {
+    height: 420px;
+}
+
+.modeNote {
+    margin: 0 15px 15px 15px;
+    padding: 8px 12px;
+    border: 1px solid #5a4416;
+    background: #2a2210;
+    color: #d8c48a;
+    border-radius: 4px;
+    font-size: 13px;
+    display: none;
+}
+
+.modeNote.on {
+    display: block;
+}
+
+button.paused {
+    background: #7a3b12;
+    border-color: #b4671f;
+    color: #fff;
+}
+
+.channels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.channelGroup {
+    margin-bottom: 12px;
+}
+
+.channelGroupTitle {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.channelBox {
+    display: inline-block;
+    padding: 4px 7px;
+    margin: 2px;
+    border: 1px solid #444;
+    border-radius: 3px;
+    background: #222;
+    cursor: pointer;
+}
+
+.channelBox input {
+    margin-right: 3px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+th,
+td {
+    padding: 6px;
+    border-bottom: 1px solid #333;
+    text-align: left;
+    white-space: nowrap;
+}
+
+th {
+    color: #aaa;
+    cursor: pointer;
+    user-select: none;
+}
+
+th:hover {
+    color: #fff;
+}
+
+/*
+ * Every table sits in one of these, see wrapTables(): a table
+ * wider than the screen scrolls on its own instead of widening
+ * the whole page, which on a phone left it without any way to
+ * reach the right-hand columns.
+ */
+.tableWrap {
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* The list of what the sensor reads, below the IE catalog */
+details.reads {
+    margin-top: 12px;
+}
+
+details.reads summary {
+    cursor: pointer;
+    color: #aaa;
+    user-select: none;
+}
+
+details.reads .readsGroup {
+    margin: 8px 0 2px;
+    color: #9cc4e8;
+}
+
+details.reads .readsItem {
+    display: inline-block;
+    margin: 1px 12px 1px 0;
+    color: #bbb;
+}
+
+/* Column widths come from the header row and never move */
+table.fixedCols {
+    table-layout: fixed;
+
+    /* Keeps room for the SSID column on narrow windows */
+    min-width: 1340px;
+}
+
+table.fixedCols td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/*
+ * The IE catalog fits the width of the other tables: a long name,
+ * vendor or example wraps instead of being cut off or pushing the
+ * pcap link out of sight.
+ */
+#catalogTable td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+th .arrow {
+    color: #00aaff;
+    font-size: 10px;
+}
+
+tbody tr:hover {
+    background: #202020;
+}
+
+tbody tr.highlight {
+    background: #2b3a44;
+}
+
+span.dim {
+    color: #555;
+}
+
+a.dl {
+    color: #4ea3d8;
+    text-decoration: none;
+    border-bottom: 1px dotted #33607d;
+}
+
+a.dl:hover {
+    color: #8fd0f5;
+}
+
+/* At least one association request was captured, so the
+   capability data for this station is the complete set */
+tbody tr.assocSeen {
+    background: #16301c;
+}
+
+tbody tr.assocSeen:hover {
+    background: #1e4027;
+}
+
+tbody tr.assocSeen.highlight {
+    background: #2b4a3a;
+}
+
+.networkControls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* Right end of the row, above the graph's top right corner */
+.flushBtn {
+    margin-left: auto;
+}
+
+/* In a snapshot there is no live table to empty */
+.flushBtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.small {
+    font-size: 12px;
+    color: #888;
+}
+
+#tip {
+    position: fixed;
+    display: none;
+    pointer-events: none;
+    background: #000;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #ddd;
+    z-index: 50;
+    max-width: min(420px, 92vw);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.7);
+}
+
+/* Close button, only where nothing hovers: a tap opens the
+   tooltip and no "mouse leaves" ever comes to close it */
+#tip .tipClose {
+    display: none;
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    pointer-events: auto;
+    background: none;
+    border: none;
+    color: #bbb;
+    font-size: 20px;
+    line-height: 1;
+    padding: 2px 6px;
+}
+
+@media (hover: none) {
+    /* Taps reach it, so one taller than the screen can be scrolled */
+    #tip {
+        padding-top: 26px;
+        pointer-events: auto;
+    }
+
+    #tip .tipClose {
+        display: block;
+    }
+}
+
+/* Pinned by a click: it takes the mouse, see pinOnClick() */
+#tip.pinned {
+    pointer-events: auto;
+    padding-top: 26px;
+    border-color: #4ea3d8;
+}
+
+#tip.pinned .tipClose {
+    display: block;
+}
+
+#tip .tipHint {
+    margin-top: 6px;
+    color: #777;
+    font-size: 11px;
+}
+
+/* Phones held upright: less padding, so more of a row fits */
+@media (max-width: 700px) {
+    .section {
+        margin: 8px;
+        padding: 8px;
+    }
+
+    /* The four view tabs on one line */
+    .tab {
+        padding: 7px 10px;
+    }
+
+    .wideLabel {
+        display: none;
+    }
+
+    .narrowLabel {
+        display: inline;
+    }
+
+    /* Six buttons do not fit a phone held upright: break within
+       the group, still right-aligned */
+    header {
+        padding: 10px 10px;
+        gap: 10px;
+    }
+
+    /* Padded to fixed widths, so it cannot wrap; a smaller pitch
+       keeps it on a 360 px screen */
+    .version {
+        font-size: 10px;
+    }
+
+    .headerButtons {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .headerButtons button {
+        padding: 5px 6px;
+        font-size: 13px;
+    }
+
+    th,
+    td {
+        padding: 4px 5px;
+        font-size: 12px;
+    }
+}
+
+/* Tooltip sections: a dim heading, then label / value rows */
+#tip .tipSec {
+    color: #888;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    margin-top: 6px;
+}
+
+#tip table {
+    width: auto;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+#tip td {
+    padding: 0 8px 0 0;
+    border: none;
+    vertical-align: top;
+    white-space: normal;
+}
+
+#tip td.tipL {
+    color: #999;
+    white-space: nowrap;
+    /* As narrow as the label: a row spanning both columns would
+       otherwise widen this column as well */
+    width: 1%;
+}
+
+#tip b {
+    color: #fff;
+}
+
+/* Device and chip maker from the vendor elements, top right */
+#tip .tipMaker {
+    float: right;
+    margin-left: 14px;
+    text-align: right;
+    color: #9cc4e8;
+    max-width: 60%;
+}
+
+#tip .tipGuess {
+    color: #888;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+}
+
+#tip .tipGuessKey {
+    color: #888;
+}
+
+button.pending {
+    border-color: #c8a050;
+    color: #e8c070;
+}
+
+.logo {
+    width: 26px;
+    height: 26px;
+    flex: none;
+    margin-right: 2px;
+}
+
+/* Next to the badge on every view: keep the moment */
+.snapBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    color: #aaa;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 2px 7px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.snapBtn svg {
+    width: 15px;
+    height: 15px;
+}
+
+.snapBtn.ok {
+    color: #8fbf8f;
+    border-color: #5a8f5a;
+}
+
+.snapBtn.bad {
+    color: #d08080;
+    border-color: #8f5a5a;
+}
+
+/* The bell: configuration changes of the BSSs */
+.bellWrap {
+    position: relative;
+}
+
+.bellCount {
+    display: none;
+    min-width: 14px;
+    padding: 0 4px;
+    border-radius: 7px;
+    background: #ddd;
+    color: #111;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 14px;
+    text-align: center;
+}
+
+.bellCount.on {
+    display: inline-block;
+}
+
+.changesPanel {
+    display: none;
+    position: fixed;
+    z-index: 50;
+    width: min(460px, calc(100vw - 32px));
+    max-height: min(420px, 60vh);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #666 #1b1b1b;
+    background: #1b1b1b;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.changesPanel.open {
+    display: block;
+}
+
+.changesPanel .chg {
+    padding: 4px 0;
+    border-top: 1px solid #2a2a2a;
+    cursor: pointer;
+}
+
+.tipNotify {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: normal;
+    margin-left: 8px;
+}
+
+.tipNotify input {
+    vertical-align: middle;
+    margin: 0 2px 0 0;
+}
+
+.changesPanel .mute {
+    float: right;
+    color: #888;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.changesPanel .chg.new b::before {
+    content: "\2022 ";
+}
+
+.pausedBadge {
+    display: none;
+    background: #7a3b12;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.pausedBadge.on {
+    display: inline-block;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div id="tip"></div>
+
+
+<header>
+
+<svg class="logo"
+     viewBox="0 0 64 64"
+     aria-hidden="true">
+<circle cx="32" cy="32" r="32" fill="#4ea3d8"/>
+<g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round">
+<path d="M7.4 29.8A30 30 0 0 1 56.6 29.8"/>
+<path d="M14.8 35.0A21 21 0 0 1 49.2 35.0"/>
+<path d="M22.2 40.1A12 12 0 0 1 41.8 40.1"/>
+</g>
+<circle cx="32" cy="47" r="4.5" fill="#ffffff"/>
+</svg>
+
+<h1>
+ESP32-C5 wlanscout+
+</h1>
+
+<span class="version"
+      id="version">
+</span>
+
+<button id="snapBtn"
+        class="snapBtn"
+        title="Take a snapshot: keep this moment on the sensor (Settings, Snapshots)"
+        aria-label="Take snapshot"
+        onclick="window.takeSnapshot()">
+<svg viewBox="0 0 24 24"
+     aria-hidden="true">
+<path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"
+      fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linejoin="round"/>
+<circle cx="12" cy="13" r="3.5"
+        fill="none" stroke="currentColor" stroke-width="2"/>
+</svg>
+<span class="wideLabel">Snapshot</span>
+</button>
+
+<span class="bellWrap"
+      id="bellWrap">
+<button id="bellBtn"
+        class="snapBtn"
+        style="display:none"
+        title="Configuration changes of the BSSs"
+        aria-label="Configuration changes"
+        onclick="window.toggleChanges()">
+<svg viewBox="0 0 24 24"
+     aria-hidden="true">
+<path d="M6 17v-6a6 6 0 0 1 12 0v6l2 2H4z M10 21h4"
+      fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linejoin="round" stroke-linecap="round"/>
+</svg>
+<span id="bellCount"
+      class="bellCount"></span>
+</button>
+<div id="changesPanel"
+     class="changesPanel"></div>
+</span>
+
+<span id="pausedBadge"
+      class="pausedBadge">
+PAUSED
+</span>
+
+<div class="headerButtons">
+
+<button id="modeWifiBtn"
+        class="modeBtn active"
+        onclick="window.setMode('wifi')">
+Wi-Fi
+</button>
+
+<button id="modeBleBtn"
+        class="modeBtn"
+        onclick="window.setMode('ble')">
+BLE
+</button>
+
+<button id="modeZbBtn"
+        class="modeBtn"
+        onclick="window.setMode('zb')">
+802.15.4
+</button>
+
+<button id="pageSettingsBtn"
+        class="modeBtn"
+        onclick="window.showSettings()">
+Settings
+</button>
+
+<button id="usbBtn"
+        class="modeBtn"
+        style="display:none"
+        title="Connect to the sensor's USB port (marked USB, not UART)"
+        onclick="window.toggleUsb()">
+USB
+</button>
+
+<!-- Last, with its symbol: the one to find without reading -->
+<button id="pauseBtn"
+        onclick="window.togglePause()">
+&#x275A;&#x275A; Pause
+</button>
+
+</div>
+
+</header>
+
+
+<div id="status">Ethernet: waiting...</div>
+
+<div id="snapshotBar"></div>
+
+
+<div id="modeNote"
+     class="modeNote">
+</div>
+
+
+<!-- ===================================================== -->
+<!-- MODE: WI-FI -->
+<!-- ===================================================== -->
+
+<div id="wifiMode"
+     class="modeView active">
+
+
+<!-- ===================================================== -->
+<!-- CHANNEL SELECTION -->
+<!-- ===================================================== -->
+
+<div class="section">
+
+<div class="title collapsible"
+     onclick="window.toggleScanPanel()">
+<span id="scanCaret">&#9656;</span>
+Scan channels
+<span class="small"
+      id="scanInfo">
+</span>
+</div>
+
+
+<!--
+  Collapsed in the markup, not by script. Anything that throws
+  during startup used to leave the panel open, because the
+  only thing closing it ran at the very end of the init block.
+-->
+<div id="scanBody"
+     style="display:none">
+
+
+<div class="channelGroup">
+
+<div class="channelGroupTitle">
+2.4 GHz
+</div>
+
+<div id="channels24"
+     class="channels">
+</div>
+
+</div>
+
+
+<div class="channelGroup">
+
+<div class="channelGroupTitle">
+5 GHz &mdash; UNII-1 / UNII-2A
+</div>
+
+<div id="channels5a"
+     class="channels">
+</div>
+
+</div>
+
+
+<div class="channelGroup">
+
+<div class="channelGroupTitle">
+5 GHz &mdash; UNII-2C
+</div>
+
+<div id="channels5b"
+     class="channels">
+</div>
+
+</div>
+
+
+<div class="channelGroup">
+
+<div class="channelGroupTitle"
+     title="Not part of the European channel plan. Listening is not transmitting, and imported equipment does turn up here, so the channels are available but off by default.">
+5 GHz &mdash; UNII-3
+</div>
+
+<div id="channels5c"
+     class="channels">
+</div>
+
+</div>
+
+
+<div class="channelGroup">
+
+<div class="channelGroupTitle"
+     title="C-V2X band in Europe. Vehicle hotspots have been seen here, but Wi-Fi traffic is the exception, so these are off by default.">
+5 GHz &mdash; UNII-4
+</div>
+
+<div id="channels5d"
+     class="channels">
+</div>
+
+</div>
+
+
+<div class="controls">
+
+<button onclick="window.selectAll()">
+All
+</button>
+
+<button onclick="window.selectNone()">
+None
+</button>
+
+<button onclick="window.select24()">
+2.4 GHz
+</button>
+
+<button onclick="window.select5()">
+5 GHz
+</button>
+
+<button onclick="window.select5low()">
+5 GHz low (36-64)
+</button>
+
+<button onclick="window.select5high()">
+5 GHz high (100-144)
+</button>
+
+<button onclick="window.selectUnii3()">
+UNII-3 (149-165)
+</button>
+
+<button onclick="window.selectUnii4()">
+UNII-4 (169-177)
+</button>
+
+<button id="applyBtn"
+        onclick="uiAction(window.applyChannels)"
+        title="The channel selection is the one setting that is not applied on click: changing it restarts the sweep and clears the history, so it is collected here first.">
+Apply
+</button>
+
+<button onclick="window.restoreAllChannels()">
+Scan all channels
+</button>
+
+<button onclick="uiAction(window.saveDefaultChannels)"
+        title="Store the ticked channels as the plan the views go back to">
+Save as default
+</button>
+
+<button onclick="window.restoreDefaultChannels()">
+Load default
+</button>
+
+<label class="small"
+       title="Standard sweep: every selected channel gets the same dwell time, which wastes time on empty channels. Fast sweep: only channels that currently carry a BSSID, plus 1, 5, 9 and 13 as coverage for 2.4 GHz, plus one rotating idle channel per sweep so new networks are still found. A beacon states its real channel in the DS Parameter Set, so an AP on channel 3 is discovered while listening on 1 or 5 and its channel then joins the plan. 5 GHz channels do not overlap, so nothing can be saved there beyond skipping empty ones.">
+<input type="checkbox"
+       autocomplete="off"
+       id="fastSweep"
+       onchange="uiAction(window.setFastSweep, this.checked)">
+Fast sweep
+</label>
+
+</div>
+
+
+<div class="controls"
+     style="margin-top:10px">
+
+<label class="small"
+       title="Every management frame that is parsed is also kept in a ring buffer in PSRAM, exactly as it came off the air. Downloading it gives a libpcap file with a radiotap header per frame, so Wireshark shows channel and signal strength and dissects every element, including the ones this tool does not evaluate.">
+<input type="checkbox"
+       autocomplete="off"
+       id="captureOn"
+       checked
+       onchange="uiAction(window.applyCaptureOptions)">
+Capture to pcap
+</label>
+
+<label class="small"
+       title="Beacons are not put into the ring: the newest beacon of each BSSID is kept in its own slot and simply overwritten, so ten beacons per second per AP no longer push the interesting frames out. Probe responses do go into the ring, they are rare and they are what reveals a hidden SSID.">
+<input type="checkbox"
+       autocomplete="off"
+       id="capBeacons"
+       checked
+       onchange="uiAction(window.applyCaptureOptions)">
+beacons and probe responses
+</label>
+
+<label class="small">
+<input type="checkbox"
+       autocomplete="off"
+       id="capProbes"
+       checked
+       onchange="uiAction(window.applyCaptureOptions)">
+probe requests
+</label>
+
+<label class="small"
+       title="Association and reassociation requests are kept in a ring of their own, 300 entries, so probe requests cannot push them out. They carry the complete capability set of a station rather than the subset a probe request holds, which is why a green row stays meaningful.">
+<input type="checkbox"
+       autocomplete="off"
+       id="capAssoc"
+       checked
+       onchange="uiAction(window.applyCaptureOptions)">
+association requests
+</label>
+
+<label class="small"
+       title="Authentication, deauthentication, disassociation, association responses and action frames. Action frames carry the 802.11k neighbour reports and the 802.11v BSS transition requests, so this is where steering decisions become visible. The sensor evaluates association responses and Apple's AWDL action frames in any case; this box only decides whether these frames go into the capture.">
+<input type="checkbox"
+       autocomplete="off"
+       id="capOther"
+       onchange="uiAction(window.applyCaptureOptions)">
+action, auth and deauth
+</label>
+
+<button onclick="apiDownload('/api/pcap')">
+Download pcap
+</button>
+
+<button onclick="uiAction(window.clearCapture)">
+Clear buffer
+</button>
+
+<span class="small"
+      id="captureInfo">
+</span>
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- VIEW TABS -->
+<!-- ===================================================== -->
+
+<div class="section">
+
+<div class="tabs">
+
+<button class="tab active"
+        onclick="window.showView('networkView',this)">
+BSSIDs
+</button>
+
+<button class="tab"
+        onclick="window.showView('clientView',this)">
+Stations
+</button>
+
+<button class="tab"
+        onclick="window.showView('spectrumView',this)">
+<span class="wideLabel">RSSI spectrum</span><span class="narrowLabel">RSSI spec.</span>
+</button>
+
+<button class="tab"
+        onclick="window.showView('catalogView',this)">
+<span class="wideLabel">IE catalog</span><span class="narrowLabel">IE cat.</span>
+</button>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- VIEW 1: BSSIDs -->
+<!-- ===================================================== -->
+
+<div id="networkView"
+     class="view active">
+
+
+<div class="title">
+Detected WLAN networks
+</div>
+
+
+<div class="networkControls">
+
+<input type="text"
+       id="filter"
+       placeholder="Filter: SSID, BSSID, ch:36, 80MHz, WPA3, wifi6, CCMP, Apple"
+       style="min-width:340px">
+
+<button onclick="window.clearFilter()">
+Clear
+</button>
+
+<button class="restoreBtn"
+        style="display:none"
+        onclick="window.restoreDefaultChannels()">
+</button>
+
+<span class="small"
+      id="filterInfo">
+</span>
+
+<button class="flushBtn"
+        title="Empty the network table; it fills again from what is heard next"
+        onclick="uiAction(window.flushTable, 'networks')">
+Flush
+</button>
+
+</div>
+
+
+<canvas id="networkGraph"></canvas>
+
+
+<div style="height:15px"></div>
+
+
+<table class="fixedCols">
+
+<thead id="networkHead">
+</thead>
+
+<tbody id="networkTable">
+</tbody>
+
+</table>
+
+
+<div style="height:20px"></div>
+
+
+<div class="title">
+6 GHz networks announced by their neighbours
+<span class="small"
+      id="sixInfo">
+</span>
+</div>
+
+<table>
+
+<thead>
+<tr>
+<th style="cursor:default">SSID</th>
+<th style="cursor:default">BSSID</th>
+<th style="cursor:default">Channel</th>
+<th style="cursor:default">Frequency</th>
+<th style="cursor:default">Width</th>
+<th style="cursor:default">PSD</th>
+<th style="cursor:default">Announced by</th>
+<th style="cursor:default">Reports</th>
+<th style="cursor:default">Age</th>
+</tr>
+</thead>
+
+<tbody id="sixTable">
+</tbody>
+
+</table>
+
+<div class="small"
+     style="margin-top:8px">
+This radio cannot tune above 5 GHz, so these entries were
+never heard directly. They come from the Reduced Neighbor
+Report element that an AP puts into its 2.4 and 5 GHz
+beacons to announce its co-located 6 GHz BSSs, which is how
+clients find them without scanning the band. A name is shown
+when the report says the BSS carries the same SSID as the
+announcing AP, or when its short SSID, a CRC-32 of the name,
+matches a network already known here.
+</div>
+
+
+<div class="small"
+     style="margin-top:8px">
+Click a column header to sort, hover for full details,
+click a bar to restrict the sweep to that channel. An SSID
+marked with * came from a directed probe or association
+request, not from the beacon: the network hides its name. The
+pcap link in each row exports the newest beacon of that BSSID
+on its own, the full buffer is available in the scan panel. An
+entry marked [mesh] is an 802.11s mesh point, whose SSID
+element is empty by design and whose name is the Mesh ID
+from element 114.
+</div>
+
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- VIEW 2: Spectrum -->
+<!-- ===================================================== -->
+
+<div id="spectrumView"
+     class="view">
+
+
+<div class="title">
+Live RSSI spectrum
+
+<select autocomplete="off" id="historyTime">
+</select>
+
+<span class="small"
+      id="spectrumLegend">
+</span>
+
+</div>
+
+<canvas id="spectrum"></canvas>
+
+
+<div style="height:15px"></div>
+
+
+<div class="title">
+
+Waterfall (same time range)
+
+
+
+</div>
+
+
+<canvas id="waterfall"></canvas>
+
+
+<div class="small"
+     style="margin-top:8px">
+Waterfall: one column per scanned channel, equal column
+width, time running from top to bottom.
+</div>
+
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- VIEW 3: Stations -->
+<!-- ===================================================== -->
+
+<div id="clientView"
+     class="view">
+
+
+<div class="title">
+Stations per AP
+</div>
+
+
+<div class="networkControls">
+
+<input type="text"
+       id="stationFilter"
+       placeholder="Filter: MAC, AP, SSID, wifi6, SAE, Apple, broadcom chip"
+       style="min-width:340px">
+
+<button onclick="window.clearStationFilter()">
+Clear
+</button>
+
+<button class="restoreBtn"
+        style="display:none"
+        onclick="window.restoreDefaultChannels()">
+</button>
+
+<span class="small"
+      id="clientInfo">
+</span>
+
+<button class="flushBtn"
+        title="Empty the station table; it fills again from what is heard next"
+        onclick="uiAction(window.flushTable, 'stations')">
+Flush
+</button>
+
+</div>
+
+
+<canvas id="clientGraph"></canvas>
+
+
+<div style="height:15px"></div>
+
+
+<div class="subTabs">
+
+<button class="subTab active"
+        data-pane="assocPane"
+        onclick="window.showStationPane('assocPane')">
+Associated <span id="assocTabCount"></span>
+</button>
+
+<button class="subTab"
+        data-pane="probePane"
+        onclick="window.showStationPane('probePane')">
+Probing only <span id="probeTabCount"></span>
+</button>
+
+<button class="subTab"
+        data-pane="histPane"
+        onclick="window.showStationPane('histPane')">
+History <span id="histTabCount"></span>
+</button>
+
+</div>
+
+
+<div id="assocPane"
+     class="stationPane active">
+
+<div class="title">
+Associated stations
+<span class="small"
+      id="clientAssocInfo">
+</span>
+</div>
+
+<table class="fixedCols">
+
+<thead id="clientHead">
+</thead>
+
+<tbody id="clientTable">
+</tbody>
+
+</table>
+
+</div>
+
+
+<div id="probePane"
+     class="stationPane">
+
+<div class="title">
+Probing only, not seen on any BSS
+<span class="small"
+      id="clientProbeInfo">
+</span>
+</div>
+
+<table class="fixedCols">
+
+<thead id="clientHeadProbe">
+</thead>
+
+<tbody id="clientTableProbe">
+</tbody>
+
+</table>
+
+</div>
+
+
+<div id="histPane"
+     class="stationPane">
+
+<div class="title">
+Stations that associated, kept permanently
+<span class="small"
+      id="assocHistInfo">
+</span>
+<button class="small"
+        style="float:right"
+        onclick="uiAction(window.clearBuffer, 'history')">
+clear
+</button>
+</div>
+
+<table class="fixedCols">
+
+<thead id="clientHeadHist">
+</thead>
+
+<tbody id="assocHistTable">
+</tbody>
+
+</table>
+
+
+<div class="small"
+     style="margin-top:8px">
+The Associated and Probing only tabs age entries out after
+the station timeout. This one does not: every station whose association
+or reassociation request was decoded stays here until the
+device reboots or the table is cleared. An association
+request names the station, the BSS and usually the network in
+clear and is seen only at the moment a station joins, so it
+is worth keeping long after the station itself has gone
+quiet.
+</div>
+
+</div>
+
+
+<div class="small"
+     style="margin-top:8px">
+An AP name in green was learned from a directed probe or an
+association request of a station, not from a beacon: that AP
+is out of range, on a channel that is not being swept, or
+hiding its SSID.
+
+The pcap link in each row exports the probe and association
+requests of that station that are still in the ring buffer.
+
+Stations are split into those seen on a BSS and those only
+ever heard probing; a station keeps its data when it moves
+over. A green row means at least one association request was
+captured, so its capability data is the complete set rather
+than the subset a probe request carries.
+
+Clicking an AP node restricts the sweep to its channel,
+which captures far more traffic. Stations are derived from
+data frames (ToDS/FromDS), probe requests and
+(re)association requests. To AP / From AP are frame counts,
+byte counts are in the tooltip. Peer is Addr3, the address
+behind the AP. Capabilities from probe requests are often
+incomplete and only become complete in the association
+request. Randomised MACs without an association are dropped
+after 30 s.
+</div>
+
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- VIEW 4: IE catalog -->
+<!-- ===================================================== -->
+
+<div id="catalogView"
+     class="view">
+
+
+<div class="title">
+Elements to look at in Wireshark
+<span class="small">
+not decoded, or decoded only in part (marked parsed)
+</span>
+<span class="small"
+      id="catalogInfo">
+</span>
+</div>
+
+
+<div class="networkControls">
+
+<label class="small">
+<input type="checkbox"
+       autocomplete="off"
+       id="catalogEnable"
+       onchange="uiAction(window.setCatalog, this.checked)">
+Record, kept across reboots
+</label>
+
+</div>
+
+
+<table class="fixedCols">
+
+<thead>
+<tr id="catalogHead">
+<th style="width:62px" data-sort="type">Type</th>
+<th style="width:78px" data-sort="id">Number</th>
+<th style="width:160px" data-sort="vendor">Vendor</th>
+<th style="width:66px" data-sort="sub">Subtype</th>
+<th data-sort="name">Name</th>
+<th style="width:130px" data-sort="in">Seen in</th>
+<th style="width:58px" data-sort="count">Count</th>
+<th style="width:140px" data-sort="first">First seen</th>
+<th style="width:140px" data-sort="last">Last seen</th>
+<th style="width:230px" data-sort="mac">Example</th>
+<th style="width:44px" data-sort="ch">Ch</th>
+<th style="width:62px" data-sort="frames">Frames</th>
+<th style="width:48px">pcap</th>
+</tr>
+</thead>
+
+<tbody id="catalogTable">
+</tbody>
+
+</table>
+
+
+<div class="networkControls"
+     style="margin-top:10px">
+
+<button onclick="apiDownload('/api/catalog.pcap')">
+Download all frames
+</button>
+
+<button onclick="uiAction(window.clearCatalog)">
+Clear catalog
+</button>
+
+<span class="small"
+      id="catalogStore">
+</span>
+
+</div>
+
+
+<details id="catalogReads"
+         class="reads">
+<summary>What this sensor reads</summary>
+<div id="catalogReadsBody"
+     class="small">
+</div>
+</details>
+
+
+<div class="small"
+     style="margin-top:8px">
+Meant for carrying the sensor around, without a network: with
+recording on, every beacon, probe response, probe request and
+association request is searched for what the firmware does not
+read, or reads only in part. That is any element it does not
+know, any vendor specific element it does not decode, any AKM or
+cipher suite it has no name for, and Interworking (107), of which
+only the network type and venue are shown. Each gets one row with
+a counter, the frame types it came in, when it was first and last
+seen, and one example: the sender, its SSID or the network it
+asked for, and the channel. The first three frames
+carrying it go into a pcap file for Wireshark. The pcap link of a
+row hands out every stored frame that carries the element, which
+can be more than the three kept for it, the full set comes from
+the button below the table.
+
+The catalog lives in the flash and survives reboots and power
+cuts; new rows are written within seconds, counters every five
+minutes. Without a clock (no NTP, no browser, no AP sending a
+Time Advertisement) a time is given as the boot and the time
+since it. Flashing a new firmware keeps the catalog; only a
+full flash image or an erase removes it.
+</div>
+
+
+</div>
+
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- MODE: BLE -->
+<!-- ===================================================== -->
+
+<div id="bleMode"
+     class="modeView">
+
+<div class="section">
+
+<div>
+
+
+<div class="title">
+BLE advertising
+</div>
+
+
+<div class="networkControls">
+
+<button id="bleModeBtn"
+        onclick="window.setMode('ble')">
+Start BLE mode
+</button>
+
+<label class="small">
+<input type="checkbox"
+       autocomplete="off"
+       id="bleActive"
+       onchange="uiAction(window.setActiveScan, this.checked)">
+Active scan (sends scan requests)
+</label>
+
+<input type="text"
+       id="bleFilter"
+       placeholder="Filter: address, name, Apple, random"
+       style="min-width:280px">
+
+<span class="small"
+      id="bleInfo">
+</span>
+
+</div>
+
+
+<canvas id="bleGraph"></canvas>
+
+
+<div style="height:15px"></div>
+
+
+<table>
+
+<thead id="bleHead">
+</thead>
+
+<tbody id="bleTable">
+</tbody>
+
+</table>
+
+
+<div class="small"
+     style="margin-top:8px">
+Advertising channels 37/38/39 only. Data channels of
+established connections cannot be sniffed with this
+controller. A passive scan transmits nothing, an active
+scan also collects scan responses (more names, but the
+analyzer becomes visible itself). The address type comes
+from the top two bits: resolvable private addresses rotate
+and are therefore useless for tracking.
+</div>
+
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- PAGE: SETTINGS -->
+<!-- ===================================================== -->
+
+<div id="settingsMode"
+     class="modeView">
+
+<div class="section">
+
+<div class="title">
+System
+</div>
+
+<table>
+<tbody id="sysTable">
+</tbody>
+</table>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Firmware update
+<span class="small"
+      id="otaInfo">
+</span>
+</div>
+
+<div class="networkControls">
+
+<input type="file"
+       id="otaFile"
+       accept=".bin">
+
+<button onclick="uiAction(window.uploadFirmware)">
+Upload and restart
+</button>
+
+<button id="otaRollback"
+        style="display:none"
+        onclick="uiAction(window.rollbackFirmware)">
+Back to previous firmware
+</button>
+
+<span class="small"
+      id="otaStatus">
+</span>
+
+</div>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Ethernet
+</div>
+
+<table>
+<tbody id="netTable">
+</tbody>
+</table>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+CPU
+<span class="small"
+      id="cpuInfo">
+</span>
+</div>
+
+<table>
+<tbody id="cpuTable">
+</tbody>
+</table>
+
+<div style="height:15px"></div>
+
+<table>
+<thead>
+<tr>
+<th style="cursor:default">Task</th>
+<th style="cursor:default">CPU</th>
+<th style="cursor:default">Stack never used</th>
+</tr>
+</thead>
+<tbody id="cpuTasks">
+</tbody>
+</table>
+
+<div class="small"
+     style="margin-top:8px">
+Shares of the last 10 s, from the run time FreeRTOS counts for every
+task; the load is what the idle task did not get, interrupts count
+for the task they interrupt. <i>loopTask</i> runs the parser and the
+web server, <i>wifi</i> and <i>tiT</i> (lwIP) the radio and the
+network. While loop() answers a request it reads no frames: the
+management queue fills up and, once full, frames are dropped. The
+temperature is the chip's own, not the air around it.
+</div>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Memory
+</div>
+
+<table>
+<tbody id="memTable">
+</tbody>
+</table>
+
+<div style="height:15px"></div>
+
+<div class="title">
+Allocated buffers
+</div>
+
+<table>
+<thead id="allocHead">
+</thead>
+<tbody id="allocTable">
+</tbody>
+</table>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Sensor identity and export
+</div>
+
+<table>
+<tbody id="idTable">
+</tbody>
+</table>
+
+<div class="controls"
+     style="margin-top:10px">
+
+<input type="text"
+       id="sensorName"
+       autocomplete="off"
+       placeholder="sensor name, e.g. hall-north"
+       style="background:#1a1a1a;color:#ddd;border:1px solid #3a3a3a;
+              border-radius:3px;padding:4px 8px;font-size:13px;
+              width:260px">
+
+<button onclick="window.saveSensorName()">
+Save name
+</button>
+
+<button onclick="apiOpen('/api/export')">
+Open export
+</button>
+
+<select id="tzSelect"
+        onchange="uiAction(window.setTimezone, this.value)"
+        style="background:#1a1a1a;color:#ddd;border:1px solid #3a3a3a;
+               border-radius:3px;padding:4px 8px;font-size:13px">
+<option value="-720">UTC-12:00</option>
+<option value="-660">UTC-11:00</option>
+<option value="-600">UTC-10:00</option>
+<option value="-570">UTC-09:30</option>
+<option value="-540">UTC-09:00</option>
+<option value="-480">UTC-08:00</option>
+<option value="-420">UTC-07:00</option>
+<option value="-360">UTC-06:00</option>
+<option value="-300">UTC-05:00</option>
+<option value="-240">UTC-04:00</option>
+<option value="-210">UTC-03:30</option>
+<option value="-180">UTC-03:00</option>
+<option value="-120">UTC-02:00</option>
+<option value="-60">UTC-01:00</option>
+<option value="0">UTC</option>
+<option value="60">UTC+01:00</option>
+<option value="120">UTC+02:00</option>
+<option value="180">UTC+03:00</option>
+<option value="210">UTC+03:30</option>
+<option value="240">UTC+04:00</option>
+<option value="270">UTC+04:30</option>
+<option value="300">UTC+05:00</option>
+<option value="330">UTC+05:30</option>
+<option value="345">UTC+05:45</option>
+<option value="360">UTC+06:00</option>
+<option value="390">UTC+06:30</option>
+<option value="420">UTC+07:00</option>
+<option value="480">UTC+08:00</option>
+<option value="525">UTC+08:45</option>
+<option value="540">UTC+09:00</option>
+<option value="570">UTC+09:30</option>
+<option value="600">UTC+10:00</option>
+<option value="630">UTC+10:30</option>
+<option value="660">UTC+11:00</option>
+<option value="720">UTC+12:00</option>
+<option value="765">UTC+12:45</option>
+<option value="780">UTC+13:00</option>
+<option value="825">UTC+13:45</option>
+<option value="840">UTC+14:00</option>
+</select>
+
+</div>
+
+<div class="small"
+     style="margin-top:8px">
+The timezone shifts displayed times only. Inside the device
+everything stays on UTC &mdash; the capture timestamps, the
+export and the clock arithmetic &mdash; so a capture taken
+here still lines up with one taken anywhere else. There is no
+daylight saving rule on board; pick the offset that applies.
+</div>
+
+<div class="small"
+     style="margin-top:8px">
+/api/export returns everything this sensor knows as one JSON
+document, meant to be merged with other sensors covering the
+same area. Captured frames are not included, those stay
+behind /api/pcap. Every timestamp is absolute UTC epoch
+seconds rather than an age, so records from several sensors
+line up. Narrow the document with sections=networks,clients
+and with since=&lt;epoch&gt; to get only what changed.
+</div>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Snapshots
+<span class="small"
+      id="snapInfo">
+</span>
+</div>
+
+<div class="controls">
+
+<button onclick="window.takeSnapshot()">
+Take snapshot
+</button>
+
+<button onclick="window.exportAllSnapshots()">
+Export all
+</button>
+
+<button onclick="document.getElementById('snapImport').click()">
+Import
+</button>
+
+<button onclick="document.getElementById('snapFile').click()">
+View file
+</button>
+
+<button onclick="window.clearSnapshots()">
+Clear all
+</button>
+
+<input type="file"
+       id="snapImport"
+       accept=".zip,.json,application/zip,application/json"
+       multiple
+       style="display:none"
+       onchange="window.importSnapshotFiles(this)">
+
+<input type="file"
+       id="snapFile"
+       accept=".zip,.json,application/zip,application/json"
+       style="display:none"
+       onchange="window.openSnapshotFile(this)">
+
+</div>
+
+<div class="controls"
+     id="snapParts"
+     style="margin-top:8px">
+<span class="small">Keep:</span>
+<label><input type="checkbox" data-bit="1"> networks</label>
+<label><input type="checkbox" data-bit="2"> stations</label>
+<label><input type="checkbox" data-bit="4"> association history</label>
+<label><input type="checkbox" data-bit="8"> spectrum</label>
+<label><input type="checkbox" data-bit="16"> IE catalog</label>
+<label><input type="checkbox" data-bit="32"> BLE</label>
+<label><input type="checkbox" data-bit="64"> 802.15.4</label>
+</div>
+
+<table style="margin-top:8px">
+<tbody id="snapTable">
+</tbody>
+</table>
+
+<div class="small"
+     style="margin-top:8px">
+A snapshot keeps what the page shows at one moment on the
+sensor's flash, the last ten (fewer when the tables are full and
+the flash runs short); <i>Keep</i> chooses what goes in,
+stored on the sensor. The camera button next to the status badge
+takes one from any view, and so does a short press on the board's
+BOOT button, without the page; the LED blinks green twice
+when it is written, red when it failed. <i>View</i> shows it with the
+usual tables and tooltips until <i>Back to live</i>. <i>Export</i>
+saves one as a .zip, <i>Export all</i> every one in a single .zip;
+<i>Import</i> puts such files on a sensor again, this one or another,
+where they count as the newest. <i>View file</i> shows a file without
+putting it on the sensor, also without one; <i>Clear all</i>
+deletes every snapshot on the sensor. The capture buffers are
+not included: the pcap links in a snapshot ask the connected sensor
+for what it holds now, so the frames may be gone, and for a snapshot
+from another sensor they were never there; the message then says so.
+</div>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Event log
+<span class="small"
+      id="logInfo">
+</span>
+</div>
+
+<div id="crashBox"
+     style="display:none; border-left:3px solid #e05050;
+            padding:4px 10px; margin-bottom:8px">
+</div>
+
+<table>
+<thead>
+<tr>
+<th style="cursor:default" id="logTimeHead">Time</th>
+<th style="cursor:default">Age</th>
+<th style="cursor:default">From</th>
+<th style="cursor:default">Event</th>
+</tr>
+</thead>
+<tbody id="logTable">
+</tbody>
+</table>
+
+<div class="pager"
+     id="logPages">
+</div>
+
+<div class="small"
+     style="margin-top:8px">
+Configuration changes with the address they came from, newest
+first, 20 to a page. The last 80 entries are kept on the device's flash, so they
+survive a restart and a power cut; each start is logged with its
+reason (power on, crash, watchdog, restart by the firmware); after a
+crash the box above the table holds its core dump. Entries
+from an earlier start have no age when the clock was not known
+then.
+</div>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Counters and capture
+</div>
+
+<table>
+<tbody id="cntTable">
+</tbody>
+</table>
+
+<div class="small"
+     style="margin-top:8px">
+The settings page does not change the radio mode, the
+scanner keeps running in whatever mode it was in.
+</div>
+
+</div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- MODE: 802.15.4 -->
+<!-- ===================================================== -->
+
+<div id="zbMode"
+     class="modeView">
+
+<div class="section">
+
+<div class="title">
+IEEE 802.15.4 / Zigbee / Thread
+</div>
+
+
+<div class="networkControls">
+
+<button id="zbModeBtn"
+        onclick="window.setMode('zb')">
+Start 802.15.4 mode
+</button>
+
+<button id="zbScanFramesBtn"
+        class="modeBtn"
+        onclick="window.setZbScan(0)">
+Frame capture
+</button>
+
+<button id="zbScanEnergyBtn"
+        class="modeBtn"
+        onclick="window.setZbScan(1)">
+Energy waterfall
+</button>
+
+<label class="small">
+<input type="checkbox"
+       autocomplete="off"
+       id="zbOverlay"
+       checked
+       onchange="window.drawZbSpectrum()">
+Show overlapping Wi-Fi channels
+</label>
+
+<span class="small"
+      id="zbInfo">
+</span>
+
+</div>
+
+
+<canvas id="zbSpectrum"></canvas>
+
+
+<div id="zbFramesPane">
+
+<div style="height:15px"></div>
+
+
+<table>
+
+<thead id="zbHead">
+</thead>
+
+<tbody id="zbTable">
+</tbody>
+
+</table>
+
+</div>
+
+
+<div id="zbEnergyPane"
+     style="display:none">
+
+<div style="height:15px"></div>
+
+<div class="title">
+
+Energy waterfall
+
+<select autocomplete="off" id="zbRange">
+
+<option value="30000">
+30 s
+</option>
+
+<option value="120000">
+2 min
+</option>
+
+<option value="600000">
+10 min
+</option>
+
+<option value="1800000">
+30 min
+</option>
+
+</select>
+
+<span class="small"
+      id="zbRateInfo">
+</span>
+
+</div>
+
+<canvas id="zbWaterfall"></canvas>
+
+</div>
+
+
+<div class="small"
+     style="margin-top:8px">
+Two independent modes. Frame capture decodes 802.15.4
+traffic; the energy waterfall measures raw power in each
+channel and therefore also shows everything that is not
+decodable at all: microwave ovens, video senders, hopping
+Bluetooth links, wireless mice, broken transmitters. Only
+2.4 GHz, since the 802.15.4 receiver does not go anywhere
+else, and the levels are relative to that receiver rather
+than calibrated dBm.
+
+Channels 11 to 26, 2405 to 2480 MHz, 2 MHz wide with 5 MHz
+spacing. The bar is the energy detect reading of the radio,
+which shows a noise floor even when nothing is transmitting;
+the marker is the strongest frame actually decoded on that
+channel. Addresses come from the MAC header of promiscuous
+frames, so encrypted payloads do not matter. Frames from a
+network the sniffer is not part of are still counted, only
+their contents stay opaque.
+</div>
+
+</div>
+
+</div>
+
+
+<script>
+
+
+// ==========================================================
+// Global state
+// ==========================================================
+
+let liveData = null;
+let snapshotView = null;    // see "Snapshots"
+let lastPointerType = "mouse";  // see letTapThrough()
+let tipTapTimer = null;
+let historyData = null;
+let networks = [];
+let stations = [];
+
+// AWDL senders from /api/clients, for the station tooltip
+let awdlDevices = [];
+let assocHistory = null;
+
+let paused = false;
+
+let scanMode = "wifi";
+
+let bleDevices = [];
+let bleStats = null;
+let bleFilterText = "";
+let stationFilterText = "";
+
+let bleSortKey = "rssi";
+let bleSortDir = -1;
+
+let bleHits = [];
+
+let filterText = "";
+
+// By name and address: RSSI and counters change with every poll
+// and would reorder the rows all the time
+let sortKey = "ssid";
+let sortDir = 1;
+
+let clientSortKey = "mac";
+let clientSortDir = 1;
+
+// Until a column head is clicked the history keeps its own order
+let clientSortChosen = false;
+
+let hoverBSSID = null;
+
+let graphHits = [];
+let graphLabels = [];
+let graphLoad = [];
+let clientHits = [];
+
+
+// ==========================================================
+// Channel configuration
+// ==========================================================
+
+let channels24 =
+    [1,2,3,4,5,6,7,8,9,10,11,12,13];
+
+/*
+ * Filled from /api/plan at startup. Keeping a copy of the
+ * sketch's channel tables here only meant that the two drift
+ * apart, which is exactly what happened when UNII-3 was
+ * added. The values below are a fallback for the moment
+ * before the fetch returns.
+ */
+let channels5 =
+    [36,40,44,48,
+     52,56,60,64,
+     100,104,108,112,
+     116,120,124,128,
+     132,136,140,144];
+
+
+/*
+ * The 5 GHz boxes are split along the UNII bands rather than
+ * shown as one long row: the regulatory rules, and with them
+ * what is worth scanning, change at exactly those edges.
+ */
+const unii = [
+    ["channels5a", ch => ch <= 64],
+    ["channels5b", ch => ch >= 100 && ch <= 144],
+    ["channels5c", ch => ch >= 149 && ch <= 165],
+    ["channels5d", ch => ch >= 169]
+];
+
+
+function createChannels()
+{
+    createChannelGroup("channels24", channels24);
+
+    unii.forEach(u =>
+        createChannelGroup(u[0], channels5.filter(u[1])));
+}
+
+
+/*
+ * Ask the device which channels it actually sweeps and build
+ * the selection from that, so a change to the plan in the
+ * sketch needs no matching edit here.
+ */
+async function loadChannelPlan()
+{
+    try
+    {
+        const response =
+            await api("/api/plan",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        const plan = await response.json();
+
+        if (plan.b24 && plan.b24.length)
+            channels24 = plan.b24;
+
+        if (plan.b5 && plan.b5.length)
+            channels5 = plan.b5;
+
+        if (plan.def && plan.def.length)
+            defaultChannels = plan.def;
+
+        createChannels();
+
+        // The next poll ticks the boxes from the device state
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+function createChannelGroup(element, channels)
+{
+    const container =
+        document.getElementById(element);
+
+    container.innerHTML = "";
+
+    channels.forEach(ch =>
+    {
+        const label =
+            document.createElement("label");
+
+        label.className = "channelBox";
+
+        const cb =
+            document.createElement("input");
+
+        cb.type = "checkbox";
+        cb.value = ch;
+        cb.checked = true;
+
+        // Firefox restores form state across reloads and would
+        // otherwise override what the device actually scans
+        cb.autocomplete = "off";
+
+        // Changing a box only changes the plan on screen, the
+        // device follows when Apply is pressed
+        cb.addEventListener("change", markChannelsDirty);
+
+        label.appendChild(cb);
+
+        label.appendChild(
+            document.createTextNode(ch)
+        );
+
+        container.appendChild(label);
+    });
+}
+
+
+function selectedChannels()
+{
+    return [
+        ...document.querySelectorAll(
+            ".channelBox input:checked"
+        )
+    ].map(e => parseInt(e.value));
+}
+
+
+function setChannels(predicate)
+{
+    document.querySelectorAll(".channelBox input").forEach(e =>
+    {
+        e.checked = predicate(parseInt(e.value));
+    });
+
+    updateScanInfo();
+}
+
+
+function selectAll()
+{
+    markChannelsDirty();
+
+    setChannels(() => true);
+}
+
+
+function selectNone()
+{
+    markChannelsDirty();
+
+    setChannels(() => false);
+}
+
+
+function select24()
+{
+    markChannelsDirty();
+
+    setChannels(ch => ch <= 14);
+}
+
+
+function select5()
+{
+    markChannelsDirty();
+
+    setChannels(ch => ch > 14);
+}
+
+
+function select5low()
+{
+    markChannelsDirty();
+
+    setChannels(ch => ch >= 36 && ch <= 64);
+}
+
+
+function select5high()
+{
+    markChannelsDirty();
+
+    setChannels(ch => ch >= 100 && ch <= 144);
+}
+
+
+function selectUnii3()
+{
+    markChannelsDirty();
+
+    setChannels(ch => ch >= 149 && ch <= 165);
+}
+
+
+function selectUnii4()
+{
+    markChannelsDirty();
+
+    setChannels(ch => ch >= 169);
+}
+
+
+window.selectUnii3 = selectUnii3;
+window.selectUnii4 = selectUnii4;
+
+
+function applyChannels()
+{
+    const channels = selectedChannels();
+
+    if (!channels.length)
+    {
+        alert("Select at least one channel.");
+        return;
+    }
+
+    queueCommand("/api/config?channels=" + channels.join(","));
+
+    channelsDirty = false;
+
+    const btn = document.getElementById("applyBtn");
+
+    if (btn)
+        btn.classList.remove("pending");
+
+    updateScanInfo();
+}
+
+
+function focusChannel(ch)
+{
+    if (!ch)
+        return;
+
+    setChannels(c => c === ch);
+
+    applyChannels();
+}
+
+
+function restoreAllChannels()
+{
+    selectAll();
+
+    applyChannels();
+}
+
+
+/*
+ * The default channel plan, stored on the device. Until /api/plan
+ * has answered it is the firmware's startup default.
+ */
+let defaultChannels = null;
+
+function defaultPlan()
+{
+    return defaultChannels ||
+        channels24.concat(channels5).filter(ch => ch < 149);
+}
+
+function restoreDefaultChannels()
+{
+    const def = defaultPlan();
+
+    setChannels(ch => def.includes(ch));
+
+    applyChannels();
+}
+
+function saveDefaultChannels()
+{
+    const channels = selectedChannels();
+
+    if (!channels.length)
+    {
+        alert("Select at least one channel.");
+        return;
+    }
+
+    queueCommand("/api/config?defchannels=" + channels.join(","), () =>
+    {
+        defaultChannels = channels;
+
+        updateScanInfo();
+    });
+}
+
+window.restoreDefaultChannels = restoreDefaultChannels;
+window.saveDefaultChannels    = saveDefaultChannels;
+
+
+/*
+ * Control commands go through the same single lane as the
+ * polling.
+ *
+ * The device serves one connection at a time. Firing a
+ * control request while a poll is in flight worked in
+ * Chromium but silently never reached the device in Firefox,
+ * so commands are queued and sent between polls instead.
+ */
+let pendingCommands = [];
+let pollBusy        = false;
+let lastCommandError = "";
+
+/*
+ * A message in the status line that stays for a few seconds, as
+ * after a snapshot: until then the poll rounds leave it alone
+ * instead of clearing it in the next second.
+ */
+let statusHeldUntil = 0;
+
+function holdStatus(ms)
+{
+    statusHeldUntil = Date.now() + ms;
+}
+
+// Empties the status line, unless a message is still held
+function clearStatus()
+{
+    if (Date.now() >= statusHeldUntil)
+        document.getElementById("status").innerText = "";
+}
+
+
+async function drainCommands()
+{
+    while (pendingCommands.length)
+    {
+        const cmd = pendingCommands.shift();
+
+        try
+        {
+            const response =
+                await api(cmd.url,
+                            { cache: "no-store",
+                              signal: timeoutSignal(8000) });
+
+            lastCommandError = "";
+
+            if (cmd.then)
+            {
+                let body = null;
+
+                try
+                {
+                    body = await response.json();
+                }
+                catch (e)
+                {
+                    body = null;
+                }
+
+                cmd.then(body);
+            }
+        }
+        catch (e)
+        {
+            cmdFailed++;
+
+            lastCommandError = cmd.url + " failed";
+
+            console.log("command failed", cmd.url, e);
+        }
+    }
+}
+
+
+let cmdSent   = 0;
+let cmdFailed = 0;
+
+
+/*
+ * Wrapper for the inline handlers.
+ *
+ * Inline handlers resolve names against the element and the
+ * document before reaching the global scope. Firefox still
+ * implements the old Element.setCapture(), so a global
+ * function of that name was shadowed by the element's method
+ * and the click did nothing. Every handler is therefore
+ * referenced through window, and nothing is named after a DOM
+ * method any more.
+ *
+ * If one of them throws, the click silently does nothing at
+ * all, which is impossible to tell apart from a request that
+ * never left the browser. This makes both visible.
+ */
+function uiAction(fn, arg)
+{
+    try
+    {
+        fn(arg);
+    }
+    catch (e)
+    {
+        lastCommandError = "click failed: " + e.message;
+
+        console.log("ui action failed", e);
+    }
+}
+
+
+function queueCommand(url, then)
+{
+    // Nothing to change in a moment that has passed; the clock
+    // still goes to a sensor that is plugged in meanwhile
+    if (snapshotView && !url.startsWith("/api/time"))
+    {
+        alert("Showing a snapshot: press Back to live first");
+        return;
+    }
+
+    cmdSent++;
+
+    pendingCommands.push({ url: url, then: then });
+
+    // The round after a command fetches the tables too
+    pollTick = -1;
+
+    // Send straight away when the lane is free
+    if (!pollBusy)
+        drainCommands();
+}
+
+
+/*
+ * Pending control changes.
+ *
+ * The device serves one connection at a time, so a control
+ * request can end up queued behind a big table response and
+ * time out. The poll would then read back the old state and
+ * quietly undo what was just clicked. A wanted state is kept
+ * here until the device confirms it, and resent if it does
+ * not arrive.
+ */
+let capWanted  = null;
+let capRetries = 0;
+
+let fastWanted  = null;
+let fastRetries = 0;
+
+
+function sendCapture(state)
+{
+    queueCommand("/api/mode?capture=" + (state.on ? 1 : 0) +
+                 "&capmask=" + state.mask,
+                 r =>
+    {
+        if (!r)
+            return;
+
+        // The device answers with what it actually stored
+        if (r.capmask !== state.mask ||
+            r.capture !== (state.on ? 1 : 0))
+        {
+            console.log("capture not applied, device reports",
+                        r.capture, r.capmask,
+                        "expected", state.on ? 1 : 0, state.mask);
+
+            return;
+        }
+
+        capWanted  = null;
+        capRetries = 0;
+
+        if (liveData)
+        {
+            liveData.capture = r.capture;
+            liveData.capmask = r.capmask;
+        }
+    });
+}
+
+
+function applyCaptureOptions()
+{
+    const on = document.getElementById("captureOn").checked;
+
+    let mask = 0;
+
+    if (document.getElementById("capBeacons").checked) mask |= 1;
+    if (document.getElementById("capProbes").checked)  mask |= 2;
+    if (document.getElementById("capAssoc").checked)   mask |= 4;
+    if (document.getElementById("capOther").checked)   mask |= 8;
+
+    capWanted  = { on: on, mask: mask };
+    capRetries = 0;
+
+    sendCapture(capWanted);
+}
+
+
+function clearCapture()
+{
+    queueCommand("/api/pcapclear");
+}
+
+
+/*
+ * Empty one buffer. "history" is the permanent association
+ * record, which is not part of the capture buffers and so has
+ * its own endpoint.
+ */
+function clearBuffer(what)
+{
+    if (what === "history")
+    {
+        queueCommand("/api/assocclear", () =>
+        {
+            assocHistory = null;
+
+            fillAssocHistory();
+        });
+
+        return;
+    }
+
+    queueCommand("/api/pcapclear?what=" + encodeURIComponent(what));
+}
+
+window.clearBuffer = clearBuffer;
+
+
+/*
+ * Flush button: the sensor forgets the network or station table
+ * (with the 6 GHz list or the names learned from stations), the
+ * page drops its copy and fetches the table again.
+ */
+function flushTable(what)
+{
+    if (snapshotView)
+        return;
+
+    const name = what === "networks" ? "network" : "station";
+
+    if (!confirm("Discard everything in the " + name + " table? " +
+                 "It fills again from what is heard next."))
+        return;
+
+    queueCommand("/api/flush?what=" + what, () =>
+    {
+        // Emptied at once, also while paused
+        if (what === "networks")
+        {
+            networks = [];
+            sixGhzList = [];
+            updateNetworkTable();
+            updateSixTable();
+            drawNetworkGraph();
+            updateNetworks();
+        }
+        else
+        {
+            stations = [];
+            awdlDevices = [];
+            updateClientTable();
+            drawClientGraph();
+            updateClients();
+        }
+    });
+}
+
+window.flushTable = flushTable;
+
+
+function toggleScanPanel(force)
+{
+    const body = document.getElementById("scanBody");
+
+    const open =
+        (force === undefined)
+            ? (body.style.display === "none")
+            : force;
+
+    body.style.display = open ? "block" : "none";
+
+    document.getElementById("scanCaret").innerHTML =
+        open ? "&#9662;" : "&#9656;";
+
+    try
+    {
+        localStorage.setItem("scanPanelOpen", open ? "1" : "0");
+    }
+    catch (e)
+    {
+        // Private mode or storage disabled, not important
+    }
+}
+
+
+function sendFastSweep(on)
+{
+    queueCommand("/api/mode?fast=" + (on ? 1 : 0), r =>
+    {
+        if (r && r.fast === (on ? 1 : 0))
+        {
+            fastWanted  = null;
+            fastRetries = 0;
+
+            if (liveData)
+                liveData.fast = r.fast;
+        }
+    });
+}
+
+
+function setFastSweep(on)
+{
+    fastWanted  = on;
+    fastRetries = 0;
+
+    sendFastSweep(on);
+}
+
+
+/*
+ * The channel checkboxes are the one control that is not
+ * applied on click.
+ *
+ * Changing the selection restarts the sweep and clears the
+ * history, so it is collected first and sent on Apply. The
+ * button says so by lighting up while the selection on screen
+ * differs from what the device is scanning.
+ */
+let channelsDirty = false;
+
+
+function markChannelsDirty()
+{
+    channelsDirty = true;
+
+    const btn = document.getElementById("applyBtn");
+
+    if (btn)
+        btn.classList.add("pending");
+
+    updateScanInfo();
+}
+
+
+// Mirror the device's selection while nothing is pending
+function syncChannelBoxes(list)
+{
+    if (channelsDirty || !list)
+        return;
+
+    const wanted = new Set(list);
+
+    document.querySelectorAll("#channels24 input, .channels input")
+        .forEach(cb =>
+    {
+        cb.checked = wanted.has(parseInt(cb.value, 10));
+    });
+}
+
+
+function updateScanInfo()
+{
+    const count = selectedChannels().length;
+
+    const dwell = 120;
+
+    let text =
+        count +
+        " channels selected | approx. " +
+        (count * dwell / 1000).toFixed(2) +
+        " s per sweep";
+
+    // Once the device reports a plan, show what is really scanned
+    if (liveData && liveData.plan)
+    {
+        if (liveData.fast)
+        {
+            text =
+                liveData.plan + " of " + count +
+                " channels in the fast plan | approx. " +
+                (liveData.plan * dwell / 1000).toFixed(2) +
+                " s per sweep";
+        }
+        else
+        {
+            text =
+                count + " channels | approx. " +
+                (liveData.plan * dwell / 1000).toFixed(2) +
+                " s per sweep";
+        }
+    }
+
+    if (channelsDirty)
+        text += " | selection changed, press Apply";
+
+    document.getElementById("scanInfo").innerText = text;
+
+    updateRestoreButtons();
+}
+
+
+/*
+ * A click on a BSS or an AP node narrows the sweep to one
+ * channel. Whenever the sweep differs from the default channel
+ * plan, the BSSID and station views offer the way back; while
+ * it is narrow they also say which channels are left.
+ */
+const RESTRICTED_MAX = 4;
+
+function updateRestoreButtons()
+{
+    const chans = selectedChannels();
+    const def   = defaultPlan();
+
+    const differs = chans.length > 0 &&
+        (chans.length !== def.length ||
+         chans.some(ch => !def.includes(ch)));
+
+    document.querySelectorAll(".restoreBtn").forEach(b =>
+    {
+        b.style.display = differs ? "" : "none";
+
+        b.innerText = "Back to default channels" +
+            (chans.length <= RESTRICTED_MAX
+                ? " (now: ch " + chans.join(", ") + ")"
+                : " (now: " + chans.length + " of " + def.length + ")");
+    });
+}
+
+
+// ==========================================================
+// Operating mode
+//
+// Wi-Fi promiscuous mode and BLE share the radio, so only
+// one of them runs at a time.
+// ==========================================================
+
+function setMode(mode)
+{
+    uiPage = mode;
+
+    // Switch the page right away. Waiting for /api/status only
+    // worked when the mode actually changed, so coming back
+    // from settings to the mode that was already active did
+    // nothing at all.
+    applyModeUI();
+
+    document.getElementById("status").innerText = "Switching mode...";
+
+    // The switch itself happens in loop() on the device.
+    // pollLoop() picks up the new mode from /api/status.
+    queueCommand("/api/mode?mode=" + mode);
+}
+
+
+function setActiveScan(on)
+{
+    queueCommand("/api/mode?active=" + (on ? 1 : 0));
+}
+
+
+/*
+ * The page shown and the radio mode are two different things:
+ * settings can be looked at without interrupting a scan.
+ */
+let uiPage = "wifi";
+
+
+function showSettings()
+{
+    uiPage = "settings";
+
+    applyModeUI();
+
+    updateSystem();
+    updateSnapshots();
+}
+
+
+function applyModeUI()
+{
+    const views = {
+        wifi: "wifiMode",
+        ble: "bleMode",
+        zb: "zbMode",
+        settings: "settingsMode"
+    };
+
+    Object.keys(views).forEach(key =>
+    {
+        document.getElementById(views[key])
+            .classList.toggle("active", key === uiPage);
+    });
+
+    document.getElementById("modeWifiBtn")
+        .classList.toggle("active", scanMode === "wifi");
+
+    document.getElementById("modeBleBtn")
+        .classList.toggle("active", scanMode === "ble");
+
+    document.getElementById("modeZbBtn")
+        .classList.toggle("active", scanMode === "zb");
+
+    document.getElementById("pageSettingsBtn")
+        .classList.toggle("active", uiPage === "settings");
+
+    const note = document.getElementById("modeNote");
+
+    if (scanMode === "wifi")
+    {
+        note.classList.remove("on");
+    }
+    else
+    {
+        note.classList.add("on");
+
+        note.innerText =
+            (scanMode === "ble" ? "BLE" : "802.15.4") +
+            " mode active. Wi-Fi scanning is halted; the radio" +
+            " is shared, so only one mode runs at a time.";
+    }
+
+    document.getElementById("bleModeBtn").style.display =
+        scanMode === "ble" ? "none" : "inline-block";
+
+    document.getElementById("zbModeBtn").style.display =
+        scanMode === "zb" ? "none" : "inline-block";
+}
+
+
+// ==========================================================
+// Pause
+// ==========================================================
+
+function togglePause()
+{
+    paused = !paused;
+
+    const btn = document.getElementById("pauseBtn");
+
+    // Two heavy bars for pause; U+FE0E keeps the triangle a plain
+    // symbol, not an emoji
+    btn.innerText = paused ? "\u25B6\uFE0E Resume"
+                           : "\u275A\u275A Pause";
+
+    btn.classList.toggle("paused", paused);
+
+    document.getElementById("pausedBadge")
+        .classList.toggle("on", paused);
+
+    // Back from a pause: the next round fetches everything
+    if (!paused)
+        pollTick = -1;
+}
+
+
+// ==========================================================
+// Tabs
+// ==========================================================
+
+function showView(id, button)
+{
+    document.querySelectorAll(".view").forEach(
+        e => e.classList.remove("active")
+    );
+
+    document.querySelectorAll(".tab").forEach(
+        e => e.classList.remove("active")
+    );
+
+    document.getElementById(id).classList.add("active");
+
+    button.classList.add("active");
+
+    if (id === "networkView")
+        drawNetworkGraph();
+
+    if (id === "spectrumView")
+    {
+        drawSpectrum();
+        drawWaterfall();
+    }
+
+    if (id === "clientView")
+        drawClientGraph();
+
+    if (id === "catalogView")
+        updateCatalog(true);
+
+}
+
+
+// ==========================================================
+// Canvas helper
+// ==========================================================
+
+function resizeCanvas(canvas, ctx)
+{
+    const dpr = window.devicePixelRatio || 1;
+
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    return {
+        width: rect.width,
+        height: rect.height
+    };
+}
+
+
+// ==========================================================
+// Tooltip
+// ==========================================================
+
+// Fetches must not hang forever: if the device stops
+// servicing its socket the browser would otherwise wait
+// indefinitely and the status line would never change.
+function timeoutSignal(ms)
+{
+    const controller = new AbortController();
+
+    setTimeout(() => controller.abort(), ms);
+
+    return controller.signal;
+}
+
+
+// ==========================================================
+// Transport: the web server, or the sensor's USB port
+// ==========================================================
+//
+// Served by the sensor, the page asks it over HTTP. Opened from a
+// static copy (https, a phone with the sensor on its USB-C port)
+// it talks to the chip's own USB port with WebUSB instead; the
+// sensor answers the same API there. The protocol is described in
+// the firmware at "Requests over Ethernet or USB": a request line
+// "GET /api/...", the answer 0x02, a header line "200 type [file]"
+// and the body in chunks of a two-byte length, ended by length 0.
+
+// The sensor never serves https, so this copy came from elsewhere
+function isStaticPage()
+{
+    return location.protocol === "https:";
+}
+
+// The open USB link, null without one
+let usbLink = null;
+
+// Espressif's USB Serial/JTAG
+const USB_VENDOR_ESPRESSIF = 0x303a;
+
+/*
+ * Reads the answers out of the byte stream. Bytes before the
+ * start byte are skipped, so a half answer after a reset does no
+ * harm; but for USB_PUT_ACK, the sensor's go-ahead for the next
+ * piece of a PUT.
+ */
+const USB_PUT_PIECE = 2048;
+const USB_PUT_ACK = 0x06;
+
+class UsbAnswerParser
+{
+    constructor(onAnswer, onAck = () => { })
+    {
+        this.onAnswer = onAnswer;
+        this.onAck = onAck;
+        this.reset();
+    }
+
+    reset()
+    {
+        this.state = "idle";
+        this.head = [];
+        this.parts = [];
+        this.lengthBytes = [];
+        this.left = 0;
+    }
+
+    feed(bytes)
+    {
+        let i = 0;
+
+        while (i < bytes.length)
+        {
+            if (this.state === "idle")
+            {
+                const b = bytes[i++];
+
+                if (b === 0x02)
+                {
+                    this.state = "head";
+                    this.head = [];
+                }
+                else if (b === USB_PUT_ACK)
+                {
+                    this.onAck();
+                }
+            }
+            else if (this.state === "head")
+            {
+                const b = bytes[i++];
+
+                if (b === 0x0a)
+                {
+                    this.state = "length";
+                    this.lengthBytes = [];
+                    this.parts = [];
+                }
+                else
+                {
+                    this.head.push(b);
+                }
+            }
+            else if (this.state === "length")
+            {
+                this.lengthBytes.push(bytes[i++]);
+
+                if (this.lengthBytes.length === 2)
+                {
+                    this.left = this.lengthBytes[0] |
+                                (this.lengthBytes[1] << 8);
+                    this.lengthBytes = [];
+
+                    if (this.left === 0)
+                        this.finish();
+                    else
+                        this.state = "body";
+                }
+            }
+            else
+            {
+                const take = Math.min(this.left, bytes.length - i);
+
+                this.parts.push(bytes.slice(i, i + take));
+                this.left -= take;
+                i += take;
+
+                if (this.left === 0)
+                    this.state = "length";
+            }
+        }
+    }
+
+    finish()
+    {
+        const words = new TextDecoder().decode(
+            new Uint8Array(this.head)).split(" ");
+
+        const total = this.parts.reduce((n, p) => n + p.length, 0);
+        const body = new Uint8Array(total);
+
+        let at = 0;
+
+        this.parts.forEach(p =>
+        {
+            body.set(p, at);
+            at += p.length;
+        });
+
+        this.reset();
+
+        this.onAnswer({
+            status: parseInt(words[0], 10) || 0,
+            type: words[1] || "",
+            filename: words[2] || "",
+            body
+        });
+    }
+}
+
+// An answer that looks enough like fetch's Response for the page
+function usbResponse(answer)
+{
+    const text = () => new TextDecoder().decode(answer.body);
+
+    return {
+        ok: answer.status >= 200 && answer.status < 300,
+        status: answer.status,
+        filename: answer.filename,
+        json: async () => JSON.parse(text()),
+        text: async () => text(),
+        blob: async () => new Blob([answer.body], { type: answer.type })
+    };
+}
+
+class UsbLink
+{
+    constructor(device, epIn, epOut)
+    {
+        this.device = device;
+        this.epIn = epIn;
+        this.epOut = epOut;
+        this.closed = false;
+        this.queue = [];
+        this.current = null;
+        this.parser = new UsbAnswerParser(a => this.answered(a),
+                                          () => this.acked());
+        this.ackWaiter = null;
+    }
+
+    // The device: chosen by the user, or one already allowed (a
+    // sensor coming back after a firmware update)
+    static async open(known = null)
+    {
+        const device = known || await navigator.usb.requestDevice(
+            { filters: [{ vendorId: USB_VENDOR_ESPRESSIF }] });
+
+        await device.open();
+
+        if (!device.configuration)
+            await device.selectConfiguration(1);
+
+        const ifaces = device.configuration.interfaces;
+
+        const ctrl = ifaces.find(i => i.alternates[0].interfaceClass === 2);
+        const data = ifaces.find(i => i.alternates[0].interfaceClass === 10);
+
+        if (!ctrl || !data)
+            throw new Error("no serial interface on this device");
+
+        await device.claimInterface(ctrl.interfaceNumber);
+        await device.claimInterface(data.interfaceNumber);
+
+        const eps = data.alternates[0].endpoints;
+
+        // DTR on, RTS off: RTS is what resets the chip
+        await device.controlTransferOut({
+            requestType: "class", recipient: "interface",
+            request: 0x22, value: 0x01, index: ctrl.interfaceNumber });
+
+        const link = new UsbLink(device,
+                                 eps.find(e => e.direction === "in"),
+                                 eps.find(e => e.direction === "out"));
+
+        link.readLoop();
+
+        return link;
+    }
+
+    /*
+     * Google's web-serial-polyfill cannot be used here: the ESP
+     * ends a transfer with an empty packet, which the polyfill
+     * hands to its stream and the stream refuses. Empty reads are
+     * simply skipped.
+     */
+    async readLoop()
+    {
+        try
+        {
+            while (!this.closed)
+            {
+                const r = await this.device.transferIn(
+                    this.epIn.endpointNumber, this.epIn.packetSize * 64);
+
+                if (r.status !== "ok")
+                    throw new Error("USB transfer " + r.status);
+
+                if (r.data && r.data.byteLength)
+                    this.parser.feed(new Uint8Array(r.data.buffer,
+                        r.data.byteOffset, r.data.byteLength));
+            }
+        }
+        catch (e)
+        {
+            this.fail(e);
+        }
+    }
+
+    /*
+     * One request at a time: the sensor answers in order. With a
+     * body (Uint8Array) it goes as "PUT url&len=..." and the bytes
+     * right after the line, see usbApiRequest() in the firmware.
+     */
+    request(url, body, options = {})
+    {
+        // Closed, the queue is never worked off: a request would wait
+        // for ever
+        if (this.closed)
+            return Promise.reject(new Error("USB link closed"));
+
+        return new Promise((resolve, reject) =>
+        {
+            this.queue.push({ url, body, resolve, reject,
+                              timeout: options.timeout || 30000,
+                              progress: options.progress });
+            this.next();
+        });
+    }
+
+    next()
+    {
+        if (this.current || !this.queue.length || this.closed)
+            return;
+
+        this.current = this.queue.shift();
+
+        // A pcap of the whole ring takes a few seconds
+        this.current.timer = setTimeout(() =>
+        {
+            const c = this.current;
+
+            this.current = null;
+            this.parser.reset();
+            c.reject(new Error("USB: no answer for " + c.url));
+            this.next();
+        }, this.current.timeout);
+
+        const c = this.current;
+
+        if (!c.body)
+        {
+            this.device.transferOut(this.epOut.endpointNumber,
+                new TextEncoder().encode("GET " + c.url + "\n"))
+                .catch(e => this.fail(e));
+            return;
+        }
+
+        this.sendBody(c).catch(e => this.fail(e));
+    }
+
+    /*
+     * The bytes go in pieces of USB_PUT_PIECE, each but the last
+     * after the sensor's USB_PUT_ACK for the one before: it drops
+     * what does not fit its receive queue while it writes the flash.
+     */
+    async sendBody(c)
+    {
+        await this.device.transferOut(this.epOut.endpointNumber,
+            new TextEncoder().encode("PUT " + c.url + "\n"));
+
+        for (let at = 0; at < c.body.length && !this.closed;
+             at += USB_PUT_PIECE)
+        {
+            const end = Math.min(at + USB_PUT_PIECE, c.body.length);
+            const ack = end < c.body.length ? this.nextAck() : null;
+
+            await this.device.transferOut(this.epOut.endpointNumber,
+                c.body.subarray(at, end));
+
+            if (c.progress)
+                c.progress(end, c.body.length);
+
+            // No go-ahead: stop sending; the sensor gives up after
+            // 10 s without data and answers with its error
+            if (ack && !await ack)
+                break;
+        }
+    }
+
+    // True on the sensor's next USB_PUT_ACK, false after 15 s
+    nextAck()
+    {
+        return new Promise(resolve =>
+        {
+            const timer = setTimeout(() =>
+            {
+                this.ackWaiter = null;
+                resolve(false);
+            }, 15000);
+
+            this.ackWaiter = () =>
+            {
+                clearTimeout(timer);
+                this.ackWaiter = null;
+                resolve(true);
+            };
+        });
+    }
+
+    acked()
+    {
+        if (this.ackWaiter)
+            this.ackWaiter();
+    }
+
+    answered(answer)
+    {
+        const c = this.current;
+
+        if (!c)
+            return;
+
+        clearTimeout(c.timer);
+        this.current = null;
+
+        c.resolve(usbResponse(answer));
+
+        this.next();
+    }
+
+    fail(error)
+    {
+        if (this.closed)
+            return;
+
+        this.closed = true;
+
+        const waiting = (this.current ? [this.current] : []).concat(this.queue);
+
+        this.current = null;
+        this.queue = [];
+
+        waiting.forEach(c =>
+        {
+            clearTimeout(c.timer);
+            c.reject(error);
+        });
+
+        if (usbLink === this)
+        {
+            usbLink = null;
+            showUsbState("USB lost: " + (error.message || error));
+        }
+    }
+
+    async close()
+    {
+        this.fail(new Error("closed"));
+
+        try
+        {
+            await this.device.close();
+        }
+        catch (e)
+        {
+        }
+    }
+}
+
+/*
+ * fetch() for the API: HTTP when the sensor served the page, USB
+ * when connected that way. A static copy without a link has no
+ * sensor to ask.
+ */
+function api(url, options = {})
+{
+    if (snapshotView && snapshotServes(url))
+        return Promise.resolve(snapshotAnswer(url));
+
+    if (usbLink)
+        return withSignal(usbLink.request(url), options.signal);
+
+    if (isStaticPage())
+        return Promise.reject(new Error("not connected"));
+
+    return fetch(url, options);
+}
+
+// An AbortSignal for a USB request as fetch() has it: given up after
+// a time limit, so a request to a sensor gone away cannot hold up
+// whoever waits for it
+function withSignal(promise, signal)
+{
+    if (!signal)
+        return promise;
+
+    return new Promise((resolve, reject) =>
+    {
+        if (signal.aborted)
+            return reject(new Error("aborted"));
+
+        signal.addEventListener("abort",
+                                () => reject(new Error("aborted")));
+        promise.then(resolve, reject);
+    });
+}
+
+// Save an answer as a file: a link for HTTP, a blob over USB
+/*
+ * Said under a failed pcap download while a snapshot is shown: the
+ * snapshot keeps no frames, the link asks the connected sensor.
+ */
+const SNAPSHOT_PCAP_NOTE =
+    "This is a snapshot: it keeps no frames, the link asks the " +
+    "connected sensor for what its capture holds now. The frames of " +
+    "that moment may have been overwritten since, and for a snapshot " +
+    "from another sensor they were never there.";
+
+// Over HTTP outside a snapshot a plain link; otherwise fetched here
+async function apiDownload(url)
+{
+    if (!usbLink && !snapshotView)
+    {
+        window.location = url;
+        return;
+    }
+
+    const note = snapshotView && url.startsWith("/api/pcap")
+        ? "\n\n" + SNAPSHOT_PCAP_NOTE : "";
+
+    try
+    {
+        const response = await api(url);
+
+        if (!response.ok)
+        {
+            alert((await response.text()).trim() + note);
+            return;
+        }
+
+        // Over USB the answer names the file, over HTTP the header
+        const disposition = (response.headers &&
+            response.headers.get("Content-Disposition")) || "";
+
+        saveBlob(await response.blob(), response.filename ||
+                 (disposition.match(/filename=([^;]+)/) || [])[1] ||
+                 "download");
+    }
+    catch (e)
+    {
+        alert("Download failed: " + (e.message || e) + note);
+    }
+}
+
+/*
+ * Send a file to the sensor: over USB as a PUT with the bytes behind
+ * the request line, over HTTP as a multipart upload, as the firmware
+ * update does.
+ */
+function apiUpload(url, bytes)
+{
+    if (snapshotView && snapshotServes(url))
+        return Promise.reject(new Error("not while a snapshot is shown"));
+
+    if (usbLink)
+        return usbLink.request(url, bytes);
+
+    if (isStaticPage())
+        return Promise.reject(new Error("not connected"));
+
+    const form = new FormData();
+
+    form.append("file", new Blob([bytes], { type: "application/json" }),
+                "snapshot.json");
+
+    return fetch(url, { method: "POST", body: form });
+}
+
+// Hand a file made in the page to the browser to save
+function saveBlob(blob, filename)
+{
+    const a = document.createElement("a");
+
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+// A JSON answer in a new tab, as /api/export opens
+async function apiOpen(url)
+{
+    if (!usbLink)
+    {
+        window.open(url, "_blank");
+        return;
+    }
+
+    try
+    {
+        const response = await api(url);
+
+        window.open(URL.createObjectURL(await response.blob()), "_blank");
+    }
+    catch (e)
+    {
+        alert("Failed: " + (e.message || e));
+    }
+}
+
+// The pcap links in the tables: over USB they download by script
+function apiLink(event, a)
+{
+    event.stopPropagation();
+
+    if (!usbLink && !snapshotView)
+        return true;
+
+    event.preventDefault();
+
+    apiDownload(a.getAttribute("href"));
+
+    return false;
+}
+
+
+// ==========================================================
+// Snapshots: a moment kept on the sensor, read back later
+// ==========================================================
+
+/*
+ * The snapshot being viewed, as the sensor writes it (see
+ * "Snapshots" in the firmware): the answers of the read-only
+ * endpoints, keyed by the URL the page asks for. While it is set,
+ * api() answers those from it; everything else, the snapshot list
+ * included, still goes to the sensor. Declared with the other
+ * state at the top.
+ */
+function snapshotPath(url)
+{
+    return url.split("?")[0];
+}
+
+/*
+ * Every endpoint a snapshot can hold, whether this one kept it or
+ * not: one left out by Keep answers 404 rather than coming live from
+ * the sensor, which would mix today's stations into an old picture.
+ */
+const SNAPSHOT_PATHS = ["/api/status", "/api/plan", "/api/live",
+    "/api/networks", "/api/changes", "/api/clients", "/api/assochistory",
+    "/api/catalog",
+    "/api/history", "/api/ble", "/api/zb", "/api/zbwaterfall"];
+
+function snapshotServes(url)
+{
+    return SNAPSHOT_PATHS.includes(snapshotPath(url));
+}
+
+// The exact URL, else any answer of the same endpoint
+function snapshotAnswer(url)
+{
+    const answers = snapshotView.answers;
+
+    let body = answers[url];
+
+    if (body === undefined)
+    {
+        const key = Object.keys(answers)
+            .find(k => snapshotPath(k) === snapshotPath(url));
+
+        body = key ? answers[key] : null;
+    }
+
+    if (body === null || body === undefined)
+        return new Response("Not in this snapshot", { status: 404 });
+
+    return new Response(JSON.stringify(body),
+        { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+// "2026-10-13 14:50" or, without a clock, the uptime then
+function snapshotTimeText(s)
+{
+    return s.epoch ? stampText(s.epoch, 0)
+                   : uptimeText(s.uptime) + " after power-on";
+}
+
+// Whatever the page collected from the other source goes
+function resetViewData()
+{
+    liveData = null;
+    historyData = null;
+    networks = [];
+    stations = [];
+    awdlDevices = [];
+    assocHistory = null;
+    catalogData = null;
+    bleDevices = [];
+    zbData = null;
+    zbWaterfallData = null;
+
+    Object.keys(apNameCache).forEach(k => delete apNameCache[k]);
+    Object.keys(apNameFromStation).forEach(k => delete apNameFromStation[k]);
+
+    hideTip();
+
+    // The next round fetches everything
+    pollTick = -1;
+}
+
+function enterSnapshot(data)
+{
+    if (!data || data.wlanscout_snapshot !== 1 || !data.answers)
+        throw new Error("not a wlanscout+ snapshot");
+
+    snapshotView = data;
+
+    resetViewData();
+    resetChanges();
+
+    const st = data.answers["/api/status"] || {};
+
+    uiPage = st.mode === 1 ? "ble" : (st.mode === 2 ? "zb" : "wifi");
+    scanMode = uiPage;
+
+    applyModeUI();
+    showSnapshotBar();
+    loadChannelPlan();
+}
+
+function leaveSnapshot()
+{
+    snapshotView = null;
+
+    resetViewData();
+    resetChanges();
+    showSnapshotBar();
+    loadChannelPlan();
+}
+
+window.leaveSnapshot = leaveSnapshot;
+
+function showSnapshotBar()
+{
+    const bar = document.getElementById("snapshotBar");
+
+    bar.classList.toggle("on", !!snapshotView);
+
+    // Flush empties the sensor's live tables, nothing a snapshot has
+    document.querySelectorAll(".flushBtn").forEach(b =>
+    {
+        b.dataset.title = b.dataset.title || b.title;
+        b.disabled = !!snapshotView;
+        b.title = snapshotView ? "Not in a snapshot: Back to live first"
+                               : b.dataset.title;
+    });
+
+    if (!snapshotView)
+    {
+        bar.innerHTML = "";
+        return;
+    }
+
+    const s = snapshotView;
+
+    bar.innerHTML = "Snapshot " + s.seq +
+        (s.name ? " “" + escapeHTML(s.name) + "”" : "") +
+        (s.sensor ? " of sensor " + escapeHTML(s.sensor) : "") +
+        ", " + snapshotTimeText(s) +
+        (s.fw ? ", firmware " + escapeHTML(s.fw) : "") +
+        (s.parts !== undefined && s.parts !== 127
+            ? " (without " + snapshotPartsText(127 & ~s.parts) + ")"
+            : "") +
+        ": the page shows that moment, the sensor is not asked" +
+        "<button onclick='leaveSnapshot()'>Back to live</button>";
+}
+
+async function viewSnapshot(seq)
+{
+    try
+    {
+        const response = await api("/api/snapshot?get=" + seq,
+                                   { cache: "no-store" });
+
+        if (!response.ok)
+            throw new Error(await response.text());
+
+        enterSnapshot(await response.json());
+
+        // An imported one carries its old number inside
+        snapshotView.seq = seq;
+        showSnapshotBar();
+    }
+    catch (e)
+    {
+        alert("Cannot open snapshot " + seq + ": " + (e.message || e));
+    }
+}
+
+window.viewSnapshot = viewSnapshot;
+
+/*
+ * From the camera button on any view or from Settings. The answer
+ * shows on the button, green or red as the board's LED, and in
+ * the status line for a few seconds.
+ */
+async function takeSnapshot()
+{
+    let text;
+    let ok = false;
+
+    try
+    {
+        const response = await api("/api/snapshot?take=1",
+                                   { cache: "no-store" });
+
+        const list = await response.json();
+
+        ok = !!list.taken;
+
+        text = ok ? "Snapshot " + list.taken + " kept on the sensor " +
+                    "(Settings, Snapshots)"
+                  : "The snapshot could not be written";
+
+        showSnapshotList(list);
+    }
+    catch (e)
+    {
+        text = "No snapshot: " + (e.message || e);
+    }
+
+    const button = document.getElementById("snapBtn");
+    const status = document.getElementById("status");
+
+    button.classList.remove("ok", "bad");
+    button.classList.add(ok ? "ok" : "bad");
+
+    status.innerText = text;
+    holdStatus(5000);
+
+    setTimeout(() =>
+    {
+        button.classList.remove("ok", "bad");
+
+        if (status.innerText === text)
+            status.innerText = "";
+    }, 5000);
+}
+
+// The checkboxes under Keep, as bits for /api/snapshot?parts=
+async function setSnapshotParts()
+{
+    let parts = 0;
+
+    document.querySelectorAll("#snapParts input").forEach(box =>
+    {
+        if (box.checked)
+            parts |= Number(box.dataset.bit);
+    });
+
+    try
+    {
+        const response = await api("/api/snapshot?parts=" + parts,
+                                   { cache: "no-store" });
+
+        showSnapshotList(await response.json());
+    }
+    catch (e)
+    {
+        updateSnapshots();
+    }
+}
+
+document.querySelectorAll("#snapParts input").forEach(box =>
+    box.addEventListener("change", setSnapshotParts));
+
+// "networks, spectrum" for the bits set
+function snapshotPartsText(parts)
+{
+    const names = ["networks", "stations", "association history",
+                   "spectrum", "IE catalog", "BLE", "802.15.4"];
+
+    return names.filter((name, i) => parts & (1 << i)).join(", ");
+}
+
+window.takeSnapshot = takeSnapshot;
+
+// The last list from the sensor, for the name to start from
+let snapshotList = [];
+
+async function renameSnapshot(seq)
+{
+    const old = (snapshotList.find(s => s.seq === seq) || {}).name || "";
+
+    const name = prompt("Name for snapshot " + seq +
+                        " (empty removes it):", old);
+
+    if (name === null)
+        return;
+
+    try
+    {
+        await api("/api/snapshot?rename=" + seq + "&name=" +
+                  encodeURIComponent(name.trim()), { cache: "no-store" });
+    }
+    catch (e)
+    {
+        alert("Cannot rename: " + (e.message || e));
+    }
+
+    updateSnapshots();
+}
+
+window.renameSnapshot = renameSnapshot;
+
+async function deleteSnapshot(seq)
+{
+    if (!confirm("Delete snapshot " + seq + "?"))
+        return;
+
+    await api("/api/snapshot?del=" + seq, { cache: "no-store" });
+
+    updateSnapshots();
+}
+
+window.deleteSnapshot = deleteSnapshot;
+
+// Every snapshot on the sensor gone, after asking
+async function clearSnapshots()
+{
+    const count = snapshotList.length;
+
+    if (!count)
+    {
+        alert("There are no snapshots on the sensor");
+        return;
+    }
+
+    if (!confirm("Delete all " + count + " snapshot" +
+                 (count === 1 ? "" : "s") + " on the sensor? " +
+                 "Export all first to keep them."))
+        return;
+
+    try
+    {
+        const response = await api("/api/snapshot?clear=1",
+                                   { cache: "no-store" });
+
+        showSnapshotList(await response.json());
+
+        snapshotStatus(count + " snapshot" + (count === 1 ? "" : "s") +
+                       " deleted");
+    }
+    catch (e)
+    {
+        snapshotStatus("Clear failed: " + (e.message || e));
+    }
+}
+
+window.clearSnapshots = clearSnapshots;
+
+// Short-lived progress and result in the status line
+function snapshotStatus(text, keep)
+{
+    const status = document.getElementById("status");
+
+    status.innerText = text;
+
+    if (keep)
+        return;
+
+    holdStatus(6000);
+
+    setTimeout(() =>
+    {
+        if (status.innerText === text)
+            status.innerText = "";
+    }, 6000);
+}
+
+// ==========================================================
+// ZIP: snapshots go out packed, a tenth of their size
+// ==========================================================
+
+/*
+ * Just enough of the ZIP format for snapshot files: deflate through
+ * the browser's own CompressionStream ("deflate-raw"), stored where a
+ * browser lacks it, UTF-8 names, no data descriptors. Reading takes
+ * the sizes from the central directory, so archives made elsewhere
+ * work as well, as long as they are stored or deflated.
+ */
+const CRC_TABLE = (() =>
+{
+    const table = new Uint32Array(256);
+
+    for (let n = 0; n < 256; n++)
+    {
+        let c = n;
+
+        for (let k = 0; k < 8; k++)
+            c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+
+        table[n] = c >>> 0;
+    }
+
+    return table;
+})();
+
+function crc32(bytes)
+{
+    let c = 0xFFFFFFFF;
+
+    for (let i = 0; i < bytes.length; i++)
+        c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+
+    return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+async function streamBytes(bytes, stream)
+{
+    const out = new Blob([bytes]).stream().pipeThrough(stream);
+
+    return new Uint8Array(await new Response(out).arrayBuffer());
+}
+
+// MS-DOS time and date of an epoch, local time as ZIP tools expect
+function dosTime(epoch)
+{
+    const d = new Date((epoch || Date.now() / 1000) * 1000);
+
+    return {
+        time: (d.getHours() << 11) | (d.getMinutes() << 5) |
+              (d.getSeconds() >> 1),
+        date: ((Math.max(d.getFullYear(), 1980) - 1980) << 9) |
+              ((d.getMonth() + 1) << 5) | d.getDate()
+    };
+}
+
+// files: [{name, bytes, epoch}] -> Blob of a .zip
+async function makeZip(files)
+{
+    const enc = new TextEncoder();
+    const parts = [];
+    const central = [];
+
+    let offset = 0;
+
+    for (const f of files)
+    {
+        const name = enc.encode(f.name);
+        const crc = crc32(f.bytes);
+
+        let method = 0;
+        let data = f.bytes;
+
+        if (typeof CompressionStream !== "undefined")
+        {
+            try
+            {
+                data = await streamBytes(f.bytes,
+                                         new CompressionStream("deflate-raw"));
+                method = 8;
+            }
+            catch (e)
+            {
+                data = f.bytes;
+            }
+        }
+
+        const t = dosTime(f.epoch);
+
+        // Local file header, 30 bytes and the name
+        const head = new DataView(new ArrayBuffer(30));
+
+        head.setUint32(0, 0x04034b50, true);
+        head.setUint16(4, 20, true);            // version needed
+        head.setUint16(6, 0x0800, true);        // UTF-8 name
+        head.setUint16(8, method, true);
+        head.setUint16(10, t.time, true);
+        head.setUint16(12, t.date, true);
+        head.setUint32(14, crc, true);
+        head.setUint32(18, data.length, true);
+        head.setUint32(22, f.bytes.length, true);
+        head.setUint16(26, name.length, true);
+        head.setUint16(28, 0, true);
+
+        parts.push(head.buffer, name, data);
+
+        // Central directory record, 46 bytes and the name
+        const dir = new DataView(new ArrayBuffer(46));
+
+        dir.setUint32(0, 0x02014b50, true);
+        dir.setUint16(4, 20, true);             // made by
+        dir.setUint16(6, 20, true);
+        dir.setUint16(8, 0x0800, true);
+        dir.setUint16(10, method, true);
+        dir.setUint16(12, t.time, true);
+        dir.setUint16(14, t.date, true);
+        dir.setUint32(16, crc, true);
+        dir.setUint32(20, data.length, true);
+        dir.setUint32(24, f.bytes.length, true);
+        dir.setUint16(28, name.length, true);
+        dir.setUint32(42, offset, true);
+
+        central.push(dir.buffer, name);
+
+        offset += 30 + name.length + data.length;
+    }
+
+    const size = central.reduce((n, p) => n + p.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, files.length, true);
+    end.setUint16(10, files.length, true);
+    end.setUint32(12, size, true);
+    end.setUint32(16, offset, true);
+
+    return new Blob(parts.concat(central, [end.buffer]),
+                    { type: "application/zip" });
+}
+
+// bytes of a .zip -> [{name, bytes}]
+async function readZip(bytes)
+{
+    const view = new DataView(bytes.buffer, bytes.byteOffset,
+                              bytes.byteLength);
+
+    // End of central directory: the last 22 bytes, or before a comment
+    let end = -1;
+
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557);
+         i--)
+    {
+        if (view.getUint32(i, true) === 0x06054b50)
+        {
+            end = i;
+            break;
+        }
+    }
+
+    if (end < 0)
+        throw new Error("not a ZIP file");
+
+    const count = view.getUint16(end + 10, true);
+    let at = view.getUint32(end + 16, true);
+
+    const dec = new TextDecoder();
+    const files = [];
+
+    for (let n = 0; n < count; n++)
+    {
+        if (view.getUint32(at, true) !== 0x02014b50)
+            throw new Error("damaged ZIP directory");
+
+        const method = view.getUint16(at + 10, true);
+        const packed = view.getUint32(at + 20, true);
+        const nameLen = view.getUint16(at + 28, true);
+        const extraLen = view.getUint16(at + 30, true);
+        const commentLen = view.getUint16(at + 32, true);
+        const local = view.getUint32(at + 42, true);
+        const name = dec.decode(bytes.subarray(at + 46, at + 46 + nameLen));
+
+        at += 46 + nameLen + extraLen + commentLen;
+
+        if (name.endsWith("/"))
+            continue;
+
+        const start = local + 30 + view.getUint16(local + 26, true) +
+                      view.getUint16(local + 28, true);
+        const data = bytes.subarray(start, start + packed);
+
+        if (method === 0)
+            files.push({ name, bytes: data });
+        else if (method === 8)
+            files.push({ name, bytes: await streamBytes(data,
+                new DecompressionStream("deflate-raw")) });
+        else
+            throw new Error(name + ": packed in a way not supported " +
+                            "(method " + method + ")");
+    }
+
+    return files;
+}
+
+// A file picked by the user: the snapshots in it, JSON or ZIP
+async function snapshotsInUpload(file)
+{
+    const bytes = new Uint8Array(await file.arrayBuffer());
+
+    // "PK\3\4": a ZIP, each .json in it a snapshot or an old bundle
+    if (bytes[0] === 0x50 && bytes[1] === 0x4b)
+    {
+        let docs = [];
+
+        for (const f of await readZip(bytes))
+            if (/\.json$/i.test(f.name))
+                docs = docs.concat(snapshotsInFile(
+                    JSON.parse(new TextDecoder().decode(f.bytes))));
+
+        if (!docs.length)
+            throw new Error("no snapshot in " + file.name);
+
+        return docs;
+    }
+
+    return snapshotsInFile(JSON.parse(new TextDecoder().decode(bytes)));
+}
+
+// "wlanscout-snapshot-7-Keller": number, then the name if it has one
+function snapshotFileName(doc, seq)
+{
+    const name = (doc.name || "").replace(/[^A-Za-z0-9._-]+/g, "_")
+        .replace(/^_+|_+$/g, "").slice(0, 40);
+
+    return "wlanscout-snapshot-" + seq + (name ? "-" + name : "");
+}
+
+async function fetchSnapshot(seq)
+{
+    const response = await api("/api/snapshot?get=" + seq,
+                               { cache: "no-store" });
+
+    if (!response.ok)
+        throw new Error("snapshot " + seq + ": " + await response.text());
+
+    return response.json();
+}
+
+// One snapshot as a .zip holding its .json
+async function exportSnapshot(seq)
+{
+    try
+    {
+        const doc = await fetchSnapshot(seq);
+        const base = snapshotFileName(doc, seq);
+
+        saveBlob(await makeZip([{
+            name: base + ".json",
+            bytes: new TextEncoder().encode(JSON.stringify(doc)),
+            epoch: doc.epoch }]), base + ".zip");
+    }
+    catch (e)
+    {
+        snapshotStatus("Export failed: " + (e.message || e));
+    }
+}
+
+window.exportSnapshot = exportSnapshot;
+
+/*
+ * Every snapshot of the sensor in one .zip, each its own .json as
+ * Export gives it. Made in the page, so it works over USB as well.
+ * Files of Export all before 1.73.0 held them in one JSON instead,
+ *   {"wlanscout_snapshots":1, ..., "snapshots":[...]},
+ * which Import still takes.
+ */
+async function exportAllSnapshots()
+{
+    try
+    {
+        const list = await (await api("/api/snapshot",
+                                      { cache: "no-store" })).json();
+
+        if (!list.snapshots || !list.snapshots.length)
+        {
+            alert("There are no snapshots on the sensor");
+            return;
+        }
+
+        const files = [];
+        let sensorName = "";
+
+        for (const s of list.snapshots)
+        {
+            snapshotStatus("Exporting snapshot " + (files.length + 1) +
+                           " of " + list.snapshots.length + " ...", true);
+
+            const doc = await fetchSnapshot(s.seq);
+
+            sensorName = doc.sensor || sensorName;
+
+            files.push({ name: snapshotFileName(doc, s.seq) + ".json",
+                         bytes: new TextEncoder().encode(JSON.stringify(doc)),
+                         epoch: doc.epoch });
+        }
+
+        const sensor = (sensorName || "sensor")
+            .replace(/[^A-Za-z0-9._-]+/g, "_");
+        const day = new Date().toISOString().slice(0, 10);
+
+        saveBlob(await makeZip(files),
+                 "wlanscout-snapshots-" + sensor + "-" + day + ".zip");
+
+        snapshotStatus(files.length + " snapshots exported");
+    }
+    catch (e)
+    {
+        snapshotStatus("Export failed: " + (e.message || e));
+    }
+}
+
+window.exportAllSnapshots = exportAllSnapshots;
+
+// The snapshots in a file: one as Export saves it, or Export all's
+function snapshotsInFile(data)
+{
+    if (data && data.wlanscout_snapshot === 1 && data.answers)
+        return [data];
+
+    if (data && data.wlanscout_snapshots === 1 &&
+        Array.isArray(data.snapshots))
+        return data.snapshots.filter(s =>
+            s && s.wlanscout_snapshot === 1 && s.answers);
+
+    throw new Error("not a wlanscout+ snapshot");
+}
+
+/*
+ * Put snapshots from files on the sensor, one by one, oldest first.
+ * The name goes as an argument, the rest as the file is, starting
+ * the way the firmware checks.
+ */
+async function importSnapshotFiles(input)
+{
+    const files = [...(input.files || [])];
+
+    input.value = "";
+
+    let docs = [];
+
+    try
+    {
+        for (const file of files)
+            docs = docs.concat(await snapshotsInUpload(file));
+    }
+    catch (e)
+    {
+        alert("Cannot import: " + (e.message || e));
+        return;
+    }
+
+    if (!docs.length)
+        return;
+
+    docs.sort((a, b) => (a.epoch - b.epoch) || (a.seq - b.seq));
+
+    if (!confirm("Import " + docs.length + " snapshot" +
+                 (docs.length === 1 ? "" : "s") + " onto the sensor? " +
+                 "They count as its newest; it keeps the last ten, the " +
+                 "oldest make room."))
+        return;
+
+    let done = 0;
+    let failed = "";
+
+    for (const doc of docs)
+    {
+        snapshotStatus("Importing snapshot " + (done + 1) + " of " +
+                       docs.length + " ...", true);
+
+        const { name, ...rest } = doc;
+        const bytes = new TextEncoder().encode(
+            JSON.stringify({ wlanscout_snapshot: 1, ...rest }));
+
+        try
+        {
+            const response = await apiUpload(
+                "/api/snapshotimport?len=" + bytes.length +
+                "&epoch=" + (doc.epoch || 0) +
+                "&uptime=" + (doc.uptime || 0) +
+                "&name=" + encodeURIComponent(name || ""), bytes);
+
+            const answer = await response.json();
+
+            if (!answer.ok)
+                throw new Error(answer.error);
+
+            done++;
+        }
+        catch (e)
+        {
+            failed = e.message || String(e);
+            break;
+        }
+    }
+
+    snapshotStatus(failed
+        ? "Import stopped after " + done + " of " + docs.length + ": " +
+          failed
+        : done + " snapshot" + (done === 1 ? "" : "s") + " imported");
+
+    updateSnapshots();
+}
+
+window.importSnapshotFiles = importSnapshotFiles;
+
+function openSnapshotFile(input)
+{
+    const file = input.files && input.files[0];
+
+    if (!file)
+        return;
+
+    // From a .zip of several the newest; Import takes them all
+    snapshotsInUpload(file)
+        .then(docs =>
+        {
+            docs.sort((a, b) => (a.epoch - b.epoch) || (a.uptime - b.uptime));
+
+            enterSnapshot(docs[docs.length - 1]);
+
+            if (docs.length > 1)
+                snapshotStatus(file.name + " holds " + docs.length +
+                               " snapshots, showing the newest");
+        })
+        .catch(e => alert("Cannot open " + file.name + ": " +
+                          (e.message || e)))
+        .finally(() => input.value = "");
+}
+
+window.openSnapshotFile = openSnapshotFile;
+
+async function updateSnapshots()
+{
+    try
+    {
+        const response = await api("/api/snapshot",
+                                   { cache: "no-store",
+                                     signal: timeoutSignal(4000) });
+
+        if (response.ok)
+            showSnapshotList(await response.json());
+    }
+    catch (e)
+    {
+        showSnapshotList(null);
+    }
+}
+
+function showSnapshotList(list)
+{
+    const table = document.getElementById("snapTable");
+    const info = document.getElementById("snapInfo");
+
+    if (!list || !list.snapshots)
+    {
+        table.innerHTML = "";
+        info.innerText = "(sensor not reachable)";
+        return;
+    }
+
+    info.innerText = list.fs
+        ? "(" + list.snapshots.length + " of " + list.keep + ")"
+        : "(no flash file system)";
+
+    // Firmware before 1.70.0 keeps everything and has no setting
+    document.querySelectorAll("#snapParts input").forEach(box =>
+    {
+        box.disabled = list.parts === undefined;
+        box.checked = list.parts === undefined ||
+                      !!(list.parts & Number(box.dataset.bit));
+    });
+    table.innerHTML = list.snapshots.slice().reverse().map(s =>
+        "<tr><td>" + s.seq + "</td>" +
+        "<td>" + (s.name ? "<b>" + escapeHTML(s.name) + "</b>" : "") +
+        "</td>" +
+        "<td>" + snapshotTimeText(s) + "</td>" +
+        "<td>" + Math.round(s.bytes / 1024) + " kB</td>" +
+        "<td><button onclick='window.viewSnapshot(" + s.seq +
+        ")'>View</button> " +
+        "<button onclick='window.exportSnapshot(" + s.seq +
+        ")'>Export</button> " +
+        "<button onclick='window.renameSnapshot(" + s.seq +
+        ")'>Rename</button> " +
+        "<button onclick='window.deleteSnapshot(" + s.seq +
+        ")'>Delete</button></td></tr>").join("");
+
+    snapshotList = list.snapshots;
+}
+
+/*
+ * The sensor did not answer. Not while a snapshot is shown: the
+ * sensor is not asked then, and a part the snapshot left out (the
+ * spectrum, say) answers 404. That put "Connection lost" in the
+ * status line every poll round and the next round took it away
+ * again, the whole page jumping by a line each time.
+ */
+function showOffline()
+{
+    if (snapshotView)
+        return;
+
+    document.getElementById("status").innerText = offlineText();
+}
+
+// What the status line says when the sensor does not answer
+function offlineText()
+{
+    return isStaticPage() && !usbLink
+        ? "Not connected: plug in the sensor's USB port and press USB"
+        : "Connection lost";
+}
+
+function clearOfflineText()
+{
+    const status = document.getElementById("status");
+
+    if (status.innerText === offlineText() ||
+        status.innerText === "Connection lost" ||
+        status.innerText.startsWith("Not connected"))
+    {
+        status.innerText = "";
+    }
+}
+
+function showUsbState(text)
+{
+    const button = document.getElementById("usbBtn");
+
+    button.classList.toggle("active", !!usbLink);
+    button.title = text;
+    button.innerText = usbLink ? "USB ✓" : "USB";
+
+    if (!usbLink && isStaticPage())
+        document.getElementById("status").innerText = text;
+}
+
+async function toggleUsb()
+{
+    if (usbLink)
+    {
+        const link = usbLink;
+
+        usbLink = null;
+        await link.close();
+        showUsbState("disconnected");
+
+        return;
+    }
+
+    try
+    {
+        usbLink = await UsbLink.open();
+
+        showUsbState("connected over USB");
+        clearOfflineText();
+
+        // The one at page load went nowhere, there was no sensor
+        sendBrowserTime();
+
+        // Fetch everything now instead of waiting for the poll
+        loadChannelPlan();
+        updateStatus();
+        updateNetworks();
+    }
+    catch (e)
+    {
+        usbLink = null;
+        showUsbState("USB: " + (e.message || e));
+    }
+}
+
+if (navigator.usb)
+{
+    navigator.usb.addEventListener("disconnect", e =>
+    {
+        if (usbLink && e.device === usbLink.device)
+            usbLink.fail(new Error("sensor unplugged"));
+    });
+
+    // After a firmware update over USB the sensor restarts and comes
+    // back as a new device; the browser already allows it, so the
+    // link is taken up again without asking
+    navigator.usb.addEventListener("connect", async e =>
+    {
+        if (!usbReconnect || usbLink ||
+            e.device.vendorId !== USB_VENDOR_ESPRESSIF)
+            return;
+
+        try
+        {
+            usbLink = await UsbLink.open(e.device);
+            showUsbState("connected over USB");
+        }
+        catch (err)
+        {
+            usbLink = null;
+        }
+    });
+}
+
+// Set while a firmware update over USB waits for the sensor
+let usbReconnect = false;
+
+
+function showTip(html, clientX, clientY, pinnable = false)
+{
+    const tip = document.getElementById("tip");
+
+    // Pinned: the mouse going over other rows leaves it alone
+    if (tipPinned && /^mouse/.test((window.event || {}).type || ""))
+        return;
+
+    // How to keep it open, for the mouse on a table row
+    if (pinnable && !tipPinned && lastPointerType === "mouse")
+        html += "<div class='tipHint'>click the row to keep it open</div>";
+
+    // What is on screen: on a phone the page can be wider than
+    // that, and a tooltip placed by the page width ran off it
+    const vv = window.visualViewport;
+
+    const viewX = vv ? vv.offsetLeft : 0;
+    const viewY = vv ? vv.offsetTop : 0;
+    const viewW = vv ? vv.width : window.innerWidth;
+    const viewH = vv ? vv.height : window.innerHeight;
+
+    tip.style.maxWidth = Math.min(420, viewW - 16) + "px";
+
+    // Never taller than the screen; the rest scrolls inside it
+    tip.style.maxHeight = (viewH - 8) + "px";
+
+    tip.innerHTML =
+        "<button class='tipClose' aria-label='Close' " +
+        "onclick='hideTip()'>\u2715</button>" + html;
+
+    // Only when it opens: mousemove calls this again and again
+    if (tip.style.display !== "block")
+        letTapThrough(tip);
+
+    tip.style.display = "block";
+    tip.scrollTop = 0;
+
+    const w = tip.offsetWidth;
+    const h = tip.offsetHeight;
+
+    let x = clientX + 16;
+    let y = clientY + 16;
+
+    if (x + w > viewX + viewW - 8)
+        x = clientX - w - 16;
+
+    if (y + h > viewY + viewH - 8)
+        y = clientY - h - 16;
+
+    x = Math.min(Math.max(viewX + 4, x), viewX + viewW - w - 4);
+    y = Math.min(Math.max(viewY + 4, y), viewY + viewH - h - 4);
+
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+}
+
+/*
+ * A tap anywhere else closes the tooltip, a tap on another row
+ * opens that one's. Mouse clicks leave it alone, the pointer
+ * leaving does that.
+ */
+document.addEventListener("pointerdown", e =>
+{
+    const tip = document.getElementById("tip");
+
+    lastPointerType = e.pointerType;
+
+    if ((e.pointerType !== "mouse" || tipPinned) &&
+        tip.style.display === "block" && !tip.contains(e.target))
+    {
+        hideTip();
+    }
+}, true);
+
+/*
+ * A tap opens a tooltip through the mouse events the browser makes
+ * up for it: mouseenter and mousemove first, then mousedown, mouseup
+ * and click. A tooltip taller than the space above or below the
+ * finger lands under it, and since on a touch screen it takes taps
+ * (to scroll and for its close button) those later events went to
+ * the tooltip: the row saw the mouse leave and closed it again. So
+ * for a moment after a tap it lets them through to the row.
+ */
+/*
+ * With a mouse the tooltip follows the pointer and lets it through,
+ * so nothing in it could be clicked, a map link say. A click on a
+ * table row pins it where it is: it takes the mouse, scrolls, has
+ * the close button, and stays while the pointer moves on, until the
+ * close button, Escape or a click outside it. On a touch screen a
+ * tooltip opened by a tap stays anyway.
+ */
+let tipPinned = false;
+
+function pinOnClick(tr, makeHtml)
+{
+    tr.addEventListener("click", ev =>
+    {
+        if (lastPointerType !== "mouse" ||
+            ev.target.closest("a, button, input"))
+            return;
+
+        tipPinned = false;
+        showTip(makeHtml(), ev.clientX, ev.clientY);
+
+        const tip = document.getElementById("tip");
+
+        tipPinned = true;
+        tip.classList.add("pinned");
+        tip.style.pointerEvents = "";
+    });
+}
+
+document.addEventListener("keydown", e =>
+{
+    if (e.key === "Escape" && tipPinned)
+        hideTip();
+});
+
+/*
+ * After a tap the browser keeps a mouse pointer where the finger was,
+ * and sends mouseover, mouseenter, mousemove and mouseleave again
+ * whenever the page changes under it: each time a table is drawn
+ * anew. Those opened, moved and closed the tooltip of whatever row
+ * now lay there, so on a phone the tooltip jumped every poll round,
+ * and came back after being closed (worst in a snapshot, whose
+ * tables are drawn the most). On a touch screen only the mouse
+ * events that follow a tap right away count; the rest stop here,
+ * before any row or graph sees them.
+ */
+let lastTouchAt = 0;
+
+// A mouse that really moves is back in charge (one that only seems
+// to, standing still where a finger was, does not)
+document.addEventListener("pointermove", e =>
+{
+    if (e.pointerType === "mouse" && (e.movementX || e.movementY))
+        lastPointerType = "mouse";
+}, true);
+
+["pointerdown", "pointerup"].forEach(type =>
+    document.addEventListener(type, e =>
+    {
+        if (e.pointerType !== "mouse")
+            lastTouchAt = performance.now();
+    }, true));
+
+["mouseover", "mouseout", "mouseenter", "mouseleave", "mousemove"]
+    .forEach(type => document.addEventListener(type, e =>
+    {
+        if (lastPointerType !== "mouse" &&
+            performance.now() - lastTouchAt > 800)
+        {
+            e.stopPropagation();
+        }
+    }, true));
+
+function letTapThrough(tip)
+{
+    if (lastPointerType === "mouse")
+        return;
+
+    tip.style.pointerEvents = "none";
+
+    clearTimeout(tipTapTimer);
+
+    tipTapTimer = setTimeout(() => tip.style.pointerEvents = "", 700);
+}
+
+
+function hideTip()
+{
+    if (tipPinned && /^mouse/.test((window.event || {}).type || ""))
+        return;
+
+    tipPinned = false;
+    document.getElementById("tip").classList.remove("pinned");
+
+    document.getElementById("tip").style.display = "none";
+}
+
+
+// ==========================================================
+// Frequency helpers
+// ==========================================================
+
+function channelToFreq(ch)
+{
+    if (ch === 14)
+        return 2484;
+
+    if (ch <= 14)
+        return 2407 + 5 * ch;
+
+    return 5000 + 5 * ch;
+}
+
+
+function isBand24(ch)
+{
+    return ch <= 14;
+}
+
+
+function networkWidthMHz(n)
+{
+    if (n.bandwidth === 8080)
+        return 80;
+
+    if (n.bandwidth === 160 ||
+        n.bandwidth === 80 ||
+        n.bandwidth === 40)
+    {
+        return n.bandwidth;
+    }
+
+    return 20;
+}
+
+
+function networkCenterFreq(n)
+{
+    const bw = networkWidthMHz(n);
+
+    if (bw === 20)
+        return channelToFreq(n.channel);
+
+    const center = n.center ? n.center : n.channel;
+
+    return channelToFreq(center);
+}
+
+
+function colorForKey(key, alpha)
+{
+    let h = 0;
+
+    const s = key || "";
+
+    for (let i = 0; i < s.length; i++)
+        h = (h * 31 + s.charCodeAt(i)) & 0xffff;
+
+    return "hsla(" + (h % 360) + ",70%,55%," + alpha + ")";
+}
+
+
+function colorForNetwork(n, alpha)
+{
+    return colorForKey(n.bssid || n.ssid, alpha);
+}
+
+
+function bandwidthText(bw)
+{
+    if (bw === 8080)
+        return "80+80";
+
+    return bw + " MHz";
+}
+
+
+function stdText(std)
+{
+    if (std === 7) return "Wi-Fi 7 (802.11be)";
+    if (std === 6) return "Wi-Fi 6 (802.11ax)";
+    if (std === 5) return "Wi-Fi 5 (802.11ac)";
+    if (std === 4) return "Wi-Fi 4 (802.11n)";
+    if (std === 3) return "Wi-Fi 3 (802.11g)";
+    if (std === 2) return "Wi-Fi 2 (802.11a)";
+    if (std === 1) return "Wi-Fi 1 (802.11b)";
+
+    return "unknown";
+}
+
+
+/*
+ * The generations a BSS announces, oldest first, as the names
+ * people actually use on the air: b, g, a, n, ac, ax, be.
+ */
+function modeList(modes)
+{
+    if (!modes)
+        return "";
+
+    const names = [
+        [0x01, "b"],
+        [0x02, "g"],
+        [0x04, "a"],
+        [0x08, "n"],
+        [0x10, "ac"],
+        [0x20, "ax"],
+        [0x40, "be"]
+    ];
+
+    return names
+        .filter(m => (modes & m[0]) !== 0)
+        .map(m => m[1])
+        .join("/");
+}
+
+
+function stdShort(std)
+{
+    if (std === 7) return "7 (be)";
+    if (std === 6) return "6 (ax)";
+    if (std === 5) return "5 (ac)";
+    if (std === 4) return "4 (n)";
+    if (std === 3) return "3 (g)";
+    if (std === 2) return "2 (a)";
+    if (std === 1) return "1 (b)";
+
+    return "?";
+}
+
+
+function bytesText(b)
+{
+    if (b > 1048576)
+        return (b / 1048576).toFixed(1) + " MB";
+
+    if (b > 1024)
+        return (b / 1024).toFixed(1) + " kB";
+
+    return b + " B";
+}
+
+
+// ==========================================================
+// Shared axis layout
+// ==========================================================
+
+const SEG_GAP = 16;
+const BAND_GAP = 34;
+
+
+function computeLayout(channelList, left, right, nets)
+{
+    const ch24 = channelList.filter(isBand24);
+    const ch5 = channelList.filter(c => !isBand24(c));
+
+    function makeBand(label, channels, is24)
+    {
+        const sorted = channels.slice().sort((a, b) => a - b);
+
+        const segments = [];
+
+        let cur = null;
+
+        sorted.forEach(ch =>
+        {
+            const f = channelToFreq(ch);
+
+            if (cur === null || f - cur.lastFreq > 60)
+            {
+                cur = {
+                    channels: [ch],
+                    lastFreq: f,
+                    fMin: f - 10,
+                    fMax: f + 10
+                };
+
+                segments.push(cur);
+            }
+            else
+            {
+                cur.channels.push(ch);
+                cur.lastFreq = f;
+                cur.fMax = f + 10;
+            }
+        });
+
+        if (nets)
+        {
+            nets.forEach(n =>
+            {
+                if (isBand24(n.channel) !== is24)
+                    return;
+
+                const f = networkCenterFreq(n);
+                const w = networkWidthMHz(n);
+
+                /*
+                 * Band membership comes from the primary
+                 * channel, the frequency from the centre
+                 * channel. A record where the two disagree
+                 * would stretch this band across the gap and
+                 * squeeze every real network into a few
+                 * pixels, so it is ignored for the layout.
+                 */
+                if (is24 !== (f < 2500))
+                    return;
+
+                let best = null;
+                let bestDist = Infinity;
+
+                segments.forEach(s =>
+                {
+                    const d =
+                        f < s.fMin ? s.fMin - f
+                                   : (f > s.fMax ? f - s.fMax : 0);
+
+                    if (d < bestDist)
+                    {
+                        bestDist = d;
+                        best = s;
+                    }
+                });
+
+                if (!best)
+                    return;
+
+                best.fMin = Math.min(best.fMin, f - w / 2);
+                best.fMax = Math.max(best.fMax, f + w / 2);
+
+                n._seg = best;
+            });
+        }
+
+        let span = 0;
+
+        segments.forEach(s =>
+        {
+            s.fMin -= 4;
+            s.fMax += 4;
+            s.span = s.fMax - s.fMin;
+
+            span += s.span;
+        });
+
+        return {
+            label: label,
+            is24: is24,
+            segments: segments,
+            span: span
+        };
+    }
+
+    const bands = [];
+
+    if (ch24.length)
+        bands.push(makeBand("2.4 GHz", ch24, true));
+
+    if (ch5.length)
+        bands.push(makeBand("5 GHz", ch5, false));
+
+    if (!bands.length)
+        return bands;
+
+    const usable =
+        (right - left) - BAND_GAP * (bands.length - 1);
+
+    let shares;
+
+    if (bands.length === 1)
+    {
+        shares = [1];
+    }
+    else
+    {
+        let s =
+            bands[0].span / (bands[0].span + bands[1].span);
+
+        s = Math.max(0.28, Math.min(0.55, s));
+
+        shares = [s, 1 - s];
+    }
+
+    let cursor = left;
+
+    bands.forEach((b, i) =>
+    {
+        b.x0 = cursor;
+        b.x1 = cursor + usable * shares[i];
+
+        cursor = b.x1 + BAND_GAP;
+
+        const inner =
+            (b.x1 - b.x0) - SEG_GAP * (b.segments.length - 1);
+
+        let sx = b.x0;
+
+        b.segments.forEach(s =>
+        {
+            s.x0 = sx;
+            s.x1 = sx + inner * (s.span / b.span);
+
+            sx = s.x1 + SEG_GAP;
+        });
+    });
+
+    return bands;
+}
+
+
+function bandForChannel(bands, ch)
+{
+    return bands.find(b => b.is24 === isBand24(ch));
+}
+
+
+function segForFreq(b, f)
+{
+    if (!b)
+        return null;
+
+    let best = null;
+    let bestDist = Infinity;
+
+    b.segments.forEach(s =>
+    {
+        const d =
+            f < s.fMin ? s.fMin - f
+                       : (f > s.fMax ? f - s.fMax : 0);
+
+        if (d < bestDist)
+        {
+            bestDist = d;
+            best = s;
+        }
+    });
+
+    return best;
+}
+
+
+function xForFreq(s, f)
+{
+    const v = Math.max(s.fMin, Math.min(s.fMax, f));
+
+    return s.x0 + (v - s.fMin) / s.span * (s.x1 - s.x0);
+}
+
+
+// The band's channels whose centre lies inside the segment
+function axisChannels(b, s)
+{
+    const all = (b.is24 ? channels24 : channels5).concat(s.channels);
+
+    return [...new Set(all)]
+        .filter(ch =>
+        {
+            const f = channelToFreq(ch);
+
+            return f >= s.fMin && f <= s.fMax;
+        })
+        .sort((x, y) => x - y);
+}
+
+
+function drawAxis(ctx, bands, top, bottom, withFreqRange)
+{
+    bands.forEach(b =>
+    {
+        ctx.fillStyle = "#aaa";
+        ctx.font = "13px Arial";
+        ctx.textAlign = "left";
+
+        ctx.fillText(b.label, b.x0, 16);
+
+        b.segments.forEach((s, si) =>
+        {
+            ctx.strokeStyle = "#444";
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+            ctx.moveTo(s.x0, bottom);
+            ctx.lineTo(s.x1, bottom);
+            ctx.stroke();
+
+            /*
+             * Every channel of the band inside this segment, not
+             * only the scanned ones: with one channel focused the
+             * segment still spans the networks heard before. The
+             * scanned channels are always labelled, the others
+             * dimmer and only where they leave room.
+             */
+            const axis = axisChannels(b, s);
+
+            const pxPerChannel =
+                axis.length > 1
+                    ? (xForFreq(s, channelToFreq(axis[1])) -
+                       xForFreq(s, channelToFreq(axis[0])))
+                    : 40;
+
+            const labelStep =
+                Math.max(1,
+                    Math.ceil(26 / Math.max(1, pxPerChannel)));
+
+            const scannedX = s.channels.map(ch =>
+                xForFreq(s, channelToFreq(ch)));
+
+            ctx.font = "10px Arial";
+            ctx.textAlign = "center";
+
+            axis.forEach((ch, i) =>
+            {
+                const x = xForFreq(s, channelToFreq(ch));
+                const scanned = s.channels.includes(ch);
+
+                ctx.strokeStyle = "#3a3a3a";
+
+                ctx.beginPath();
+                ctx.moveTo(x, bottom);
+                ctx.lineTo(x, bottom + 4);
+                ctx.stroke();
+
+                const label = scanned ||
+                    (i % labelStep === 0 &&
+                     scannedX.every(sx => Math.abs(sx - x) >= 26));
+
+                if (label)
+                {
+                    ctx.fillStyle = scanned ? "#888" : "#5a5a5a";
+                    ctx.fillText(ch, x, bottom + 16);
+                }
+            });
+
+            if (withFreqRange)
+            {
+                ctx.fillStyle = "#555";
+                ctx.textAlign = "left";
+
+                ctx.fillText(
+                    Math.round(s.fMin) + " - " +
+                    Math.round(s.fMax) + " MHz",
+                    s.x0,
+                    bottom + 32
+                );
+            }
+
+            if (si < b.segments.length - 1)
+            {
+                const gx = s.x1 + SEG_GAP / 2;
+
+                ctx.strokeStyle = "#555";
+                ctx.setLineDash([4, 4]);
+
+                ctx.beginPath();
+                ctx.moveTo(gx, top - 6);
+                ctx.lineTo(gx, bottom + 4);
+                ctx.stroke();
+
+                ctx.setLineDash([]);
+            }
+        });
+    });
+}
+
+
+function activeChannels()
+{
+    if (liveData && liveData.channels && liveData.channels.length)
+        return liveData.channels.map(c => c.ch);
+
+    return selectedChannels();
+}
+
+
+// ==========================================================
+// RSSI spectrum
+// ==========================================================
+
+function drawSpectrum()
+{
+    const canvas =
+        document.getElementById("spectrum");
+
+    const ctx = canvas.getContext("2d");
+
+    const size = resizeCanvas(canvas, ctx);
+
+    const width = size.width;
+    const height = size.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    if (!liveData || !liveData.channels.length)
+        return;
+
+    const left = 58;
+    const right = width - 15;
+    const top = 26;
+    const bottom = height - 26;
+
+    const graphHeight = bottom - top;
+
+    const RSSI_MIN = -100;
+    const RSSI_MAX = -20;
+
+    function yForRSSI(r)
+    {
+        let v = (r - RSSI_MIN) / (RSSI_MAX - RSSI_MIN);
+
+        v = Math.max(0, Math.min(1, v));
+
+        return bottom - v * graphHeight;
+    }
+
+    const bands =
+        computeLayout(activeChannels(), left, right, null);
+
+    if (!bands.length)
+        return;
+
+    ctx.font = "11px Arial";
+    ctx.textAlign = "left";
+
+    for (let r = RSSI_MAX; r >= RSSI_MIN; r -= 10)
+    {
+        const y = yForRSSI(r);
+
+        ctx.strokeStyle = "#292929";
+        ctx.lineWidth = 1;
+
+        bands.forEach(b =>
+        {
+            b.segments.forEach(s =>
+            {
+                ctx.beginPath();
+                ctx.moveTo(s.x0, y);
+                ctx.lineTo(s.x1, y);
+                ctx.stroke();
+            });
+        });
+
+        if (r % 20 === 0)
+        {
+            ctx.fillStyle = "#777";
+            ctx.fillText(r + " dBm", 4, y + 4);
+        }
+    }
+
+    drawAxis(ctx, bands, top, bottom, false);
+
+    const byChannel = {};
+
+    liveData.channels.forEach(c => byChannel[c.ch] = c);
+
+    // Max hold and average over the selected time range.
+    // The history v arrays use the same order as
+    // liveData.channels.
+    const maxHold = {};
+    const avgHold = {};
+
+    if (historyData && historyData.points.length)
+    {
+        const sum = {};
+        const cnt = {};
+
+        historyData.points.forEach(p =>
+        {
+            p.v.forEach((val, idx) =>
+            {
+                if (val <= -127)
+                    return;
+
+                const c = liveData.channels[idx];
+
+                if (!c)
+                    return;
+
+                if (maxHold[c.ch] === undefined || val > maxHold[c.ch])
+                    maxHold[c.ch] = val;
+
+                sum[c.ch] = (sum[c.ch] || 0) + val;
+                cnt[c.ch] = (cnt[c.ch] || 0) + 1;
+            });
+        });
+
+        Object.keys(cnt).forEach(ch =>
+        {
+            avgHold[ch] = sum[ch] / cnt[ch];
+        });
+    }
+
+    bands.forEach(b =>
+    {
+        b.segments.forEach(s =>
+        {
+            const points = [];
+            const maxPoints = [];
+            const avgPoints = [];
+
+            s.channels.forEach(ch =>
+            {
+                const c = byChannel[ch];
+
+                if (!c)
+                    return;
+
+                let rssi = c.avg;
+
+                if (rssi <= -127)
+                    rssi = RSSI_MIN;
+
+                const x = xForFreq(s, channelToFreq(ch));
+
+                points.push({
+                    ch: ch,
+                    x: x,
+                    y: yForRSSI(rssi)
+                });
+
+                if (maxHold[ch] !== undefined)
+                    maxPoints.push({ x: x, y: yForRSSI(maxHold[ch]) });
+
+                if (avgHold[ch] !== undefined)
+                    avgPoints.push({ x: x, y: yForRSSI(avgHold[ch]) });
+            });
+
+            if (!points.length)
+                return;
+
+            function polyline(pts, color, width, dash)
+            {
+                if (pts.length < 1)
+                    return;
+
+                ctx.beginPath();
+
+                pts.forEach((p, i) =>
+                {
+                    if (i === 0)
+                        ctx.moveTo(p.x, p.y);
+                    else
+                        ctx.lineTo(p.x, p.y);
+                });
+
+                ctx.setLineDash(dash || []);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = width;
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            polyline(avgPoints, "rgba(150,165,175,0.8)", 1, [4, 3]);
+            polyline(maxPoints, "rgba(255,144,48,0.9)", 1.5);
+
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, bottom);
+
+            points.forEach(p => ctx.lineTo(p.x, p.y));
+
+            ctx.lineTo(points[points.length - 1].x, bottom);
+            ctx.closePath();
+
+            ctx.fillStyle = "rgba(0,170,255,0.12)";
+            ctx.fill();
+
+            ctx.beginPath();
+
+            points.forEach((p, i) =>
+            {
+                if (i === 0)
+                    ctx.moveTo(p.x, p.y);
+                else
+                    ctx.lineTo(p.x, p.y);
+            });
+
+            ctx.strokeStyle = "#00aaff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            points.forEach(p =>
+            {
+                const isCurrent =
+                    (p.ch === liveData.currentChannel);
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, isCurrent ? 4 : 2.5, 0, Math.PI * 2);
+
+                ctx.fillStyle = isCurrent ? "#fff" : "#00aaff";
+                ctx.fill();
+
+                if (isCurrent)
+                {
+                    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+                    ctx.lineWidth = 1;
+
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, top);
+                    ctx.lineTo(p.x, bottom);
+                    ctx.stroke();
+                }
+            });
+        });
+    });
+}
+
+
+// ==========================================================
+// Waterfall
+// ==========================================================
+
+function drawWaterfall()
+{
+    const canvas =
+        document.getElementById("waterfall");
+
+    const ctx = canvas.getContext("2d");
+
+    const size = resizeCanvas(canvas, ctx);
+
+    const width = size.width;
+    const height = size.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    if (!historyData || !liveData || !liveData.channels.length)
+        return;
+
+    const rows = historyData.points;
+
+    if (!rows.length)
+        return;
+
+    // Same geometry as the spectrum above so the columns
+    // line up with the curve, including the segment breaks.
+    const left = 58;
+    const right = width - 15;
+
+    const bands =
+        computeLayout(activeChannels(), left, right, null);
+
+    if (!bands.length)
+        return;
+
+    // Map channel number to its pixel range once
+    const columns = {};
+
+    bands.forEach(b =>
+    {
+        b.segments.forEach(s =>
+        {
+            s.channels.forEach(ch =>
+            {
+                const f = channelToFreq(ch);
+
+                columns[ch] = {
+                    x0: xForFreq(s, f - 10),
+                    x1: xForFreq(s, f + 10)
+                };
+            });
+        });
+    });
+
+    const rowHeight = height / rows.length;
+
+    for (let y = 0; y < rows.length; y++)
+    {
+        const values = rows[y].v;
+
+        for (let x = 0; x < values.length; x++)
+        {
+            const c = liveData.channels[x];
+
+            if (!c)
+                continue;
+
+            const col = columns[c.ch];
+
+            if (!col)
+                continue;
+
+            let rssi = values[x];
+
+            if (rssi <= -127)
+                rssi = -100;
+
+            let v = (rssi + 100) / 80;
+
+            v = Math.max(0, Math.min(1, v));
+
+            let rr, gg, bb;
+
+            if (v < 0.33)
+            {
+                const t = v / 0.33;
+
+                rr = 0;
+                gg = Math.round(40 + 80 * t);
+                bb = Math.round(80 + 120 * t);
+            }
+            else if (v < 0.66)
+            {
+                const t = (v - 0.33) / 0.33;
+
+                rr = Math.round(50 + 205 * t);
+                gg = Math.round(120 + 100 * (1 - t));
+                bb = Math.round(200 * (1 - t));
+            }
+            else
+            {
+                const t = (v - 0.66) / 0.34;
+
+                rr = 255;
+                gg = Math.round(100 * (1 - t));
+                bb = 0;
+            }
+
+            ctx.fillStyle =
+                "rgb(" + rr + "," + gg + "," + bb + ")";
+
+            ctx.fillRect(
+                col.x0,
+                y * rowHeight,
+                Math.ceil(col.x1 - col.x0) + 1,
+                Math.ceil(rowHeight) + 1
+            );
+        }
+    }
+
+    // Segment breaks, same position as in the spectrum
+    bands.forEach(b =>
+    {
+        b.segments.forEach((s, si) =>
+        {
+            if (si >= b.segments.length - 1)
+                return;
+
+            const gx = s.x1 + SEG_GAP / 2;
+
+            ctx.strokeStyle = "#555";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+
+            ctx.beginPath();
+            ctx.moveTo(gx, 0);
+            ctx.lineTo(gx, height);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+        });
+
+        // Band label for orientation
+        ctx.fillStyle = "rgba(200,200,200,0.55)";
+        ctx.font = "11px Arial";
+        ctx.textAlign = "left";
+
+        ctx.fillText(b.label, b.x0 + 2, 12);
+    });
+}
+
+
+// ==========================================================
+// Filter
+// ==========================================================
+
+function matchesFilter(n)
+{
+    if (!filterText)
+        return true;
+
+    const terms =
+        filterText.toLowerCase().split(/\s+/).filter(t => t);
+
+    const haystack = [
+        n.ssid,
+        n.bssid,
+        n.cfgn ? "changed configuration" : "",
+        beaconsTooFast(n) ? "fastbeacons" : "",
+        n.dtim ? "dtim" + n.dtim[0] : "",
+        n.vendor,
+        "ch:" + n.channel,
+        n.channel,
+        bandwidthText(n.bandwidth).replace(" ", ""),
+        n.sec,
+        n.pair,
+        n.group,
+        n.akm,
+        "wifi" + n.std,
+        stdShort(n.std),
+        stdText(n.std),
+        isBand24(n.channel) ? "2.4ghz" : "5ghz",
+        n.mesh ? "mesh 802.11s" : "",
+        n.vht24 ? "vht24 256qam" : "",
+        n.cc,
+        n.mfpr ? "pmf" : "",
+        n.wps ? "wps" : "",
+        n.ibss ? "ibss adhoc" : "",
+        n.suitebad ? "broken suite " + suiteBadText(n) : "",
+        n.wpanoakm ? "wpa element without akm" : "",
+        n.rid ? "drone remote id " + ridMaker(n.rid) + " " +
+                (RID_UA_TYPES[n.rid.ua] || "") + " " + (n.rid.sid || "")
+              : "",
+        n.color ? "bss colour color " + n.color[0] : "",
+        n.bcc ? "colour change color change" : "",
+        n.maxidle ? "max idle" : "",
+        n.wfacapa !== undefined
+            ? "qos management " + wfaCapaText(n.wfacapa) : "",
+        (n.basicrates || []).length
+            ? "basic rates " + n.basicrates.map(r => r / 2).join(" ")
+            : "basic rates none marked basic",
+
+        // What the tooltip spells out, so it can be searched too:
+        // capabilities, 11k/11v detail, multi-link, streams, the
+        // power envelope, unknown elements and the notes
+        apCapsText(n),
+        rrmText(n.rrm || 0),
+        wnmText(n.wnm || 0),
+        n.mld ? "mlo mld " + n.mld : "",
+        n.nss ? n.nss + "ss" : "",
+        (n.tpe || []).length
+            ? "tpe tx power envelope " + n.tpe.map(tpeText).join(" ")
+            : "",
+        n.tpc !== undefined ? "tpc " + n.tpc + " dbm" : "",
+        n.pwrc !== undefined ? "power constraint " + n.pwrc + " db" : "",
+        erpText(n.erp) ? "erp " + erpText(n.erp) : "",
+        xloadText(n),
+        n.apclk ? "time advertisement clock" : "",
+        n.aptz ? "time zone " + n.aptz : "",
+        n.iw ? "interworking " + iwText(n) : "",
+        n.adv ? advText(n) : "",
+        n.bprot ? "beacon protection" : "",
+        n.apname ? "ap name " + n.apname : "",
+        n.vfw ? "firmware " + n.vfw : "",
+        n.ovr ? "override " + overrideText(n) : "",
+        n.p2p || n.wfd !== undefined ? "wi-fi direct p2p " + p2pText(n) : "",
+        n.mbo ? mboText(n) : "",
+        n.hp ? "printer " + printerText(n) : "",
+        n.wpsname ? "wps device " + n.wpsname : "",
+        n.wpsdev ? "wps " + wpsDeviceText(n) : "",
+        omnText(n) ? "operating mode " + omnText(n) : "",
+        isNan(n) || n.nan ? "nan cluster wi-fi aware " + nanText(n) : "",
+        quietText(n) ? "quiet " + quietText(n) : "",
+        aacText(n) ? "admission " + aacText(n) : "",
+        apMakers(n).makers.join(" "),
+        n.acc ? "apple accessory carplay " + appleAccText(n) : "",
+        (n.voui || []).map(v => v[2]).join(" "),
+        apMakers(n).chips.map(c => c + " chip").join(" "),
+        (n.unk || []).map((c, i) => unknownElementText(n, i)).join(" "),
+        networkNotes(n).map(note => note[1]).join(" ")
+    ].join(" ").toLowerCase();
+
+    return terms.every(t => haystack.indexOf(t) >= 0);
+}
+
+
+function filteredNetworks()
+{
+    return networks.filter(matchesFilter);
+}
+
+
+// ==========================================================
+// The bell: configuration changes of all BSSs
+// ==========================================================
+
+/*
+ * /api/changes, fetched again only when /api/status names a newer
+ * change: {boot, seq, changes: [[number, seconds ago, BSSID, SSID,
+ * what, from, to], ...]}, newest first. What the viewer has seen
+ * is kept in this browser, per sensor start.
+ */
+let cfgList     = { boot: -1, seq: -1, changes: [] };
+let cfgFetchAt  = 0;
+let cfgFetching = false;
+
+function cfgSeenFrom()
+{
+    try
+    {
+        const seen = JSON.parse(localStorage.getItem("wlanscout.cfgSeen"));
+
+        return seen && seen.boot === cfgList.boot ? seen.seq : 0;
+    }
+    catch (e)
+    {
+        return 0;
+    }
+}
+
+/*
+ * Changes of one BSS that came in together - a new security setting
+ * changes label, AKM, PMF and ciphers at once - shown and counted as
+ * one: neighbours in the list, same BSSID, at most 2 s apart.
+ */
+function groupChanges(changes)
+{
+    const groups = [];
+
+    changes.forEach(c =>
+    {
+        const last = groups[groups.length - 1];
+
+        if (last && last[0][2] === c[2] && Math.abs(last[0][1] - c[1]) <= 2)
+            last.push(c);
+        else
+            groups.push([c]);
+    });
+
+    return groups;
+}
+
+// The changes of the BSSs that ring the bell
+function bellChanges()
+{
+    const muted = cfgList.muted || [];
+
+    // By the time of the last change: a flapping entry is updated in
+    // place and keeps the number it was made with
+    return cfgList.changes.filter(c => !muted.includes(c[2]))
+        .sort((a, b) => a[1] - b[1] || b[0] - a[0]);
+}
+
+function fillBell()
+{
+    const from   = cfgSeenFrom();
+    const unread = groupChanges(bellChanges())
+        .filter(g => g.some(c => c[0] > from)).length;
+    const count  = document.getElementById("bellCount");
+
+    count.innerText = unread > 99 ? "99+" : String(unread);
+
+    // A snapshot's list is read as it was, nothing in it is new
+    count.classList.toggle("on", unread > 0 && !snapshotView);
+
+    document.getElementById("bellBtn").title = snapshotView
+        ? "Configuration changes up to this snapshot"
+        : unread
+        ? unread + " new configuration change" + (unread === 1 ? "" : "s")
+        : "Configuration changes of the BSSs";
+}
+
+/*
+ * When a change was, for hovering over "… ago": "9:43:27 18.10.2026".
+ * Live from the browser's clock, in a snapshot from the moment it
+ * was taken if the sensor knew the time then; null when unknown.
+ */
+function changeStamp(secondsBefore, liveBase)
+{
+    let at;
+
+    if (snapshotView)
+    {
+        if (!snapshotView.epoch)
+            return null;
+
+        at = snapshotView.epoch * 1000 - secondsBefore * 1000;
+    }
+    else
+        at = liveBase - secondsBefore * 1000;
+
+    const d   = new Date(at);
+    const two = x => String(x).padStart(2, "0");
+
+    return d.getHours() + ":" + two(d.getMinutes()) + ":" +
+           two(d.getSeconds()) + " " + two(d.getDate()) + "." +
+           two(d.getMonth() + 1) + "." + d.getFullYear();
+}
+
+// "… ago" with the time itself on hover
+function agoSpan(text, secondsBefore, liveBase)
+{
+    const stamp = changeStamp(secondsBefore, liveBase);
+
+    return stamp ? "<span title='" + stamp + "'>" + text + "</span>" : text;
+}
+
+// Into or out of a snapshot: its list, or the live one again
+function resetChanges()
+{
+    cfgList = { boot: -1, seq: -1, changes: [] };
+
+    document.getElementById("changesPanel").classList.remove("open");
+}
+
+async function checkChanges(st)
+{
+    const button = document.getElementById("bellBtn");
+
+    // Older firmware: no bell
+    if (st.cfgseq === undefined)
+    {
+        button.style.display = "none";
+        return;
+    }
+
+    button.style.display = "";
+
+    // cfgver also moves when an entry is updated, a flapping BSS's
+    const version = st.cfgver !== undefined ? st.cfgver : st.cfgseq;
+    const known   = cfgList.ver !== undefined ? cfgList.ver : cfgList.seq;
+
+    if (cfgFetching || (st.boot === cfgList.boot && version === known))
+        return;
+
+    cfgFetching = true;
+
+    try
+    {
+        const response = await api("/api/changes",
+            { cache: "no-store", signal: timeoutSignal(4000) });
+
+        // A snapshot taken before the bell has no list
+        if (!response.ok)
+            throw new Error("no list");
+
+        cfgList    = await response.json();
+        cfgFetchAt = Date.now();
+
+        fillBell();
+
+        if (document.getElementById("changesPanel")
+                .classList.contains("open"))
+            fillChanges(cfgSeenFrom());
+    }
+    catch (e)
+    {
+        // The next status answer tries again; a snapshot without the
+        // list shows no bell
+        if (snapshotView)
+            button.style.display = "none";
+    }
+    finally
+    {
+        cfgFetching = false;
+    }
+}
+
+function changeText([, , , , what, from, to])
+{
+    return configChangeText(what, from, to);
+}
+
+// One change: a restart, a flapping BSS or a field with both values
+function configChangeText(what, from, to)
+{
+    if (what === "restart")
+        return "AP restarted, was up " + uptimeText(Number(from));
+
+    if (what === "two clocks")
+        return "two devices send as this BSSID, their beacon timers " +
+               escapeHTML(to);
+
+    if (what === "flapping")
+        return "flapping between two configurations (" +
+               escapeHTML(from) + "), " + escapeHTML(to);
+
+    return escapeHTML(what) + " <span class='dim'><s>" + escapeHTML(from) +
+           "</s></span> \u2192 " + escapeHTML(to);
+}
+
+function fillChanges(newFrom)
+{
+    const panel = document.getElementById("changesPanel");
+
+    // In a snapshot the times count back from the moment it was taken
+    const since = snapshotView ? 0 : Math.round((Date.now() - cfgFetchAt) / 1000);
+    const ago   = snapshotView ? " before the snapshot" : " ago";
+
+    const muted = cfgList.muted || [];
+    const mute  = (bssid, on) => snapshotView ? "" :
+        "<a class='mute' onclick='event.stopPropagation(); " +
+        "window.setCfgNotify(\"" + bssid + "\", " + on + ")'>" +
+        (on ? "unmute" : "mute") + "</a>";
+
+    panel.innerHTML =
+        "<b>Configuration changes</b>" +
+        (bellChanges().length
+            ? groupChanges(bellChanges()).map(g =>
+                "<div class='chg" + (g.some(c => c[0] > newFrom) ? " new" : "") +
+                "' onclick='window.filterChange(\"" + g[0][2] + "\")'>" +
+                mute(g[0][2], false) +
+                "<b>" + escapeHTML(g[0][3] || "<hidden>") + "</b> " +
+                "<span class='dim'>" + g[0][2] + " \u00b7 " +
+                agoSpan(secondsText(g[0][1] + since) + ago, g[0][1],
+                        cfgFetchAt) +
+                "</span><br>" +
+                g.map(changeText).join("<br>") + "</div>").join("")
+            : "<div class='chg dim'>None since the sensor started</div>") +
+        (muted.length
+            ? "<div class='chg dim'>Not notified: " + muted.map(b =>
+                b + " " + mute(b, true)).join("<br>") + "</div>"
+            : "");
+}
+
+/*
+ * The checkbox in the tooltip and mute/unmute in the list: whether a
+ * BSS rings the bell. Kept on the sensor, for every viewer.
+ */
+function setCfgNotify(bssid, on)
+{
+    queueCommand("/api/cfgmute?bssid=" + bssid + "&on=" + (on ? 0 : 1), () =>
+    {
+        const muted = (cfgList.muted || []).filter(b => b !== bssid);
+
+        cfgList.muted = on ? muted : muted.concat([bssid]);
+
+        const n = networks.find(x => x.bssid === bssid);
+
+        if (n)
+            n.cfgmute = on ? 0 : 1;
+
+        fillBell();
+
+        if (document.getElementById("changesPanel")
+                .classList.contains("open"))
+            fillChanges(cfgSeenFrom());
+
+        updateNetworkTable();
+    });
+}
+
+window.setCfgNotify = setCfgNotify;
+
+// Under the bell, but kept inside the window: on a phone the bell
+// sits near the right edge
+function positionChanges(panel)
+{
+    const bell  = document.getElementById("bellBtn").getBoundingClientRect();
+    const width = panel.offsetWidth;
+
+    panel.style.top  = Math.round(bell.bottom + 4) + "px";
+    panel.style.left = Math.round(Math.max(8, Math.min(bell.left,
+        document.documentElement.clientWidth - width - 8))) + "px";
+}
+
+function toggleChanges()
+{
+    const panel = document.getElementById("changesPanel");
+
+    if (panel.classList.toggle("open") && snapshotView)
+    {
+        fillChanges(Infinity);
+        positionChanges(panel);
+        return;
+    }
+
+    if (panel.classList.contains("open"))
+    {
+        fillChanges(cfgSeenFrom());
+
+        positionChanges(panel);
+
+        // Opened is seen
+        try
+        {
+            localStorage.setItem("wlanscout.cfgSeen", JSON.stringify(
+                { boot: cfgList.boot, seq: cfgList.seq }));
+        }
+        catch (e)
+        {
+            // Without storage the count comes back on reload
+        }
+
+        fillBell();
+    }
+}
+
+window.toggleChanges = toggleChanges;
+
+// A change clicked: the network table filtered to that BSS
+function filterChange(bssid)
+{
+    document.getElementById("filter").value = bssid;
+
+    filterText = bssid;
+
+    updateNetworkTable();
+    drawNetworkGraph();
+
+    document.getElementById("changesPanel").classList.remove("open");
+}
+
+window.filterChange = filterChange;
+
+document.addEventListener("click", ev =>
+{
+    const panel = document.getElementById("changesPanel");
+
+    if (panel.classList.contains("open") &&
+        !document.getElementById("bellWrap").contains(ev.target))
+        panel.classList.remove("open");
+});
+
+
+function clearFilter()
+{
+    document.getElementById("filter").value = "";
+
+    filterText = "";
+
+    updateNetworkTable();
+    drawNetworkGraph();
+}
+
+
+/*
+ * Reported airtime as a background hatch.
+ *
+ * This is not a measurement the sensor made. It is the BSS
+ * Load element, which every AP fills in from its own point of
+ * view, so two APs on one channel can legitimately disagree
+ * and an AP without the element contributes nothing at all.
+ * A band can therefore look clear because nobody reports,
+ * not because it is free.
+ *
+ * Each BSS covers the frequency span it actually occupies,
+ * the band is binned at 2 MHz and the worst reporter wins per
+ * bin: the question the picture answers is "can I still send
+ * here", and for that the pessimist is the honest one.
+ */
+function drawLoadHatch(ctx, bands, nets, top, bottom)
+{
+    const BIN   = 2;    // MHz
+    const FLOOR = 40;   // below this, nothing is drawn
+
+    bands.forEach(b =>
+    {
+        b.segments.forEach(seg =>
+        {
+            const count =
+                Math.max(1, Math.ceil((seg.fMax - seg.fMin) / BIN));
+
+            const load = new Array(count).fill(0);
+
+            nets.forEach(n =>
+            {
+                if (!(n.util >= FLOOR))
+                    return;
+
+                if ((n._seg || segForFreq(b, networkCenterFreq(n))) !== seg)
+                    return;
+
+                const f = networkCenterFreq(n);
+                const w = networkWidthMHz(n);
+
+                let i0 = Math.floor((f - w / 2 - seg.fMin) / BIN);
+                let i1 = Math.ceil((f + w / 2 - seg.fMin) / BIN);
+
+                i0 = Math.max(0, i0);
+                i1 = Math.min(count, i1);
+
+                for (let i = i0; i < i1; i++)
+                {
+                    if (n.util > load[i])
+                        load[i] = n.util;
+                }
+            });
+
+            // Runs of equal load become one rectangle
+            let i = 0;
+
+            while (i < count)
+            {
+                if (!load[i])
+                {
+                    i++;
+                    continue;
+                }
+
+                let j = i;
+
+                while (j < count && load[j] === load[i])
+                    j++;
+
+                const x0 = xForFreq(seg, seg.fMin + i * BIN);
+                const x1 = xForFreq(seg, seg.fMin + j * BIN);
+
+                hatchRect(ctx, x0, x1, top, bottom, load[i]);
+
+                /*
+                 * Keep who contributed to this run so the
+                 * hover can name them. The run is the busiest
+                 * reporter, but the others overlapping it are
+                 * what makes the picture make sense.
+                 */
+                const f0 = seg.fMin + i * BIN;
+                const f1 = seg.fMin + j * BIN;
+
+                graphLoad.push({
+                    x0: x0, x1: x1,
+                    f0: f0, f1: f1,
+                    util: load[i],
+                    nets: nets.filter(n =>
+                    {
+                        if (!(n.util >= FLOOR))
+                            return false;
+
+                        const f = networkCenterFreq(n);
+                        const w = networkWidthMHz(n);
+
+                        return (f - w / 2) < f1 && (f + w / 2) > f0;
+                    })
+                });
+
+                i = j;
+            }
+        });
+    });
+}
+
+
+/*
+ * Amber at the floor, red towards full. The opacity rises
+ * with it as well, so a busy channel reads as busy even at a
+ * glance, without the hatch ever competing with the network
+ * outlines in front of it.
+ */
+function hatchRect(ctx, x0, x1, top, bottom, util)
+{
+    if (x1 <= x0)
+        return;
+
+    /*
+     * Amber from 40 %, red from 70 %. Two steps rather than a
+     * continuous ramp, because a reader should be able to say
+     * which band a stretch is in without a colour key.
+     */
+    const red = (util >= 70);
+
+    const t = Math.min(1, Math.max(0,
+        red ? (util - 70) / 30 : (util - 40) / 30));
+
+    ctx.save();
+
+    ctx.beginPath();
+    ctx.rect(x0, top, x1 - x0, bottom - top);
+    ctx.clip();
+
+    ctx.strokeStyle =
+        (red ? "rgba(208,128,128," : "rgba(200,160,80,") +
+        (0.22 + t * 0.24).toFixed(2) + ")";
+
+    ctx.lineWidth = 1;
+
+    const step = 7;
+    const span = bottom - top;
+
+    for (let x = x0 - span; x < x1 + span; x += step)
+    {
+        ctx.beginPath();
+        ctx.moveTo(x, bottom);
+        ctx.lineTo(x + span, top);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
+    loadBadge(ctx, x0, x1, top, red);
+}
+
+
+/*
+ * A marker in the top right corner of the hatched stretch.
+ *
+ * The hatch alone says "busy" but not how busy without
+ * comparing shades, and shades are hard to judge against a
+ * dark background. The badge states the step outright.
+ */
+function loadBadge(ctx, x0, x1, top, red)
+{
+    const size = 14;
+
+    // Too narrow and the badge would cover the stretch itself
+    if (x1 - x0 < size + 8)
+        return;
+
+    const cx = x1 - 4 - size / 2;
+    const cy = top + 4 + size / 2;
+
+    ctx.save();
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = red ? "#d08080" : "#c8a050";
+    ctx.fillStyle = "rgba(20,20,20,0.85)";
+
+    ctx.beginPath();
+
+    if (red)
+    {
+        ctx.rect(cx - size / 2, cy - size / 2, size, size);
+    }
+    else
+    {
+        // Triangle, slightly taller than wide so the ! fits
+        ctx.moveTo(cx, cy - size / 2 - 1);
+        ctx.lineTo(cx + size / 2, cy + size / 2);
+        ctx.lineTo(cx - size / 2, cy + size / 2);
+        ctx.closePath();
+    }
+
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = red ? "#d08080" : "#c8a050";
+    ctx.font = "bold 10px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // The triangle puts its centre of area below the centroid
+    ctx.fillText(red ? "\u2715" : "!", cx, cy + (red ? 0 : 2));
+
+    ctx.restore();
+}
+
+
+// ==========================================================
+// Network graph
+// ==========================================================
+
+function drawNetworkGraph()
+{
+    const canvas =
+        document.getElementById("networkGraph");
+
+    const ctx = canvas.getContext("2d");
+
+    const size = resizeCanvas(canvas, ctx);
+
+    const width = size.width;
+    const height = size.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    graphHits = [];
+    graphLabels = [];
+    graphLoad = [];
+
+    const left = 58;
+    const right = width - 15;
+    const top = 32;
+    const bottom = height - 46;
+
+    const graphHeight = bottom - top;
+
+    const RSSI_MIN = -100;
+    const RSSI_MAX = -20;
+
+    function yForRSSI(r)
+    {
+        let v = (r - RSSI_MIN) / (RSSI_MAX - RSSI_MIN);
+
+        v = Math.max(0, Math.min(1, v));
+
+        return bottom - v * graphHeight;
+    }
+
+    const shown = filteredNetworks();
+
+    const bands =
+        computeLayout(activeChannels(), left, right, shown);
+
+    if (!bands.length)
+        return;
+
+    ctx.font = "11px Arial";
+    ctx.textAlign = "left";
+
+    for (let r = RSSI_MAX; r >= RSSI_MIN; r -= 10)
+    {
+        const y = yForRSSI(r);
+
+        ctx.strokeStyle = "#292929";
+        ctx.lineWidth = 1;
+
+        bands.forEach(b =>
+        {
+            b.segments.forEach(s =>
+            {
+                ctx.beginPath();
+                ctx.moveTo(s.x0, y);
+                ctx.lineTo(s.x1, y);
+                ctx.stroke();
+            });
+        });
+
+        if (r % 20 === 0)
+        {
+            ctx.fillStyle = "#777";
+            ctx.fillText(r + " dBm", 4, y + 4);
+        }
+    }
+
+    drawAxis(ctx, bands, top, bottom, true);
+
+    const placed = [];
+
+
+    function labelFits(x0, x1, y0, y1)
+    {
+        if (y0 < top || y1 > bottom)
+            return false;
+
+        return !placed.some(p =>
+            !(x1 < p.x0 || x0 > p.x1 ||
+              y1 < p.y0 || y0 > p.y1)
+        );
+    }
+
+
+    function placeLabel(text, xc, yPref)
+    {
+        const w = ctx.measureText(text).width + 6;
+
+        for (let dy = 0; dy <= 72; dy += 11)
+        {
+            const cands =
+                dy === 0 ? [yPref] : [yPref - dy, yPref + dy];
+
+            for (const y of cands)
+            {
+                const x0 = xc - w / 2;
+                const x1 = xc + w / 2;
+
+                if (labelFits(x0, x1, y - 9, y + 2))
+                {
+                    const rect = {
+                        x0: x0, x1: x1,
+                        y0: y - 9, y1: y + 2
+                    };
+
+                    placed.push(rect);
+
+                    return rect;
+                }
+            }
+        }
+
+        return null;
+    }
+
+
+    function segmentOf(n)
+    {
+        const b = bandForChannel(bands, n.channel);
+
+        if (!b)
+            return null;
+
+        if (n._seg && b.segments.indexOf(n._seg) >= 0)
+            return n._seg;
+
+        return segForFreq(b, networkCenterFreq(n));
+    }
+
+
+    const visible =
+        shown
+            .filter(n => bandForChannel(bands, n.channel))
+            .slice()
+            .sort((a, b) => b.rssi - a.rssi);
+
+
+    drawLoadHatch(ctx, bands, visible, top, bottom);
+
+    visible.forEach(n =>
+    {
+        const s = segmentOf(n);
+
+        if (!s)
+            return;
+
+        const f = networkCenterFreq(n);
+        const w = networkWidthMHz(n);
+
+        const xl = xForFreq(s, f - w / 2);
+        const xr = xForFreq(s, f + w / 2);
+
+        const y = yForRSSI(n.rssi);
+
+        const shoulder = Math.min(12, (xr - xl) * 0.15);
+
+        const highlight = (n.bssid === hoverBSSID);
+
+        ctx.beginPath();
+        ctx.moveTo(xl, bottom);
+        ctx.lineTo(xl + shoulder, y);
+        ctx.lineTo(xr - shoulder, y);
+        ctx.lineTo(xr, bottom);
+        ctx.closePath();
+
+        ctx.fillStyle =
+            colorForNetwork(n, highlight ? 0.45 : 0.20);
+
+        ctx.fill();
+
+        ctx.strokeStyle = colorForNetwork(n, 0.95);
+        ctx.lineWidth = highlight ? 2.5 : 1.5;
+        ctx.stroke();
+
+        graphHits.push({
+            n: n,
+            xl: xl, xr: xr,
+            y: y, bottom: bottom
+        });
+    });
+
+
+    ctx.font = "11px Arial";
+    ctx.textAlign = "center";
+    ctx.lineWidth = 1;
+
+    visible.forEach(n =>
+    {
+        const s = segmentOf(n);
+
+        if (!s)
+            return;
+
+        const xc = xForFreq(s, networkCenterFreq(n));
+
+        const y = yForRSSI(n.rssi);
+
+        let name = isNan(n) ? "NAN cluster" : (n.ssid || "<hidden>");
+
+        if (name.length > 18)
+            name = name.substring(0, 18) + "\u2026";
+
+        const text =
+            name + "  " + n.channel + "/" +
+            bandwidthText(n.bandwidth);
+
+        const rect = placeLabel(text, xc, y - 6);
+
+        if (rect === null)
+            return;
+
+        ctx.fillStyle =
+            (n.bssid === hoverBSSID) ? "#ffffff" : "#e0e0e0";
+
+        ctx.fillText(text, xc, rect.y1);
+
+        graphLabels.push({
+            n: n,
+            x0: rect.x0, x1: rect.x1,
+            y0: rect.y0, y1: rect.y1
+        });
+    });
+
+
+    if (!visible.length)
+    {
+        ctx.fillStyle = "#666";
+        ctx.textAlign = "center";
+        ctx.font = "13px Arial";
+
+        ctx.fillText(
+            filterText
+                ? "No network matches the filter"
+                : "No networks on the scanned channels",
+            (left + right) / 2,
+            (top + bottom) / 2
+        );
+    }
+}
+
+
+// ==========================================================
+// Tooltip content
+// ==========================================================
+
+function cipherText(n)
+{
+    if (!n.pair && !n.group)
+        return "none";
+
+    let s = n.pair || "?";
+
+    if (n.group)
+        s += " / group " + n.group;
+
+    if (n.mgmt)
+        s += " / Mgmt " + n.mgmt;
+
+    return s;
+}
+
+
+function pmfText(n)
+{
+    if (n.mfpr) return "required";
+    if (n.mfpc) return "capable";
+
+    return "off";
+}
+
+
+/*
+ * Element names for the "unknown element" notes, generated from
+ * Wireshark's ie_tag_num_vals and tag_num_vals_eid_ext
+ * (epan/dissectors/packet-ieee80211.c, GPL-2.0-or-later). Only
+ * used to name what the sensor itself does not decode.
+ */
+const IE_NAMES = {
+    0:"SSID parameter set", 1:"Supported Rates", 2:"FH Parameter set",
+    3:"DS Parameter set", 4:"CF Parameter set",
+    5:"Traffic Indication Map (TIM)", 6:"IBSS Parameter set",
+    7:"Country Information", 8:"Hopping Pattern Parameters",
+    9:"Hopping Pattern Table", 10:"Request", 11:"QBSS Load Element",
+    12:"EDCA Parameter Set", 13:"Traffic Specification",
+    14:"Traffic Classification", 15:"Schedule", 16:"Challenge text",
+    32:"Power Constraint", 33:"Power Capability", 34:"TPC Request",
+    35:"TPC Report", 36:"Supported Channels",
+    37:"Channel Switch Announcement", 38:"Measurement Request",
+    39:"Measurement Report", 40:"Quiet", 41:"IBSS DFS",
+    42:"ERP Information", 43:"TS Delay", 44:"TCLAS Processing",
+    45:"HT Capabilities", 46:"QoS Capability", 47:"ERP Information",
+    48:"RSN Information", 50:"Extended Supported Rates",
+    51:"AP Channel Report", 52:"Neighbor Report", 53:"RCPI",
+    54:"Mobility Domain", 55:"Fast BSS Transition", 56:"Timeout Interval",
+    57:"RIC Data", 58:"DSE Registered Location",
+    59:"Supported Operating Classes",
+    60:"Extended Channel Switch Announcement", 61:"HT Operation",
+    62:"Secondary Channel Offset (802.11n D1.10)",
+    63:"BSS Average Access Delay", 64:"Antenna", 65:"RSNI",
+    66:"Measurement Pilot Transmission",
+    67:"BSS Available Admission Capacity",
+    68:"BSS AC Access Delay/WAPI Parameter Set", 69:"Time Advertisement",
+    70:"RM Enabled Capabilities", 71:"Multiple BSSID",
+    72:"20/40 BSS Coexistence", 73:"20/40 BSS Intolerant Channel Report",
+    74:"Overlapping BSS Scan Parameters", 75:"RIC Descriptor",
+    76:"Management MIC", 78:"Event Request", 79:"Event Report",
+    80:"Diagnostic Request", 81:"Diagnostic Report",
+    82:"Location Parameters", 83:"Non Transmitted BSSID Capability",
+    84:"SSID List", 85:"Multiple BSSID Index", 86:"FMS Descriptor",
+    87:"FMS Request", 88:"FMS Response", 89:"QoS Traffic Capability",
+    90:"BSS Max Idle Period", 91:"TFS Request", 92:"TFS Response",
+    93:"WNM-Sleep Mode", 94:"TIM Broadcast Request",
+    95:"TIM Broadcast Response", 96:"Collocated Interference Report",
+    97:"Channel Usage", 98:"Time Zone", 99:"DMS Request",
+    100:"DMS Response", 101:"Link Identifier", 102:"Wakeup Schedule",
+    104:"Channel Switch Timing", 105:"PTI Control", 106:"PU Buffer Status",
+    107:"Interworking", 108:"Advertisement Protocol",
+    109:"Expedited Bandwidth Request", 110:"QoS Map Set",
+    111:"Roaming Consortium", 112:"Emergency Alert Identifier",
+    113:"Mesh Configuration", 114:"Mesh ID", 115:"Mesh Link Metric Report",
+    116:"Congestion Notification", 117:"Mesh Peering Management",
+    118:"Mesh Channel Switch Parameters", 119:"Mesh Awake Window",
+    120:"Beacon Timing", 121:"MCCAOP Setup Request",
+    122:"MCCAOP SETUP Reply", 123:"MCCAOP Advertisement",
+    124:"MCCAOP Teardown", 125:"Gate Announcement", 126:"Root Announcement",
+    127:"Extended Capabilities", 128:"Lucent/Agere Proprietary",
+    130:"Path Request", 131:"Path Reply", 132:"Path Error",
+    133:"Cisco CCX1 CKIP + Device Name", 136:"Cisco CCX2",
+    137:"Proxy Update", 138:"Proxy Update Confirmation",
+    139:"Authenticated Mesh Peering Exchange",
+    140:"MIC (Message Integrity Code)", 141:"Destination URI",
+    142:"U-APSD Coexistence", 143:"Wakeup Schedule 802.11ad",
+    144:"Extended Schedule", 145:"STA Availability", 146:"DMG TSPEC",
+    147:"Next DMG ATI", 148:"DMG Capabilities", 149:"Cisco Unknown 95",
+    150:"Vendor Specific", 151:"DMG Operating",
+    152:"DMG BSS Parameter Change", 153:"DMG Beam Refinement",
+    154:"Channel Measurement Feedback", 157:"Awake Window",
+    158:"Multi Band", 159:"ADDBA Extension", 160:"NEXTPCP List",
+    161:"PCP Handover", 162:"DMG Link Margin", 163:"Switching Stream",
+    164:"Session Transmission", 165:"Dynamic Tone Pairing Report",
+    166:"Cluster Report", 167:"Relay Capabilities",
+    168:"Relay Transfer Parameter", 169:"Beamlink Maintenance",
+    170:"Multiple MAC Sublayers", 171:"U-PID",
+    172:"DMG Link Adaption Acknowledgment", 173:"Symbol Proprietary",
+    174:"MCCAOP Advertisement Overview", 175:"Quiet Period Request",
+    177:"Quiet Period Response", 182:"ECAPC Policy",
+    183:"Cluster Time Offset", 184:"Intra-Access Category Priority",
+    185:"SCS Descriptor", 190:"Antenna Sector ID", 191:"VHT Capabilities",
+    192:"VHT Operation", 193:"Extended BSS Load",
+    194:"Wide Bandwidth Channel Switch", 195:"Tx Power Envelope",
+    196:"Channel Switch Wrapper", 199:"Operating Mode Notification",
+    201:"Reduced Neighbor Report", 206:"Fine Time Measurement Params",
+    207:"S1G Open-Loop Link Margin Index", 208:"RPS", 209:"Page Slice",
+    210:"AID Request", 211:"AID Response", 212:"Sector Operation",
+    213:"S1G Beacon Compatibility", 214:"Short Beacon Interval",
+    215:"Change Sequence", 216:"Target Wake Time", 217:"S1G Capabilities",
+    220:"Subchannel Selective Transmission", 221:"Vendor Specific",
+    222:"Authentication Control", 223:"TSF Timer Accuracy", 224:"S1G Relay",
+    225:"Reachable Address", 226:"S1G Relay Discovery",
+    228:"AID Announcement", 229:"PV1 Probe Response Option",
+    230:"EL Operation", 231:"Sectorized Group ID List", 232:"S1G Operation",
+    233:"Header Compression", 234:"SST Operation", 235:"MAD",
+    236:"S1G Relay Activation", 237:"CAG Number", 239:"AP-CSN",
+    240:"FILS Indication", 241:"Differential Initial Link Setup",
+    242:"Fragment", 244:"RSN eXtension", 255:"Element ID Extension"
+};
+
+const IE_EXT_NAMES = {
+    1:"Association Delay Info", 2:"FILS Request Parameters",
+    3:"FILS Key Confirmation", 4:"FILS Session", 5:"FILS HLP Container",
+    6:"FILS IP Address Assignment", 7:"Key Delivery", 8:"Wrapped Data",
+    9:"FTM Synchronization Information", 10:"Extended Request",
+    11:"Estimated Service Parameters", 12:"FILS Public Key",
+    13:"FILS Nonce", 14:"Future Channel Guidance",
+    32:"OWE Diffie-Hellman Parameter", 33:"Password Identifier",
+    35:"HE Capabilities", 36:"HE Operation", 37:"UORA Parameter Set",
+    38:"MU EDCA Parameter Set", 39:"Spatial Reuse Parameter Set",
+    41:"NDP Feedback Report Parameter Set",
+    42:"BSS Color Change Announcement", 43:"Quiet Time Period Setup",
+    45:"ESS Report", 46:"Opportunistic Power Save", 47:"HE BSS Load",
+    52:"Max Channel Switch Time", 54:"Operating Channel Information",
+    55:"Multiple BSSID Configuration", 56:"Non-Inheritance",
+    57:"Known BSSID", 58:"Short SSID", 59:"HE 6 GHz Band Capabilities",
+    60:"UL MU Power Capabilities", 88:"MSCS Descriptor Element",
+    89:"TCLAS Mask", 92:"Rejected Groups",
+    93:"Anti-Clogging Token Container", 94:"Secure LTF Parameters",
+    95:"ISTA Passive TB Ranging Measurement Report",
+    96:"RSTA Passive TB Ranging Measurement Report",
+    97:"Passive TB Ranging LCI Table element",
+    98:"ISTA Availability Window", 99:"RSTA Availability Window",
+    100:"PASN Parameters", 101:"Ranging Parameters",
+    102:"Direction Measurement Results", 103:"Multiple AOD Feedback",
+    104:"Multiple Best AWV ID", 105:"LOS Likelihood", 106:"EHT Operation",
+    107:"Multi-Link", 108:"EHT Capabilities", 109:"TID-To-Link Mapping",
+    110:"Multi-Link Traffic Indication", 113:"QoS Characteristics",
+    114:"AKM Suite Selector", 133:"MLO Link Information", 134:"AID Bitmap",
+    135:"Bandwidth Indication", 137:"Non-AP STA Regulatory Connectivity",
+    161:"Supported Groups"
+};
+
+/*
+ * Transmit Power Envelope (element 195), raw octets from the
+ * firmware. First octet: bits 0-2 the count, bits 3-5 the
+ * interpretation, bits 6-7 the category. Then signed values in
+ * 0.5 dB steps: for EIRP one per width (20, 40, 80, 160 MHz, an
+ * extra one for 320), for PSD one per 20 MHz subchannel.
+ */
+function tpeText(t)
+{
+    const count  = t[0] & 7;
+    const interp = (t[0] >> 3) & 7;
+    const cat    = (t[0] >> 6) & 3;
+
+    const dbm = v => ((v > 127 ? v - 256 : v) / 2);
+
+    const kind = ["local EIRP", "local PSD", "regulatory client EIRP",
+                  "regulatory client PSD"][interp] ||
+                 "interpretation " + interp;
+
+    const values = t.slice(1);
+
+    let text;
+
+    if (interp === 0 || interp === 2)
+    {
+        const widths = [20, 40, 80, 160, 320];
+
+        const list = values.slice(0, Math.min(values.length, 5))
+            .map((v, i) => ({ w: widths[i], p: dbm(v) }));
+
+        // One value for all widths reads easier than a list
+        text = list.every(x => x.p === list[0].p)
+            ? list[0].p + " dBm up to " + list[list.length - 1].w + " MHz"
+            : list.map(x => x.w + " MHz " + x.p + " dBm").join(", ");
+    }
+    else
+    {
+        // -128 forbids the subchannel, 127 sets no limit
+        const psd = v => v === 128 ? "off" : v === 127 ? "no limit"
+                                           : dbm(v) + " dBm/MHz";
+
+        const list = values.map(psd);
+
+        text = list.every(x => x === list[0])
+            ? list[0] + (count ? " on all " + list.length + " subchannels" : "")
+            : list.join(", ");
+    }
+
+    return kind + " " + text + (cat === 1 ? " (subordinate devices)" : "");
+}
+
+// The single EIRP of an envelope that has the same one for every
+// width, else null
+function tpeFlatEirp(t)
+{
+    const interp = (t[0] >> 3) & 7;
+
+    if (interp !== 0 && interp !== 2)
+        return null;
+
+    const values = t.slice(1).map(v => (v > 127 ? v - 256 : v) / 2);
+
+    return values.length && values.every(v => v === values[0])
+        ? values[0] : null;
+}
+
+// The frame types an unknown element came in, see SEEN_* in the sketch
+function seenInText(bits)
+{
+    return [[1, "beacon"], [2, "probe response"],
+            [4, "probe request"], [8, "assoc request"]]
+        .filter(s => bits & s[0])
+        .map(s => s[1])
+        .join(", ");
+}
+
+// "Unknown element 98 Time Zone (probe response)"
+function unknownElementText(x, i)
+{
+    const seen = seenInText((x.unkin || [])[i] || 0);
+
+    return "Unknown element " + elementName(x.unk[i]) +
+           (seen ? " (" + seen + ")" : "");
+}
+
+function elementName(code)
+{
+    if (code >= 256)
+        return "ext " + (code - 256) + " " +
+               (IE_EXT_NAMES[code - 256] || "unnamed");
+
+    return code + " " + (IE_NAMES[code] || "unnamed");
+}
+
+/*
+ * Things worth pointing out about a BSS.
+ *
+ * Deliberately kept out of the table: most of these apply to
+ * a minority of networks, and a column that is empty nine
+ * times out of ten wastes width while a coloured cell that
+ * fires constantly stops being read. In the tooltip they cost
+ * nothing until someone looks.
+ *
+ * Three groups, by what the reader is meant to do with them:
+ * amber for odd but harmless, blue for the current state of
+ * the air, red for something that should be fixed.
+ */
+/*
+ * bgap: [gaps between back-to-back beacons, of them under half an
+ * interval, the shortest in µs]. Delayed beacons make a few short
+ * gaps; at least ten measured and more than a fifth short is a
+ * second sender.
+ */
+function beaconsTooFast(n)
+{
+    return !!n.bgap && n.bgap[0] >= 10 && n.bgap[1] / n.bgap[0] > 0.2;
+}
+
+// TIM: [DTIM period, group traffic buffered, stations waiting]
+function dtimText(n)
+{
+    if (!n.dtim)
+        return "";
+
+    const [period, mcast, waiting] = n.dtim;
+
+    return period + " (" + Math.round(period * (n.bi || 100) * 1.024) +
+           " ms)" + (mcast ? " \u00b7 mcast buffered" : "") +
+           (waiting ? " \u00b7 " + waiting + " STA waiting" : "");
+}
+
+function beaconGapText(n)
+{
+    // Only where it says something: for a normal AP it is all long gaps
+    if (!beaconsTooFast(n))
+        return "";
+
+    return n.bgap[1] + " of " + n.bgap[0] + " gaps under half the " +
+           "interval, shortest " + (n.bgap[2] / 1000).toFixed(1) + " ms";
+}
+
+// clocks: [frames of one timer, of another, switches, µs apart]
+function clockTwin(n)
+{
+    return !!n.clocks && n.clocks[2] >= 4 &&
+           n.clocks[0] >= 3 && n.clocks[1] >= 3;
+}
+
+// How much a security label protects, for comparing BSSs of one SSID
+function secRank(sec)
+{
+    const ranks = { "Open": 0, "WEP": 1, "OWE": 2, "WPA": 2, "WPA-EAP": 3,
+                    "WPA/WPA2": 3, "WPA2": 4, "WPA/WPA3": 4,
+                    "WPA/WPA2/WPA3": 4, "WPA2/WPA3": 5, "WPA3": 6,
+                    "WPA2-EAP": 7 };
+
+    return ranks[sec] !== undefined ? ranks[sec] : -1;
+}
+
+/*
+ * A BSS that is not like the others of its SSID: weaker security, no
+ * PMF where they require it, another or no Country element. Only
+ * against BSSs of other devices (one device with WPA2 in 2.4 GHz
+ * and WPA2/WPA3 in 5 GHz has a note of its own), and only where at
+ * least two of them agree, two thirds of them. Weaker security is
+ * what an evil twin with its own BSSID looks like.
+ */
+function ssidOutlierNotes(n)
+{
+    const amber = "#c8a050";
+    const red   = "#d08080";
+
+    if (!n.ssid || n.ssid === "<hidden>" || n.mesh)
+        return [];
+
+    const peers = networks.filter(o => o !== n && o.ssid === n.ssid &&
+        !o.mesh && !nearAddress(o.bssid, n.bssid));
+
+    if (peers.length < 2)
+        return [];
+
+    // The value most of them share, if two thirds do
+    const usual = values =>
+    {
+        const count = {};
+
+        values.forEach(v => count[v] = (count[v] || 0) + 1);
+
+        const best = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+
+        return count[best] >= 2 && count[best] * 3 >= values.length * 2
+            ? best : null;
+    };
+
+    const notes = [];
+    const name  = "\u201c" + escapeHTML(n.ssid) + "\u201d";
+    const of    = " than the other " + peers.length + " BSSs of " + name +
+                  " on other devices";
+
+    const sec = usual(peers.map(o => o.sec || "Open"));
+
+    if (sec !== null && secRank(n.sec || "Open") >= 0 && secRank(sec) >= 0 &&
+        secRank(n.sec || "Open") < secRank(sec))
+        notes.push([red,
+            "Weaker security" + of + ": " + escapeHTML(n.sec || "Open") +
+            " here, " + escapeHTML(sec) + " there. A client looking for " +
+            name + " may log in here: an evil twin, or an AP left behind " +
+            "with an old setting"]);
+    else if (usual(peers.map(o => o.mfpr ? "1" : "0")) === "1" && !n.mfpr)
+        notes.push([amber,
+            "PMF not required here, unlike the other " + peers.length +
+            " BSSs of " + name + " on other devices"]);
+
+    const cc = usual(peers.map(o => o.cc || "-"));
+
+    if (cc !== null && cc !== "-" && (n.cc || "-") !== cc)
+        notes.push([amber,
+            "Country element " + (n.cc ? escapeHTML(n.cc) : "missing") +
+            " here, " + cc + " on the other " + peers.length + " BSSs of " +
+            name + " on other devices"]);
+
+    return notes;
+}
+
+function networkNotes(n)
+{
+    const notes = [];
+
+    const amber = "#c8a050";
+    const blue  = "#7aaed0";
+    const red   = "#d08080";
+    const pink  = "#e070c0";
+
+    // ---- not understood by this sensor ------------------
+
+    (n.unk || []).forEach((code, i) =>
+        notes.push([pink, unknownElementText(n, i)]));
+
+    // ---- state of the air -------------------------------
+
+    if (n.csacnt > 0 || n.csach > 0)
+    {
+        notes.push([blue,
+            "Channel switch announced: moving to channel " +
+            n.csach + " in " + n.csacnt + " beacon" +
+            (n.csacnt === 1 ? "" : "s") +
+            ". Usually a radar detection on a DFS channel, or " +
+            "an automatic channel selection run"]);
+    }
+
+    if (n.channel >= 52 && n.channel <= 144)
+    {
+        notes.push([blue,
+            "DFS channel under ETSI rules: the AP has to leave " +
+            "it within 10 s of a radar detection and may not " +
+            "come back for 30 minutes"]);
+    }
+
+    if (n.util >= 60)
+    {
+        notes.push([blue,
+            "Channel utilisation " + n.util + " %, as reported " +
+            "by the AP itself in the BSS Load element"]);
+    }
+
+    // ---- odd but harmless -------------------------------
+
+    if (n.dtim && n.dtim[0] > 3)
+        notes.push([amber,
+            "DTIM every " + n.dtim[0] + " beacons: broadcast and " +
+            "multicast wait up to " +
+            Math.round(n.dtim[0] * (n.bi || 100) * 1.024) + " ms for " +
+            "stations in power save, so ARP, mDNS and the like answer late"]);
+
+    if (beaconsTooFast(n))
+        notes.push([amber,
+            "Beacons come faster than their interval allows: " +
+            Math.round(100 * n.bgap[1] / n.bgap[0]) + " % of them less " +
+            "than half an interval (" + Math.round(n.bi * 0.512) + " ms) " +
+            "after the previous one. Two senders under one BSSID, or " +
+            "software sending beacons of its own beside the AP"]);
+
+    if (n.mbo && n.mbo.dis)
+    {
+        notes.push([red,
+            "AP refuses new associations (MBO): " +
+            (MBO_DISALLOWED[n.mbo.dis] || "reason " + n.mbo.dis)]);
+    }
+
+    if (n.p2p && (n.p2p[1] & 0x10))
+    {
+        notes.push([amber,
+            "Wi-Fi Direct group bridged to the infrastructure " +
+            "network (cross connection)"]);
+    }
+
+    if (acmText(n))
+    {
+        notes.push([amber,
+            "Admission control required for " + acmText(n) +
+            ": clients without ADDTS fall back to a lower class"]);
+    }
+
+    if (n.vht24)
+    {
+        notes.push([amber,
+            "VHT elements in a 2.4 GHz beacon: a vendor " +
+            "extension to announce 256-QAM, not 802.11ac. The " +
+            "standard defines VHT for 5 GHz only, which is why " +
+            "this BSS is listed as Wi-Fi 4"]);
+    }
+    else if (n.channel <= 14 &&
+             (n.voui || []).some(v => v[0] === "00904C" && v[1] === 4))
+    {
+        /*
+         * The same, wrapped: Broadcom's vendor element type 4 carries
+         * VHT capabilities so that Broadcom clients use 256-QAM in
+         * 2.4 GHz ("TurboQAM"). In a Wi-Fi 6 BSS that is redundant,
+         * HE brings 256-QAM in 2.4 GHz with the standard.
+         */
+        notes.push([amber,
+            "Broadcom's element for 256-QAM in 2.4 GHz (00:90:4C " +
+            "type 4, VHT capabilities wrapped as a vendor element): " +
+            (n.std >= 6
+                ? "for older Broadcom clients only, Wi-Fi 6 brings " +
+                  "256-QAM in 2.4 GHz anyway"
+                : "a vendor extension, 802.11n itself stops at " +
+                  "64-QAM; only Broadcom clients use it")]);
+    }
+
+    /*
+     * A hidden SSID: the name still goes out in clear in the probe
+     * and association requests of every client that joins, so it
+     * protects nothing. Not for a mesh (no SSID by design), a NAN
+     * cluster, or the OWE half of a transition pair, which is hidden
+     * by design.
+     */
+    if (!isNan(n) && !n.mesh && !n.owename &&
+        (n.ssid === "<hidden>" || n.resolved))
+    {
+        notes.push([amber,
+            "Hidden SSID: no protection. Every client that joins " +
+            "sends the name in clear in its probe and association " +
+            "requests, and keeps asking for it wherever it goes, " +
+            "telling everyone nearby" +
+            (n.resolved ? "; that is how the name above was learned"
+                        : "")]);
+    }
+
+    if (n.gf)
+    {
+        notes.push([amber,
+            "HT Greenfield announced: no legacy preamble, so " +
+            "802.11a and g stations cannot see these frames at " +
+            "all and will not defer to them. Optional in " +
+            "802.11n and removed from the standard in 802.11-2016"]);
+    }
+
+    if (n.wps)
+    {
+        /*
+         * Config Methods bitmask. The PIN methods are the ones
+         * an external registrar attack works against; push
+         * button needs physical access and a short window.
+         */
+        const PIN = 0x0004 | 0x0008 | 0x0100 | 0x2000 | 0x4000;
+        const PBC = 0x0080 | 0x0200 | 0x0400;
+
+        const m = n.wpsm || 0;
+
+        const names = [];
+
+        if (m & 0x0004) names.push("Label");
+        if (m & 0x0008) names.push("Display");
+        if (m & 0x0100) names.push("Keypad");
+        if (m & PBC)    names.push("Push Button");
+        if (m & 0x0040) names.push("NFC");
+
+        const how =
+            names.length ? names.join(", ") : "methods not announced";
+
+        if ((m & PIN) && !n.wpslock)
+        {
+            notes.push([red,
+                "WPS with a PIN method and AP Setup Locked not " +
+                "set: " + how + ". That is the configuration the " +
+                "external registrar attack works against"]);
+        }
+        else if (m & PIN)
+        {
+            notes.push([amber,
+                "WPS with a PIN method, but AP Setup Locked is " +
+                "set: " + how + ". The lock is what stops a PIN " +
+                "brute force, and it can be lifted again"]);
+        }
+        else
+        {
+            notes.push([amber, names.length
+                ? "WPS present: " + how + ". No PIN method among " +
+                  "them, so the usual offline attack does not apply"
+                : "WPS present, no configuration methods announced " +
+                  "and so no PIN method: the usual offline attack " +
+                  "does not apply"]);
+        }
+
+        if (n.wpsstate === 1)
+        {
+            notes.push([red,
+                "WPS state \"not configured\": the AP will hand " +
+                "its credentials to any enrollee that completes " +
+                "the exchange"]);
+        }
+    }
+
+    if (isBand24(n.channel) && n.bandwidth >= 40)
+    {
+        notes.push([amber,
+            "40 MHz in 2.4 GHz: the band holds three " +
+            "non-overlapping 20 MHz channels, so a 40 MHz BSS " +
+            "takes two of them and the gain rarely survives the " +
+            "extra collisions. Not recommended"]);
+    }
+
+    if (n.intol && n.bandwidth >= 40 && isBand24(n.channel))
+    {
+        notes.push([red,
+            "40 MHz Intolerant, yet this BSS runs 40 MHz itself: it " +
+            "makes every neighbouring AP in the band fall back to " +
+            "20 MHz and keeps the width for itself. Either switch " +
+            "it to 20 MHz or drop the intolerant bit"]);
+    }
+    else if (n.intol)
+    {
+        notes.push([amber,
+            "40 MHz Intolerant: this BSS demands that every " +
+            "neighbouring AP in the band falls back to 20 MHz"]);
+    }
+
+    if (n.basic && n.basic <= 4)
+    {
+        notes.push([amber,
+            "Lowest basic rate " + (n.basic / 2) + " Mbit/s: " +
+            "beacons and management frames are sent at that " +
+            "rate and occupy the channel for everyone. 1 and " +
+            "2 Mbit/s are 802.11b rates; unless 802.11b devices " +
+            "still need this BSS, switch 802.11b off (lowest " +
+            "basic rate 6 Mbit/s or more)"]);
+    }
+
+    /*
+     * No rate marked basic: the BSS asks nothing of its clients.
+     * Control frames then fall back to the mandatory rates of the
+     * PHY (6, 12 and 24 Mbit/s in OFDM), and the AP picks the beacon
+     * rate itself. It works, but it is not what the standard expects
+     * of an AP, and nobody can tell from the beacon what it needs.
+     */
+    if (Array.isArray(n.basicrates) && !n.basicrates.length && !n.basic)
+    {
+        notes.push([amber,
+            "No basic rate marked: the BSS requires no rate of its " +
+            "clients, so control frames fall back to the mandatory " +
+            "rates of the PHY (6, 12, 24 Mbit/s) and the AP picks " +
+            "the beacon rate itself. Unusual; it works, but leaves " +
+            "the clients guessing"]);
+    }
+
+    /*
+     * Pre-authentication (RSN capabilities bit 0) runs 802.1X
+     * towards the next AP ahead of a roam. With PSK or SAE alone
+     * there is no 802.1X to run: the bit does nothing, and says the
+     * configuration was copied from an enterprise one or set by
+     * mistake.
+     */
+    if (n.preauth && !/802\.1X/.test(n.akm || ""))
+    {
+        notes.push([amber,
+            "Pre-authentication announced without 802.1X: it " +
+            "authenticates ahead of a roam over 802.1X, which " +
+            escapeHTML(n.akm || "this AKM") + " does not use, so it " +
+            "does nothing here; likely a misconfiguration"]);
+    }
+
+    if (n.suitebad)
+    {
+        notes.push([amber,
+            (n.suitebad[0] === 2 ? "WPA" : "RSN") + " element lists " +
+            "suite " + suiteBadText(n) + " under an OUI that does not " +
+            "belong there: a firmware fault of the AP; stations may " +
+            "skip the suite or fail to connect"]);
+    }
+
+    if (n.wpanoakm)
+    {
+        notes.push([blue,
+            "WPA element without an AKM: it offers neither PSK nor " +
+            "802.1X, so no station logs in over WPA" +
+            (n.sec && n.sec !== "WPA"
+                ? "; " + escapeHTML(n.sec) + " comes from the RSN element"
+                : "")]);
+    }
+
+    if (n.rid && n.rid.st === 3)
+    {
+        notes.push([red,
+            "The drone reports an emergency in its Remote ID"]);
+    }
+
+    if (n.bcc && n.bcc[2] > 1)
+    {
+        notes.push([blue,
+            "BSS colour switched " + n.bcc[2] + " times: another BSS " +
+            "on the channel keeps picking the same colour"]);
+    }
+
+    if (n.tsfreset && n.tsfreset[1] < 3600)
+    {
+        notes.push([blue,
+            "Beacon timestamp went back " + uptimeText(n.tsfreset[1]) +
+            " ago: the AP restarted, or at least its radio"]);
+    }
+
+    if (n.mbssid)
+    {
+        notes.push([amber,
+            "Multiple BSSID element: further BSSs share this " +
+            "beacon and do not send one of their own, so they " +
+            "are not counted separately here"]);
+    }
+
+    if (n.bi && n.bi !== 100)
+    {
+        notes.push([amber,
+            "Beacon interval " + n.bi + " TU instead of the " +
+            "usual 100. Lower costs airtime, higher delays " +
+            "discovery and power-save wakeups"]);
+    }
+
+    if (!n.cc)
+    {
+        notes.push([amber,
+            "No Country element: clients cannot learn the " +
+            "regulatory domain from this BSS and fall back to " +
+            "their own conservative defaults"]);
+    }
+
+    const country = countryMajority();
+
+    if (n.cc && country && n.cc !== country.cc)
+    {
+        notes.push([blue,
+            "Country " + escapeHTML(n.cc) + " while " + country.count +
+            " of " + country.total + " networks here with a Country " +
+            "element say " + escapeHTML(country.cc) + " (" +
+            Math.round(100 * country.count / country.total) + " %): " +
+            "set up for another regulatory domain, likely bought " +
+            "abroad or left at a default. Clients that follow it " +
+            "take that domain's channels and power limits"]);
+    }
+
+    /*
+     * A power envelope well below what the regulator allows. It
+     * binds the clients of the BSS for certain, and usually means
+     * the AP itself is set to reduced power as well, deliberately
+     * or by a leftover setting. Not every AP lowers the envelope
+     * along with its own power, so an AP without this note is not
+     * necessarily at full power.
+     */
+    (n.tpe || []).forEach(t =>
+    {
+        const interp = (t[0] >> 3) & 7;
+
+        if ((interp === 0 || interp === 2) && t.length > 1)
+        {
+            const eirp = (t[1] > 127 ? t[1] - 256 : t[1]) / 2;
+
+            if (eirp < 18)
+            {
+                notes.push([amber,
+                    "Tx power envelope of " + eirp + " dBm EIRP at " +
+                    "20 MHz, below 18 dBm: clients are held to it, " +
+                    "and the AP is probably set to reduced power too"]);
+            }
+        }
+    });
+
+    /*
+     * ERP: bit 0 an 802.11b station is associated, bit 1 the AP
+     * protects its OFDM frames, for its own 11b station or one
+     * in an overlapping BSS
+     */
+    if (n.erp !== undefined && (n.erp & 2))
+    {
+        notes.push([amber,
+            "ERP protection on: the AP sends OFDM frames behind " +
+            "RTS/CTS or CTS-to-self because of " +
+            (n.erp & 1 ? "an 802.11b station associated with it"
+                       : "802.11b devices in an overlapping BSS") +
+            ", which costs airtime"]);
+    }
+    else if (n.erp !== undefined && (n.erp & 1))
+    {
+        notes.push([amber,
+            "802.11b station associated: its DSSS frames at " +
+            "1 to 11 Mbit/s take a lot of airtime, even though the " +
+            "AP announces no protection"]);
+    }
+
+    // The TPC Report states the power the beacon went out with
+    if (n.tpc !== undefined && n.tpc < 18)
+    {
+        notes.push([amber,
+            "Beacons sent at " + n.tpc + " dBm by the AP's own TPC " +
+            "report, below 18 dBm: the AP runs at reduced power"]);
+    }
+
+    // ---- worth fixing -----------------------------------
+
+    if (clockTwin(n))
+        notes.push([red,
+            "Two devices send as this BSSID: its frames carry two " +
+            "different beacon timers, " + (n.clocks[3] / 1e6).toFixed(1) +
+            " s apart, alternating " + n.clocks[2] + " times. A cloned " +
+            "MAC address, an evil twin, or two APs set to the same BSSID"]);
+
+    ssidOutlierNotes(n).forEach(note => notes.push(note));
+
+    if ((n.sec || "").toUpperCase() === "WEP")
+    {
+        notes.push([red,
+            "WEP: the Privacy bit is set but there is neither an " +
+            "RSN nor a WPA element, so the only thing left is " +
+            "WEP. Broken since 2001 and withdrawn from the " +
+            "standard in 802.11-2012"]);
+    }
+
+    const cipher = ((n.pair || "") + " " + (n.group || "")).toUpperCase();
+
+    if (cipher.indexOf("TKIP") >= 0)
+    {
+        notes.push([red,
+            "TKIP in use: caps the whole BSS at 802.11g rates, " +
+            "HT and later are not allowed with it"]);
+    }
+
+    const akm = (n.akm || "").toUpperCase();
+
+    const sae = akm.indexOf("SAE") >= 0;
+    const psk = akm.indexOf("PSK") >= 0;
+
+    if (sae && psk)
+    {
+        /*
+         * Transition mode is supposed to look like this. PMF
+         * cannot be required here because the PSK clients it
+         * exists for cannot do it, so MFPR = 0 is correct and
+         * only MFPC is mandatory. The weakness is the
+         * downgrade path itself, not the configuration.
+         */
+        notes.push([amber,
+            "WPA3 transition mode: SAE and PSK side by side, so " +
+            "a client can be pushed back to the weaker one. PMF " +
+            "cannot be required in this mode, which is why it is " +
+            "not flagged here"]);
+    }
+    /*
+     * WPA3 mandates PMF for an access point. An 802.11s mesh point is
+     * none: its peering is secured by SAE and AMPE, and wpa_supplicant
+     * (OpenWrt, Freifunk) turns PMF on there only when configured,
+     * outside 6 GHz it is off by default. So no red note for a mesh,
+     * only the state.
+     */
+    else if (sae && !n.mfpr && !n.mesh)
+    {
+        notes.push([red,
+            "SAE without PSK alongside it, yet protected " +
+            "management frames are not required. WPA3-only " +
+            "mandates PMF, so this BSS is not conforming"]);
+    }
+
+    if (sae && !n.mfpc && !n.mesh)
+    {
+        notes.push([red,
+            "SAE offered while protected management frames are " +
+            "not even supported. SAE without PMF gives up the " +
+            "protection it exists for"]);
+    }
+
+    if (sae && !n.mfpc && n.mesh)
+    {
+        notes.push([blue,
+            "Mesh with SAE, management frames between the mesh " +
+            "points not protected: PMF is off, the default of " +
+            "wpa_supplicant for a mesh. The peering itself is " +
+            "secured by SAE and AMPE"]);
+    }
+
+    const split = mloSplitText(n);
+
+    if (split)
+        notes.push([amber, split]);
+
+    /*
+     * 2.4 GHz channels lie 5 MHz apart, a 20 MHz BSS covers four of
+     * them. On 1, 6, 11 (or 1, 5, 9, 13 in Europe) neighbours either
+     * share a channel, and with it the airtime, or stay clear of
+     * each other; in between, a BSS overlaps those on both sides,
+     * hears them only as noise and collides with them.
+     */
+    if (OVERLAP_CHANNELS.includes(n.channel))
+    {
+        notes.push([amber,
+            "Channel " + n.channel + " overlaps the neighbours on the " +
+            "channels to either side: they cannot share the airtime " +
+            "and disturb each other. Better 1, 6 or 11 (in Europe also " +
+            "1, 5, 9, 13)"]);
+    }
+
+    /*
+     * 802.11b, a or g alone, no 802.11n: the lowest rates and, in
+     * 2.4 GHz, protection for every OFDM station around. An old
+     * device; nothing to configure, it has to go.
+     */
+    if (n.std > 0 && n.std <= 3)
+    {
+        notes.push([amber,
+            "No 802.11n: a " + ["802.11b", "802.11a", "802.11g"][n.std - 1] +
+            " BSS sends at the old rates and takes that much more " +
+            "airtime from everyone on the channel. Better replace the " +
+            "old device with a new one"]);
+    }
+
+    /*
+     * Open without OWE: everything goes out in clear. Not for the
+     * open half of an OWE transition pair, a mesh or a NAN cluster.
+     */
+    if (/^open$/i.test(n.sec || "") && !n.owetrans && !n.owename &&
+        !n.mesh && !isNan(n))
+    {
+        notes.push([amber,
+            "Open network: everything is sent in clear for anyone " +
+            "nearby to read. OWE (Enhanced Open) encrypts each client " +
+            "without a password; better offer it, beside an open " +
+            "transition network for older clients if need be"]);
+    }
+
+    const security = securityMismatchText(n);
+
+    if (security && !split)
+        notes.push([blue, security]);
+
+    const countries = countryMismatchText(n);
+
+    if (countries)
+        notes.push([blue, countries]);
+
+    return notes;
+}
+
+
+// Neither in 1, 6, 11 nor in 1, 5, 9, 13
+const OVERLAP_CHANNELS = [2, 3, 4, 7, 8, 10, 12];
+
+// The BSSIDs of one device: sameDevice(), or addresses at most 15
+// apart, such as …:44:FF and …:45:00 (the locally administered bit
+// left out)
+function nearAddress(a, b)
+{
+    if (sameDevice(a, b))
+        return true;
+
+    const value = x =>
+    {
+        const o = x.split(":").map(h => parseInt(h, 16));
+        o[0] &= ~2;
+        return o.reduce((v, octet) => v * 256 + octet, 0);
+    };
+
+    return Math.abs(value(a) - value(b)) < 16;
+}
+
+/*
+ * The same SSID with other security on another BSSID of this device,
+ * typically WPA2 in 2.4 GHz and WPA2/WPA3 in 5 GHz: a client that
+ * changes band changes between PSK and SAE and logs in anew, and
+ * may not take the other band at all.
+ */
+function securityMismatchText(n)
+{
+    if (!n.ssid || n.ssid === "<hidden>")
+        return "";
+
+    const others = networks.filter(o => o !== n && o.ssid === n.ssid &&
+        o.sec && n.sec && o.sec !== n.sec && nearAddress(o.bssid, n.bssid));
+
+    if (!others.length)
+        return "";
+
+    const o = others[0];
+
+    return "The same SSID on channel " + o.channel + " of this device " +
+        "offers " + escapeHTML(o.sec) + ", here " + escapeHTML(n.sec) +
+        ": a client changing between them has to log in anew, some " +
+        "stay on one band. One setting for all bands avoids it";
+}
+
+/*
+ * One network, several countries: all its access points stand in
+ * one place and should announce the same Country element, which
+ * sets channels and power. A router announcing DE and its repeater
+ * CH has the region set wrong on one of them.
+ */
+function countryMismatchText(n)
+{
+    if (!n.cc || !n.ssid || n.ssid === "<hidden>")
+        return "";
+
+    const other = [...new Set(networks.filter(o => o.ssid === n.ssid &&
+        o.cc && o.cc !== n.cc).map(o => o.cc))];
+
+    if (!other.length)
+        return "";
+
+    return "Country " + escapeHTML(n.cc) + " here, " +
+        other.map(escapeHTML).join(", ") + " on other access points " +
+        "with this SSID: several countries for one network are " +
+        "implausible, one of them has its region set wrong";
+}
+
+
+/*
+ * The country most networks in range announce, when more than half
+ * of at least five with a Country element agree: {cc, count, total},
+ * else null. An AP saying something else is set up for another
+ * regulatory domain.
+ */
+function countryMajority()
+{
+    const counts = {};
+    let total = 0;
+
+    networks.forEach(o =>
+    {
+        if (!o.cc)
+            return;
+
+        counts[o.cc] = (counts[o.cc] || 0) + 1;
+        total++;
+    });
+
+    if (total < 5)
+        return null;
+
+    const cc = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+
+    return counts[cc] * 2 > total ? { cc, count: counts[cc], total } : null;
+}
+
+/*
+ * One device, its BSSIDs: the same address with the locally
+ * administered bit set (08:… and 0A:…), or the same first five
+ * octets with the last one in the same block of sixteen.
+ */
+function sameDevice(a, b)
+{
+    const x = a.split(":").map(h => parseInt(h, 16));
+    const y = b.split(":").map(h => parseInt(h, 16));
+
+    if ((x[0] & ~2) === (y[0] & ~2) &&
+        x.slice(1).join() === y.slice(1).join())
+        return true;
+
+    return x.slice(0, 5).join() === y.slice(0, 5).join() &&
+           (x[5] >> 4) === (y[5] >> 4);
+}
+
+/*
+ * An AP MLD with a single link: link 0, nothing else named, no other
+ * BSSID of it heard. A higher link ID says there is a link 0
+ * somewhere, on a band or channel not being heard.
+ */
+function singleLinkMld(n)
+{
+    return !!n.mld && n.mlolink === 0 && !n.mlolinks &&
+           networks.filter(o => o.mld === n.mld).length === 1;
+}
+
+/*
+ * Multi-link split up: one device runs several bands, each as an AP
+ * MLD of its own with a single link, where one AP MLD with a link per
+ * band was meant. The links of one AP MLD share SSID and security,
+ * so separate names per band, or different security, keep them
+ * apart. Two different MLD addresses on one device are two MLDs
+ * whatever the sensor hears, so this cannot be a link on a channel
+ * that is not being swept; a single MLD with one link alone is not
+ * flagged for that reason.
+ */
+function mloSplitText(n)
+{
+    if (!singleLinkMld(n))
+        return "";
+
+    // On another band: several SSIDs on one radio, each its own
+    // MLD (a guest network beside the main one), is how it should be
+    const others = networks.filter(o => o !== n && o.mld &&
+        o.mld !== n.mld && singleLinkMld(o) &&
+        bandOfChannel(o.channel) !== bandOfChannel(n.channel) &&
+        sameDevice(o.bssid, n.bssid));
+
+    if (!others.length)
+        return "";
+
+    const which = others.map(o => "\u201c" + escapeHTML(o.ssid || "") +
+        "\u201d on " + bandOfChannel(o.channel)).join(", ");
+
+    const why = [];
+
+    if (others.some(o => o.ssid !== n.ssid))
+        why.push("the names differ");
+
+    others.filter(o => o.sec !== n.sec).forEach(o =>
+        why.push("the security differs (" + escapeHTML(n.sec || "open") +
+                 " vs " + escapeHTML(o.sec || "open") + ")"));
+
+    return "Multi-link split: this device also runs " + which +
+        " as a separate AP MLD with one link, as it does this BSS. " +
+        "The bands of one AP MLD share SSID and security" +
+        (why.length ? "; here " + why.join(" and ") : "") +
+        ", so clients get no multi-link across the bands";
+}
+
+
+/*
+ * Rates come in units of 500 kbit/s, so 11 is 5.5 Mbit/s.
+ * Every station must support all of these to join, and the
+ * lowest of them is what beacons go out at.
+ */
+function basicRateText(n)
+{
+    const list = n.basicrates || [];
+
+    if (!list.length)
+        return "<span class='dim'>none marked basic</span>";
+
+    return list
+        .slice()
+        .sort((a, b) => a - b)
+        .map(r => (r / 2))
+        .join(", ") + " Mbit/s";
+}
+
+
+/*
+ * Tooltip layout: a header, then sections with a dim heading and
+ * label / value rows. Rows with an empty value and sections
+ * without rows are left out, so a plain BSS stays short.
+ */
+function tipRows(rows)
+{
+    const kept = rows.filter(r => r && r[1] !== undefined &&
+                                  r[1] !== null && r[1] !== "");
+
+    if (!kept.length)
+        return "";
+
+    return "<table>" + kept.map(r =>
+        r[0] === null
+            ? "<tr><td colspan='2'>" + r[1] + "</td></tr>"
+            : "<tr><td class='tipL'>" + r[0] + "</td><td>" + r[1] +
+              "</td></tr>").join("") + "</table>";
+}
+
+function tipSection(title, rows)
+{
+    const body = tipRows(rows);
+
+    return body ? "<div class='tipSec'>" + title + "</div>" + body : "";
+}
+
+// Red first, then amber, blue, and pink last
+const NOTE_ORDER = { "#d08080": 0, "#c8a050": 1, "#7aaed0": 2, "#e070c0": 3 };
+
+// The notes as coloured bullets, last in every tooltip
+function tipNotes(notes)
+{
+    if (!notes.length)
+        return "";
+
+    const sorted = notes.slice().sort((a, b) =>
+        (NOTE_ORDER[a[0]] ?? 4) - (NOTE_ORDER[b[0]] ?? 4));
+
+    return "<div class='tipSec'>NOTES</div>" + sorted.map(note =>
+        "<span style='color:" + note[0] + "'>\u2022 " + note[1] +
+        "</span>").join("<br>");
+}
+
+/*
+ * ERP Information (42): bit 0 a non-ERP (802.11b) station is
+ * present, bit 1 protection is on, bit 2 the long preamble is
+ * required.
+ */
+function erpText(erp)
+{
+    if (erp === undefined || !(erp & 3))
+        return "";
+
+    return [
+        erp & 1 ? "802.11b station present" : "",
+        erp & 2 ? "protection on" : "",
+        erp & 4 ? "long preamble" : ""
+    ].filter(x => x).join(", ");
+}
+
+
+/*
+ * Extended BSS Load (193): MU-MIMO capable stations, spatial
+ * stream underutilization and the busy time on the secondary
+ * channels, the last four scaled to 255. Empty when everything
+ * is zero, many APs send the element without filling it in.
+ * Secondary channels only as far as the BSS is wide.
+ */
+function xloadText(n)
+{
+    const x = n.xload;
+
+    if (!x || !x.some(v => v))
+        return "";
+
+    const pct = v => Math.round(v * 100 / 255) + " %";
+    const w = networkWidthMHz(n);
+
+    const busy = [[20, x[2]], [40, x[3]], [80, x[4]]]
+        .filter(([mhz]) => w > mhz)
+        .map(([mhz, v]) => mhz + " MHz " + pct(v));
+
+    return [
+        x[0] + " MU-MIMO station" + (x[0] === 1 ? "" : "s"),
+        "streams idle " + pct(x[1]),
+        busy.length ? "secondary busy " + busy.join(" / ") : ""
+    ].filter(v => v).join(" \u00b7 ");
+}
+
+
+// The AP's clock from its Time Advertisement, against the sensor's
+function apClockText(n)
+{
+    if (!n.apclk)
+        return "";
+
+    const tz = (lastStatus && lastStatus.tzlabel) || "UTC";
+
+    let delta = "";
+
+    if (n.apdelta !== undefined)
+        delta = Math.abs(n.apdelta) < 2
+            ? ", same as the sensor"
+            : ", " + (n.apdelta > 0 ? "+" : "\u2212") +
+              (Math.abs(n.apdelta) < 60
+                  ? Math.abs(n.apdelta) + " s"
+                  : uptimeText(Math.abs(n.apdelta))) +
+              " against the sensor";
+
+    return n.apclk + " " + tz + delta;
+}
+
+
+/*
+ * Who made the Wi-Fi chip, by the OUI of a vendor element its
+ * driver adds to every beacon. Metalink is the WLAN part of
+ * Lantiq, later Intel and now MaxLinear. Texas Instruments' ACX
+ * chips sat in early 802.11g routers, FRITZ!Boxes among them. Intel's
+ * 00:17:35 comes from the driver of its client chips. Any other OUI in a
+ * vendor element names the maker of the device itself.
+ *
+ * Some Broadcom (Epigram) elements are copied by other chips so
+ * that Broadcom clients understand them: type 4, 256-QAM in
+ * 2.4 GHz, and the pre-802.11n HT elements 0x33 and 0x34. They
+ * say nothing about the chip.
+ *
+ * Apple's Device IE (00:A0:40 type 0) comes from accessories made
+ * for Apple devices, not from Apple: a car head unit with
+ * wireless CarPlay, say. Its own manufacturer field is used
+ * instead, see apMakers().
+ */
+const VENDOR_COMPAT_TYPES = {
+    "00904C": [0x04, 0x33, 0x34],
+    "00A040": [0x00]
+};
+
+const WIFI_CHIP_OUIS = {
+    "00904C": "Broadcom", "001018": "Broadcom",
+    "8CFDF0": "Qualcomm", "00037F": "Qualcomm",
+    "000C43": "MediaTek", "000CE7": "MediaTek",
+    "00E04C": "Realtek",  "002686": "Quantenna",
+    "000986": "MaxLinear (Lantiq)", "005043": "Marvell",
+    "18FE34": "Espressif", "001C51": "Celeno",
+    "4045DA": "Unisoc (Spreadtrum)", "00025B": "CSR (Qualcomm)",
+    "080028": "Texas Instruments", "001735": "Intel"
+};
+
+/*
+ * The maker's name for an OUI where the registry entry is long,
+ * old or missing. 00:0B:86 is Aruba's, 00:19:77 Aerohive's, both
+ * now owned by others; 00:A0:F8 was Symbol's, whose WLAN line went
+ * via Motorola and Zebra to Extreme (WiNG). Sophos APs send their
+ * own OUI 7C:5A:1C with the bytes reversed, 1C:5A:7C, which has
+ * no registry entry. Mojo Networks (before that AirTight) belongs
+ * to Arista, Xirrus to Cambium. DJI's element comes under
+ * 44:32:44, ASCII "D2D", which has no registry entry.
+ */
+const MAKER_NAMES = {
+    "000B86": "Aruba (HPE)",
+    "001977": "Aerohive (Extreme)",
+    "00A0F8": "Extreme WiNG",
+    "1422DB": "eero (Amazon)",
+    "000C42": "MikroTik",
+    "00090F": "Fortinet",
+    "001D0F": "TP-Link",
+    "009D85": "SigmaStar",
+    "000E58": "Sonos",
+    "00E0FC": "HUAWEI",
+    "1C5A7C": "Sophos",
+    "6CB227": "Sony",
+    "8CBEBE": "Xiaomi",
+    "001174": "Mojo Networks (Arista)", "30B62D": "Mojo Networks (Arista)",
+    "88B1E1": "Mojo Networks (Arista)", "E4D124": "Mojo Networks (Arista)",
+    "000F7D": "Xirrus (Cambium)", "443244": "DJI"
+};
+
+/*
+ * OUIs that say nothing about the maker: 00:00:0F (NeXT) shows up
+ * in odd elements, 00:02:BC (LVL7) wrote the software D-Link and
+ * others ran, not the device. 00:13:74 is the OUI hostapd uses for
+ * its QCA elements, built in whatever the chip. 00:00:00 is
+ * registered to Xerox but stands for nothing in an element.
+ */
+const NO_MAKER_OUIS = ["00000F", "0002BC", "001374", "000000"];
+
+function ouiColons(hex)
+{
+    return hex.match(/../g).join(":");
+}
+
+// Chip and device makers from the vendor elements, each once
+function apMakers(n)
+{
+    const chips  = [];
+    const makers = [];
+
+    // Manufacturer from the Apple Device IE, given by the device
+    if (n.acc && n.acc[1])
+        makers.push(n.acc[1]);
+
+    for (const [oui, type, name] of (n.voui || []))
+    {
+        if ((VENDOR_COMPAT_TYPES[oui] || []).includes(type) ||
+            NO_MAKER_OUIS.includes(oui))
+            continue;
+
+        const chip = WIFI_CHIP_OUIS[oui];
+
+        // DD-WRT sends MikroTik's element too, with its radio name
+        if (oui === "000C42" && n.vendor !== "Routerboard.com")
+            continue;
+
+        // No registry entry: often not an OUI at all but a broken
+        // element, its first three octets mean nothing
+        if (!chip && !name && !MAKER_NAMES[oui])
+            continue;
+
+        const list = chip ? chips : makers;
+        const text = chip || MAKER_NAMES[oui] || name;
+
+        if (!list.includes(text))
+            list.push(text);
+    }
+
+
+    return { chips, makers };
+}
+
+/*
+ * Interworking (107), 802.11-2020 9.4.2.92: access network type
+ * and flags, then optionally the venue (group, type) and the
+ * HESSID. Venue names from tables 9-65 and 9-66.
+ */
+const IW_NETWORK_TYPES = {
+    0: "private network",
+    1: "private network with guest access",
+    2: "chargeable public network",
+    3: "free public network",
+    4: "personal device network",
+    5: "emergency services only network",
+    14: "test or experimental",
+    15: "wildcard"
+};
+
+const VENUE_GROUPS = [
+    "Unspecified", "Assembly", "Business", "Educational",
+    "Factory and Industrial", "Institutional", "Mercantile",
+    "Residential", "Storage", "Utility and Miscellaneous",
+    "Vehicular", "Outdoor"
+];
+
+const VENUE_TYPES = {
+    1: ["", "Arena", "Stadium", "Passenger Terminal", "Amphitheater",
+        "Amusement Park", "Place of Worship", "Convention Center",
+        "Library", "Museum", "Restaurant", "Theater", "Bar",
+        "Coffee Shop", "Zoo or Aquarium",
+        "Emergency Coordination Center"],
+    2: ["", "Doctor or Dentist office", "Bank", "Fire Station",
+        "Police Station", "", "Post Office", "Professional Office",
+        "Research and Development Facility", "Attorney Office"],
+    3: ["", "School, Primary", "School, Secondary",
+        "University or College"],
+    4: ["", "Factory"],
+    5: ["", "Hospital", "Long-Term Care Facility",
+        "Alcohol and Drug Rehabilitation Center", "Group Home",
+        "Prison or Jail"],
+    6: ["", "Retail Store", "Grocery Market",
+        "Automotive Service Station", "Shopping Mall", "Gas Station"],
+    7: ["", "Private Residence", "Hotel or Motel", "Dormitory",
+        "Boarding House"],
+    10: ["", "Automobile or Truck", "Airplane", "Bus", "Ferry",
+         "Ship or Boat", "Train", "Motor Bike"],
+    11: ["", "Muni-mesh Network", "City Park", "Rest Area",
+         "Traffic Control", "Bus Stop", "Kiosk"]
+};
+
+function interworking(n)
+{
+    const b = (n.iw || "").match(/../g);
+
+    if (!b)
+        return null;
+
+    const v = b.map(x => parseInt(x, 16));
+
+    // Venue follows at 3 or 9 octets, HESSID at 7 or 9
+    const venue = v.length === 3 || v.length >= 9;
+
+    return {
+        type: v[0] & 15,
+        internet: (v[0] & 0x10) !== 0,
+        asra: (v[0] & 0x20) !== 0,
+        esr: (v[0] & 0x40) !== 0,
+        uesa: (v[0] & 0x80) !== 0,
+        group: venue ? v[1] : -1,
+        vtype: venue ? v[2] : -1,
+        hessid: v.length >= 7
+            ? b.slice(v.length - 6).join(":") : ""
+    };
+}
+
+function venueText(iw)
+{
+    if (iw.group < 0)
+        return "";
+
+    const group = VENUE_GROUPS[iw.group] || "group " + iw.group;
+    const type = (VENUE_TYPES[iw.group] || [])[iw.vtype] ||
+                 (iw.vtype ? "type " + iw.vtype : "");
+
+    return group + (type ? " / " + type : "");
+}
+
+// "free public network, Internet, venue Vehicular / Bus"
+function iwText(n)
+{
+    const iw = interworking(n);
+
+    if (!iw)
+        return "";
+
+    return [
+        IW_NETWORK_TYPES[iw.type] || "network type " + iw.type,
+        iw.internet ? "Internet" : "",
+        iw.asra ? "additional step required" : "",
+        iw.esr ? "emergency services reachable" : "",
+        iw.uesa ? "unauthenticated emergency service" : "",
+        iw.group >= 0 ? "venue " + venueText(iw) : "",
+        iw.hessid ? "HESSID " + iw.hessid : ""
+    ].filter(t => t).join(", ");
+}
+
+/*
+ * Apple Device IE: "SEAT · SE3821 · My SEAT 4624", manufacturer,
+ * model and name as the accessory sends them.
+ */
+function appleAccText(n)
+{
+    if (!n.acc)
+        return "";
+
+    return [n.acc[1], n.acc[2], n.acc[0]].filter(t => t)
+               .join(" \u00b7 ") || "element present";
+}
+
+/*
+ * RSNE Override (Wi-Fi Alliance): the security offered to clients
+ * that understand it, Wi-Fi 7 ones, beside the RSN element for
+ * all others. "SAE, SAE-EXT-KEY · GCMP-256, CCMP-128 · PMF
+ * required · H2E"
+ */
+function overrideText(n)
+{
+    const o = n.ovr;
+
+    if (!o)
+        return "";
+
+    return [o.akm, o.pair,
+            ["", "PMF capable", "PMF required"][o.pmf] || "",
+            o.h2e ? "H2E" : ""].filter(t => t).join(" \u00b7 ");
+}
+
+/*
+ * P2P (Wi-Fi Direct) and Wi-Fi Display (Miracast). P2P group
+ * capability: bit 0 group owner, 1 persistent group, 4 cross
+ * connection; device capability bit 2 concurrent operation. WFD
+ * device information: bits 0-1 the device type, 4-5 whether a
+ * session is possible.
+ */
+const WFD_TYPES = ["Miracast source", "Miracast sink",
+                   "Miracast secondary sink", "Miracast source and sink"];
+
+function p2pText(n)
+{
+    const parts = [];
+
+    if (n.p2p)
+    {
+        const [dev, group, name] = n.p2p;
+
+        parts.push([
+            group & 0x01 ? "group owner" : "",
+            group & 0x02 ? "persistent group" : "",
+            group & 0x10 ? "cross connection" : "",
+            dev & 0x04 ? "concurrent operation" : ""
+        ].filter(t => t).join(", ") || "element present");
+
+        if (name)
+            parts.push("\u201c" + name + "\u201d");
+    }
+
+    if (n.wfd !== undefined)
+        parts.push(WFD_TYPES[n.wfd & 3] +
+                   (((n.wfd >> 4) & 3) === 1 ? ", available" : ""));
+
+    return parts.join(" \u00b7 ");
+}
+
+/*
+ * Operating Mode Notification (199): bits 0-1 channel width (20,
+ * 40, 80, 160 MHz with bit 2 set), bits 4-6 receive streams - 1.
+ * "20 MHz, 1 stream"
+ */
+function omnText(n)
+{
+    if (n.omn === undefined)
+        return "";
+
+    const w = n.omn & 3;
+    const width = w === 2 && (n.omn & 4) ? 160 : [20, 40, 80, 160][w];
+    const nss = ((n.omn >> 4) & 7) + 1;
+
+    return width + " MHz, " + nss + " stream" + (nss > 1 ? "s" : "");
+}
+
+/*
+ * Manufacturer, model name and model number from WPS, "HP G5J38A";
+ * a model name that already holds the number keeps it once. The
+ * firmware never reads the serial number.
+ */
+function wpsDeviceText(n)
+{
+    if (!n.wpsdev)
+        return "";
+
+    const [maker, model, number] = n.wpsdev;
+
+    const parts = [maker];
+
+    if (model && !(maker && model.startsWith(maker)))
+        parts.push(model);
+    else if (model)
+        parts[0] = model;
+
+    if (number && !parts.some(p => p && p.includes(number)))
+        parts.push(number);
+
+    return parts.filter(p => p).join(" ");
+}
+
+// HP printers name their model in HP's element; not the serial
+function printerText(n)
+{
+    return n.hp
+        ? n.hp[0] + (n.hp[1] && !n.hp[0].includes(n.hp[1])
+                         ? " (" + n.hp[1] + ")" : "")
+        : "";
+}
+
+/*
+ * MBO-OCE: AP capability bit 6 cellular data aware, the OCE
+ * control bit 6 a non-OCE AP on the channel, the channels the AP
+ * would rather clients avoid, and Association Disallowed with its
+ * reason code.
+ */
+const MBO_DISALLOWED = {
+    1: "unspecified reason",
+    2: "maximum number of stations reached",
+    3: "air interface overloaded",
+    4: "authentication server overloaded",
+    5: "signal too weak"
+};
+
+function mboText(n)
+{
+    const m = n.mbo;
+
+    if (!m)
+        return "";
+
+    return [
+        "MBO",
+        m.cap & 0x40 ? "cellular data aware" : "",
+        m.oce >= 0 ? "OCE" : "",
+        m.oce >= 0 && (m.oce & 0x40) ? "non-OCE AP on the channel" : "",
+        m.npc && m.npc.length ? "avoid channel " + m.npc.join(", ") : "",
+        m.dis ? "no new associations" : ""
+    ].filter(t => t).join(" \u00b7 ");
+}
+
+// Advertisement Protocol (108): what can be asked before joining
+const ADV_PROTOCOLS = {
+    0: "ANQP", 1: "MIH Information Service",
+    2: "MIH Command and Event Services", 3: "EAS", 4: "RLQP",
+    221: "vendor specific"
+};
+
+function advText(n)
+{
+    return (n.adv || []).map(id => ADV_PROTOCOLS[id] || "protocol " + id)
+        .join(", ");
+}
+
+// "20 s", or "2 min 5 s" from a minute on
+function secondsText(seconds)
+{
+    return seconds < 60 ? seconds + " s" : uptimeText(seconds);
+}
+
+/*
+ * Quiet (40): [period, duration, offset], period in beacon
+ * intervals, the others in TU. "Quiet 31 ms every 200 beacons
+ * (≈ 20 s), 20 TU after the beacon"
+ */
+function quietText(n)
+{
+    if (!n.quiet)
+        return "";
+
+    const [period, duration, offset] = n.quiet;
+
+    const ms = Math.round(duration * 1.024);
+
+    const every = period
+        ? "every " + period + " beacon" + (period === 1 ? "" : "s") +
+          (n.bi ? " (\u2248 " + secondsText(Math.round(
+              period * n.bi * 1.024 / 1000)) + ")" : "")
+        : "once";
+
+    return ms + " ms " + every + ", " + offset + " TU after the beacon";
+}
+
+/*
+ * BSS Available Admission Capacity (67): a bitmask, bits 0 to 7
+ * user priorities, 8 to 11 access categories, then one value per
+ * set bit in units of 32 µs per second. Some APs (Aruba) put a
+ * fixed value above one second there.
+ */
+const AC_NAMES = ["best effort", "background", "video", "voice"];
+
+function aacText(n)
+{
+    const b = (n.aac || "").match(/../g);
+
+    if (!b || b.length < 2)
+        return "";
+
+    const v = b.map(x => parseInt(x, 16));
+
+    const mask = v[0] | (v[1] << 8);
+
+    const parts = [];
+
+    let pos = 2;
+
+    for (let bit = 0; bit < 12 && pos + 1 < v.length; bit++)
+    {
+        if (!(mask & (1 << bit)))
+            continue;
+
+        parts.push([bit < 8 ? "UP" + bit : AC_NAMES[bit - 8],
+                    v[pos] | (v[pos + 1] << 8)]);
+
+        pos += 2;
+    }
+
+    // 31250 × 32 µs is the whole second
+    const limited = parts.filter(([, raw]) => raw <= 31250);
+
+    if (parts.length && !limited.length)
+        return parts.map(([name]) => name).join(", ") +
+               " \u2014 above 1 s/s, not limited";
+
+    return parts.map(([name, raw]) => name + " " +
+        (raw > 31250 ? "not limited"
+                     : Math.round(raw * 32 / 1000) + " ms/s")).join(", ");
+}
+
+// Access categories that need admission control (WMM ACM bits)
+function acmText(n)
+{
+    return n.acm > 0
+        ? [3, 2, 0, 1].filter(i => n.acm & (1 << i))
+              .map(i => AC_NAMES[i]).join(", ")
+        : "";
+}
+
+// Top right of the AP and the station tooltip: BEST GUESS
+/*
+ * Drone Remote ID (ASTM F3411), decoded by the firmware: what the
+ * drone broadcasts by law for anyone to read, the pilot's position
+ * included. Of the serial number only its manufacturer code comes
+ * along (ANSI/CTA-2063-A); 1581 is DJI's.
+ */
+const RID_UA_TYPES = ["drone", "aeroplane", "multirotor", "gyroplane",
+    "VTOL", "ornithopter", "glider", "kite", "free balloon",
+    "captive balloon", "airship", "parachute", "rocket",
+    "tethered aircraft", "ground obstacle", "aircraft"];
+
+const RID_STATUS = ["status undeclared", "on the ground", "airborne",
+    "emergency", "Remote ID system failure"];
+
+const RID_MAKERS = { "1581": "DJI" };
+
+// Altitudes come as value / 2 - 1000 m, 0 meaning unknown
+function ridMetres(raw)
+{
+    return raw ? raw / 2 - 1000 : null;
+}
+
+function ridMetresText(raw)
+{
+    const m = ridMetres(raw);
+
+    return m === null ? "" : (Math.round(m * 10) / 10) + " m";
+}
+
+// A position on OpenStreetMap, the marker on it
+function ridMapLink(lat, lon, label)
+{
+    if (!lat && !lon)
+        return "";
+
+    const y = (lat / 1e7).toFixed(6), x = (lon / 1e7).toFixed(6);
+
+    return "<a class='dl' target='_blank' rel='noopener' " +
+        "href='https://www.openstreetmap.org/?mlat=" + y + "&mlon=" + x +
+        "#map=17/" + y + "/" + x + "'>" + label + "</a> " + y + ", " + x;
+}
+
+function ridMaker(r)
+{
+    return RID_MAKERS[r.mk] || "";
+}
+
+function ridDeviceText(r)
+{
+    return "Drone" + (r.ua > 0 && r.ua !== 2 ? " (" + RID_UA_TYPES[r.ua] + ")"
+                                            : "");
+}
+
+// "45 m above takeoff"
+function ridHeightText(r)
+{
+    const h = ridMetresText(r.h);
+
+    return h ? h + (r.hagl ? " above ground" : " above takeoff") : "";
+}
+
+// EU classification: category and class C0 to C6
+function ridEuText(eu)
+{
+    if (!eu)
+        return "";
+
+    const cat = ["", "open", "specific", "certified"][eu >> 4] || "";
+    const cls = (eu & 15) ? "class C" + ((eu & 15) - 1) : "";
+
+    return [cat ? cat + " category" : "", cls].filter(x => x).join(", ");
+}
+
+function ridSpeedText(r)
+{
+    if (r.spd === undefined || r.spd < 0)
+        return "";
+
+    return (r.spd / 100).toFixed(1) + " m/s" +
+        (r.trk !== undefined && r.trk <= 360 ? " towards " + r.trk + "\u00b0"
+                                            : "") +
+        (r.vs ? ", " + (r.vs > 0 ? "climbing " : "descending ") +
+                (Math.abs(r.vs) / 100).toFixed(1) + " m/s" : "");
+}
+
+function ridRows(r)
+{
+    return [
+        ["Status", r.st !== undefined ? RID_STATUS[r.st] || "status " + r.st
+                                      : ""],
+        ["Height", ridHeightText(r)],
+        ["Altitude", [ridMetresText(r.ag) ? ridMetresText(r.ag) + " GNSS" : "",
+                      ridMetresText(r.ab) ? ridMetresText(r.ab) +
+                                            " barometric" : ""]
+                         .filter(x => x).join(", ")],
+        ["Speed", ridSpeedText(r)],
+        ["Drone", ridMapLink(r.lat, r.lon, "map")],
+        ["Pilot", ridMapLink(r.olat, r.olon, "map") +
+            (ridMetresText(r.oalt) ? ", " + ridMetresText(r.oalt) +
+                                     " altitude" : "")],
+        ["Class", ridEuText(r.eu)],
+        ["Self-ID", r.sid ? escapeHTML(r.sid) : ""],
+        ["Report", r.ago !== undefined ? r.ago + " s ago" : ""]
+    ];
+}
+
+
+function apMakerHeader(n)
+{
+    const m = apMakers(n);
+
+    const rows = [];
+
+    const makers = m.makers.slice();
+
+    if (n.rid && ridMaker(n.rid) && !makers.includes(ridMaker(n.rid)))
+        makers.push(ridMaker(n.rid));
+
+    if (makers.length)
+        rows.push(["Manufacturer",
+                   makers.map(escapeHTML).join(" \u00b7 ")]);
+
+    if (m.chips.length)
+        rows.push(["Chip", m.chips.map(escapeHTML).join(" / ")]);
+
+    // Venue group 10 from Interworking; the venue type is in the
+    // SECURITY rows, it is not always set or not always right
+    const iw = interworking(n);
+
+    if (n.rid)
+    {
+        // What a drone says about itself, by law; details below
+        rows.push(["Device", ridDeviceText(n.rid)]);
+
+        if (ridHeightText(n.rid))
+            rows.push(["Height", ridHeightText(n.rid)]);
+
+        if (n.rid.olat || n.rid.olon)
+            rows.push(["Pilot", ridMapLink(n.rid.olat, n.rid.olon, "map")
+                                    .replace(/<\/a>.*/, "</a>")]);
+    }
+    else if (iw && iw.group === 10)
+        rows.push(["Device", "Vehicle"]);
+    else if (n.hp)
+        rows.push(["Device", "Printer"]);
+
+    // Only a guess from what the AP sends, so it says so on top
+    return rows.length
+        ? "<div class='tipMaker'><div class='tipGuess'>BEST GUESS</div>" +
+          rows.map(([k, v]) => "<div><span class='tipGuessKey'>" + k +
+                               ":</span> " + v + "</div>").join("") +
+          "</div>"
+        : "";
+}
+
+// "8C:FD:F0 type 1, 4 Qualcomm (chip)", one line per OUI and meaning
+function vendorOuiText(n)
+{
+    const lines = [];
+
+    (n.voui || []).forEach(([oui, type, name]) =>
+    {
+        const key = parseInt(oui + type.toString(16).padStart(2, "0"), 16);
+
+        const what = VENDOR_IE_NAMES[key] ||
+            ((VENDOR_COMPAT_TYPES[oui] || []).includes(type)
+                ? "" : WIFI_CHIP_OUIS[oui] ? "chip" : "");
+
+        // Types with a name of their own (WMM, WPS ...) stay apart
+        const same = !VENDOR_IE_NAMES[key] && lines.find(l =>
+            l.oui === oui && l.name === name && l.what === what &&
+            !l.named);
+
+        if (same)
+            same.types.push(type);
+        else
+            lines.push({oui, name, what, types: [type],
+                        named: !!VENDOR_IE_NAMES[key]});
+    });
+
+    return lines.map(l => ouiColons(l.oui) + " type " + l.types.join(", ") +
+        (l.name ? " " + escapeHTML(l.name) : "") +
+        (l.what ? " (" + escapeHTML(l.what) + ")" : "")).join("<br>");
+}
+
+
+function networkTooltip(n)
+{
+    const f = networkCenterFreq(n);
+    const w = networkWidthMHz(n);
+
+    const join = list => list.filter(x => x).join(" \u00b7 ");
+
+    // ---- header -----------------------------------------
+
+    let html =
+        apMakerHeader(n) +
+        "<b>" + escapeHTML(ssidLabel(n)) + "</b>" +
+        (n.mesh
+            ? " <span style='color:#8fbf8f'>(802.11s Mesh ID, the " +
+              "SSID element is empty)</span>"
+            : "") +
+        (n.resolved
+            ? " <span style='color:#8fbf8f'>(hidden, name " +
+              (n.owename
+                  ? "taken from the OWE Transition element of " +
+                    "its open partner BSS"
+                  : "learned from a probe or association request") +
+              ")</span>"
+            : "") +
+        (n.apname ? "<br>AP name: " + escapeHTML(n.apname) : "") +
+        (n.vfw ? "<br>Firmware: " + escapeHTML(n.vfw) : "") +
+        "<br>" + n.bssid +
+        (n.vendor ? " (" + escapeHTML(n.vendor) + ")" : "") +
+        "<br>RSSI " + n.rssi + " dBm \u00b7 last seen " + n.age + " s ago";
+
+    // ---- drone ------------------------------------------
+
+    if (n.rid)
+        html += tipSection("REMOTE ID", ridRows(n.rid));
+
+    // ---- radio ------------------------------------------
+
+    html += tipSection("RADIO", [
+        ["Channel", n.channel + " \u00b7 " + bandwidthText(n.bandwidth) +
+            " \u00b7 " + Math.round(f - w / 2) + "\u2013" +
+            Math.round(f + w / 2) + " MHz" +
+            // At 20 MHz the centre is the channel itself
+            (n.center !== n.channel
+                ? " (centre channel " + n.center + ", " + f + " MHz)"
+                : "")],
+        ["Standard", join([
+            stdText(n.std),
+            modeList(n.modes) ? "announces " + modeList(n.modes) : "",
+            n.nss ? n.nss + " spatial stream" + (n.nss > 1 ? "s" : "") : ""])],
+        ["Basic rates", basicRateText(n)],
+        ["Ad-hoc", ibssText(n)],
+        ["NAN", nanText(n)],
+        ["QoS Mgmt", wfaCapaText(n.wfacapa)],
+        ["BSS colour", bssColorText(n)],
+        ["Multiple BSSID", n.mbssid ? "element present" : ""],
+        ["Vendor IEs", vendorOuiText(n)],
+        ["Apple accessory", escapeHTML(appleAccText(n))],
+        ["Operating mode", omnText(n)],
+        ["Wi-Fi Direct", escapeHTML(p2pText(n))],
+        ["Printer", escapeHTML(printerText(n))]
+    ]);
+
+    // ---- security ---------------------------------------
+
+    const owePartner = n.owetrans
+        ? (n.owessid ? escapeHTML(n.owessid)
+                     : "<span class='dim'>hidden</span>") +
+          " " + escapeHTML(n.owebssid)
+        : "";
+
+    // WPS goes on the security line: "WPS active, device “FBox”, …"
+    const wps = [
+        n.wps ? "active" : "",
+        n.wpsname ? "device \u201c" + escapeHTML(n.wpsname) + "\u201d"
+                  : "",
+        wpsDeviceText(n) ? "\u201c" + escapeHTML(wpsDeviceText(n)) +
+                           "\u201d" : ""].filter(x => x).join(", ");
+
+    html += tipSection("SECURITY", [
+        [null, join([
+            escapeHTML(n.sec),
+            n.akm ? "AKM " + escapeHTML(n.akm) : "",
+            "cipher " + escapeHTML(cipherText(n)),
+            "PMF " + pmfText(n),
+            wps ? "WPS " + wps : ""])],
+        ["Also", join([
+            n.preauth ? "pre-authentication" : "",
+            n.hs20 ? "Hotspot 2.0" : "",
+            n.bprot ? "beacon protection" : ""])],
+        ["Override", escapeHTML(overrideText(n))],
+        ["Interworking", escapeHTML(join([iwText(n), advText(n)]))],
+        ["OWE transition", owePartner]
+    ]);
+
+    // ---- mesh -------------------------------------------
+
+    if (n.mesh)
+    {
+        html += tipSection("MESH", [
+            ["Peering", n.meshpeers + " peering" +
+                (n.meshpeers === 1 ? "" : "s") +
+                (n.meshgate ? ", mesh gate" : "") +
+                (n.meshaccept ? ", accepting peers"
+                              : ", not accepting peers") +
+                (n.meshfwd ? ", forwarding" : "")],
+            ["Path", meshPathText(n.meshpath) +
+                " \u00b7 metric " + meshMetricText(n.meshmetric) +
+                " \u00b7 auth " + meshAuthText(n.meshauth)]
+        ]);
+    }
+
+    // ---- roaming ----------------------------------------
+
+    html += tipSection("ROAMING", [
+        ["11k", n.k ? (rrmText(n.rrm || 0) || "announced") : ""],
+        ["11v", n.v || n.wnm
+            ? (wnmText(n.wnm || 0) || "announced") : ""],
+        ["11r", n.r ? "fast transition (mobility domain)" : ""],
+        ["MBO", escapeHTML(mboText(n))],
+        ["Pilot", n.mpt === undefined ? ""
+            : n.mpt ? "measurement pilot every " + n.mpt + " TU"
+                    : "measurement pilot: none (interval 0)"]
+    ]);
+
+    // ---- multi-link -------------------------------------
+
+    if (n.mld)
+    {
+        html += tipSection("MULTI-LINK", [
+            ["AP MLD", n.mld +
+                (n.mlolink >= 0 ? ", this is link " + n.mlolink : "") +
+                (mldMaxLinks(n) ? ", up to " + mldMaxLinks(n) +
+                                  " links at once" : "")],
+            ["Links", mldLinksText(n)],
+            ["EML", emlText(n)],
+            ["MLD", mldCapText(n)]
+        ]);
+    }
+
+    // ---- power ------------------------------------------
+
+    const power = [];
+    const tpeLines = [];
+
+    if (n.cc)
+        power.push("Country " + escapeHTML(n.cc));
+
+    (n.tpe || []).forEach(t =>
+    {
+        const flat = tpeFlatEirp(t);
+
+        if (flat !== null && flat >= 18)
+            power.push("TPE " + flat + " dBm" +
+                       (((t[0] >> 3) & 7) === 2 ? " (client)" : ""));
+        else
+            tpeLines.push(tpeText(t));
+    });
+
+    if (n.pwrc !== undefined)
+        power.push("power constraint " + n.pwrc + " dB");
+
+    if (n.tpc !== undefined)
+        power.push("TPC " + n.tpc + " dBm");
+
+    html += tipSection("POWER",
+        [[null, join(power)]].concat(
+            tpeLines.map(l => ["Envelope", l]),
+            [["Quiet", quietText(n)]]));
+
+    // ---- load -------------------------------------------
+
+    html += tipSection("LOAD", [
+        [null, join([
+            n.clients + " station" + (n.clients === 1 ? "" : "s") +
+                " observed",
+            n.sta >= 0
+                ? "BSS Load " + n.sta + " stations" +
+                  (n.util >= 0 ? ", " + n.util + " % channel utilisation" : "")
+                : "no BSS load element",
+            "beacon " + n.bi + " TU (" + (n.bi * 1.024).toFixed(0) + " ms)" +
+                (n.dtim ? ", DTIM " + dtimText(n) : "")])],
+        ["Beacon gaps", beaconGapText(n)],
+        ["Extended", xloadText(n)],
+        ["Admission", aacText(n)],
+        ["Max idle", maxIdleText(n.maxidle)],
+        ["ERP", erpText(n.erp)]
+    ]);
+
+    // ---- time -------------------------------------------
+
+    html += tipSection("TIME", [
+        ["Up", tsfUpText(n)],
+        ["Clock", apClockText(n)],
+        ["Zone", n.aptz ? escapeHTML(n.aptz) : ""]
+    ]);
+
+    // ---- configuration changes ---------------------------
+
+    html += configChangeSection(n);
+
+    // ---- capture ----------------------------------------
+
+    html += tipSection("CAPTURE", [
+        [null, join([
+            n.beacons + " beacon" + (n.beacons === 1 ? "" : "s"),
+            "known for " + n.seen + " s",
+            (n.pcapb ? "latest beacon held" : "no beacon held") +
+                (n.pcapf ? ", " + n.pcapf + " further frame" +
+                           (n.pcapf === 1 ? "" : "s") : "")])]
+    ]);
+
+    return html + tipNotes(networkNotes(n));
+}
+
+
+/*
+ * Names are cached by BSSID.
+ *
+ * The networks list is a snapshot of what is currently within
+ * the timeout, and an AP can fall out of it briefly while the
+ * sweep is on other channels. Without the cache the stations
+ * view would fall back to the raw BSSID for a few seconds
+ * even though the name was just known.
+ */
+const apNameCache = {};
+
+
+// Names that came from a station rather than from a beacon
+const apNameFromStation = {};
+
+
+function rememberApNames()
+{
+    networks.forEach(n =>
+    {
+        if (n.ssid && n.ssid !== "<hidden>")
+        {
+            apNameCache[n.bssid] = n.ssid;
+
+            // The beacon came after the station's guess
+            delete apNameFromStation[n.bssid];
+        }
+    });
+}
+
+
+function rememberStationApNames(list)
+{
+    (list || stations).forEach(c =>
+    {
+        if (!c.apssid)
+            return;
+
+        // A beacon name always wins over an inferred one
+        if (!apNameCache[c.bssid])
+        {
+            apNameCache[c.bssid] = c.apssid;
+            apNameFromStation[c.bssid] = true;
+        }
+    });
+}
+
+
+function apForBSSID(bssid)
+{
+    return networks.find(n => n.bssid === bssid);
+}
+
+
+// Name for a BSSID, falling back to the cache and finally to
+// the BSSID itself
+function apNameFor(bssid)
+{
+    const ap = apForBSSID(bssid);
+
+    if (ap && ap.ssid && ap.ssid !== "<hidden>")
+        return ap.ssid;
+
+    if (apNameCache[bssid])
+        return apNameCache[bssid];
+
+    if (ap && ap.ssid)
+        return ap.ssid;
+
+    return bssid;
+}
+
+
+function capsText(c)
+{
+    const parts = [];
+
+    if (c.std)
+        parts.push(stdShort(c.std));
+
+    if (c.nss)
+        parts.push(c.nss + "SS");
+
+    // What the station can do, not the width of its current
+    // channel; 320 MHz for instance is only possible in 6 GHz
+    if (c.width)
+        parts.push("up to " + c.width + " MHz");
+
+    return parts.length ? parts.join(" | ") : "-";
+}
+
+
+/*
+ * RM Enabled Capabilities, 802.11-2020 table 9-191, bit by bit.
+ * The firmware passes the five octets on as one number.
+ */
+const RRM_BITS = [
+    [0,  "link measurement"],
+    [1,  "neighbor report"],
+    [2,  "parallel measurements"],
+    [3,  "repeated measurements"],
+    [4,  "beacon passive"],
+    [5,  "beacon active"],
+    [6,  "beacon table"],
+    [7,  "beacon reporting conditions"],
+    [8,  "frame measurement"],
+    [9,  "channel load"],
+    [10, "noise histogram"],
+    [11, "statistics"],
+    [12, "LCI"],
+    [13, "LCI azimuth"],
+    [14, "transmit stream/category"],
+    [15, "triggered transmit stream/category"],
+    [16, "AP channel report"],
+    [17, "RM MIB"],
+    [28, "neighbor report TSF offset"],
+    [29, "RCPI"],
+    [30, "RSNI"],
+    [31, "BSS average access delay"],
+    [32, "BSS available admission capacity"],
+    [33, "antenna"],
+    [34, "FTM range report"],
+    [35, "civic location"]
+];
+
+// The order the firmware packs them in, see wnmCapsOf()
+const WNM_BITS = [
+    "BSS transition management", "WNM sleep", "TIM broadcast", "proxy ARP",
+    "FMS", "TFS", "DMS", "WNM notification",
+    "FTM responder", "FTM initiator"
+];
+
+function rrmText(bits)
+{
+    // 40 bits do not fit the 32 bit operators, so divide instead
+    const names = RRM_BITS
+        .filter(b => Math.floor(bits / 2 ** b[0]) % 2 === 1)
+        .map(b => b[1]);
+
+    return names.length ? names.join(", ") : "";
+}
+
+function wnmText(mask)
+{
+    const names = WNM_BITS.filter((name, i) => mask & (1 << i));
+
+    return names.length ? names.join(", ") : "";
+}
+
+/*
+ * Multi-Link (802.11be). The firmware passes the raw fields of
+ * the Basic Multi-Link element; the codings are those of the
+ * EML Capabilities and MLD Capabilities subfields.
+ */
+function microsText(us)
+{
+    return us >= 1000 ? (us / 1000) + " ms" : us + " \u00b5s";
+}
+
+function emlText(x)
+{
+    if (!(x.mlof & 1))
+        return "";
+
+    const eml = x.eml;
+
+    const parts = [];
+
+    if (eml & 0x0001)
+    {
+        const padding    = [0, 32, 64, 128, 256][(eml >> 1) & 7];
+        const transition = [0, 16, 32, 64, 128, 256][(eml >> 4) & 7];
+
+        parts.push("EMLSR (padding " +
+                   (padding === undefined ? "?" : microsText(padding)) +
+                   ", transition " +
+                   (transition === undefined ? "?" : microsText(transition)) +
+                   ")");
+    }
+    else
+    {
+        parts.push("no EMLSR");
+    }
+
+    if (eml & 0x0080)
+    {
+        const delay = [0, 32, 64, 128, 256][(eml >> 8) & 7];
+
+        parts.push("EMLMR (delay " +
+                   (delay === undefined ? "?" : microsText(delay)) + ")");
+    }
+    else
+    {
+        parts.push("no EMLMR");
+    }
+
+    // 0 = none, then 128 us doubling up to 64 TU
+    const timeout = (eml >> 11) & 0x0F;
+
+    if (timeout)
+        parts.push("transition timeout " +
+                   microsText(timeout <= 10 ? 2 ** (timeout + 6) : 0));
+
+    return parts.join(", ");
+}
+
+function mldCapText(x)
+{
+    if (!(x.mlof & 2))
+        return "";
+
+    const cap = x.mldcap;
+
+    const parts = [];
+
+    const ttlm = (cap >> 5) & 3;
+
+    parts.push("TID-to-link mapping: " +
+               ["not supported", "all TIDs to one link set",
+                "reserved", "per TID"][ttlm]);
+
+    if (cap & 0x0010) parts.push("SRS");
+    if (cap & 0x1000) parts.push("AAR");
+    if (cap & 0x2000) parts.push("link reconfiguration");
+    if (cap & 0x4000) parts.push("aligned TWT");
+
+    return parts.join(", ");
+}
+
+// Up to how many links at once; the field counts one less
+function mldMaxLinks(x)
+{
+    return (x.mlof & 2) ? (x.mldcap & 0x0F) + 1 : 0;
+}
+
+/*
+ * The links of a station's multi-link request: first the one the
+ * request came in on (its link ID is the AP's), then one per
+ * per-STA profile with band, widest channel and address as far as
+ * the profile gives them.
+ */
+function mloLinkList(c, ap)
+{
+    const macs = {};
+
+    (c.mlomacs || []).forEach(l => macs[l.link] = l.mac);
+
+    return [{ link: ap && ap.mlolink >= 0 ? ap.mlolink : -1,
+              band: c.mloband, width: 0, mac: "", nstr: 0, req: true }]
+        .concat(c.mloprof.map(p => ({
+            link: p.link, band: p.band, width: p.width,
+            mac: macs[p.link] || "", nstr: p.nstr, req: false })));
+}
+
+// 2, 5, 6 as the firmware sends it; 0 = the profile does not say
+function bandName(b)
+{
+    return b ? (b === 2 ? "2.4" : b) + " GHz" : "";
+}
+
+// "6 GHz · link 2 · up to 160 MHz · 02:00:00:00:02:02"
+function mloLinkText(l)
+{
+    return [bandName(l.band) || "band not given",
+            l.link >= 0 ? "link " + l.link : "",
+            l.req ? "association link" : "",
+            l.width ? "up to " + l.width + " MHz" : "",
+            l.mac].filter(Boolean).join(" \u00b7 ");
+}
+
+/*
+ * Link pairs that cannot send on one while receiving on the other
+ * (NSTR), by band: "5 + 6 GHz". A bit for a link no profile
+ * describes is the association link.
+ */
+function nstrText(links)
+{
+    const pairs = [];
+
+    const name = l => bandName(l.band) || "link " + l.link;
+
+    links.filter(l => !l.req).forEach(l =>
+    {
+        for (let n = 0; n < 16; n++)
+        {
+            if (!(l.nstr & (1 << n)))
+                continue;
+
+            const other = links.find(o => !o.req && o.link === n) ||
+                          links[0];
+
+            const pair = [name(l), name(other)].sort()
+                .join(" + ").replace(/ GHz \+/, " +");
+
+            if (!pairs.includes(pair))
+                pairs.push(pair);
+        }
+    });
+
+    return pairs.length
+        ? pairs.join(", ") + ", not sending on one while receiving " +
+          "on the other"
+        : "";
+}
+
+function bandOfChannel(ch)
+{
+    return isBand24(ch) ? "2.4 GHz" : "5 GHz";
+}
+
+/*
+ * Every link of an AP MLD this sensor knows of: the BSSIDs heard
+ * with the same MLD address, plus 6 GHz BSSs that one of them
+ * announces in its Reduced Neighbor Report under the same SSID.
+ */
+function mldLinksText(n)
+{
+    const links = networks
+        .filter(o => o.mld === n.mld)
+        .sort((a, b) => (a.mlolink - b.mlolink) || (a.channel - b.channel))
+        .map(o =>
+            bandOfChannel(o.channel) + " ch " + o.channel +
+            (o.mlolink >= 0 ? " (link " + o.mlolink + ")" : "") +
+            (o.bssid === n.bssid ? " this one" : " " + o.bssid));
+
+    const bssids = networks.filter(o => o.mld === n.mld).map(o => o.bssid);
+
+    sixGhzList
+        .filter(e => bssids.includes(e.reporter) && e.ssid === n.ssid)
+        .forEach(e =>
+            links.push("6 GHz ch " + e.ch + " " + e.bssid +
+                       " (announced only)"));
+
+    return links.join(", ");
+}
+
+/*
+ * A multi-link station shows up once per link it transmits on,
+ * each time with that link's own address. The per-STA profiles
+ * of its association request name those addresses, so the extra
+ * entries can be tied back to the one with the capabilities.
+ * Rebuilt whenever stations or the history are loaded.
+ */
+let mldLinkOwner = {};
+
+function rebuildMldLinks()
+{
+    const map = {};
+
+    const all = (stations || [])
+        .concat(assocHistory ? assocHistory.clients : []);
+
+    all.forEach(c =>
+    {
+        (c.mlomacs || []).forEach(l =>
+        {
+            if (l.mac !== c.mac)
+                map[l.mac] = { mld: c.mld, link: l.link, owner: c.mac };
+        });
+    });
+
+    mldLinkOwner = map;
+}
+
+// Where a station can operate, from its operating classes
+function bandsText(c)
+{
+    // A list of class numbers, see outOpClasses() in the firmware
+    const has = cls => (c.opcl || []).includes(cls);
+
+    const any = list => list.some(has);
+
+    const range = (a, b) =>
+        Array.from({ length: b - a + 1 }, (v, i) => a + i);
+
+    const parts = [];
+
+    if (any(range(81, 84)))
+        parts.push("2.4 GHz");
+
+    const unii = [];
+
+    if (any(range(115, 117))) unii.push("1");
+    if (any(range(118, 120))) unii.push("2A");
+    if (any(range(121, 123))) unii.push("2C");
+    if (any(range(124, 127))) unii.push("3");
+
+    if (unii.length)
+    {
+        const width =
+            any([129, 130]) ? 160 :
+            has(128) ? 80 :
+            any([116, 117, 119, 120, 122, 123, 126, 127]) ? 40 : 20;
+
+        parts.push("5 GHz (UNII-" + unii.join(", ") +
+                   ", up to " + width + " MHz)");
+    }
+
+    if (any(range(131, 137)))
+    {
+        const width =
+            has(137) ? 320 :
+            any([134, 135]) ? 160 :
+            has(133) ? 80 :
+            has(132) ? 40 : 20;
+
+        parts.push("6 GHz (up to " + width + " MHz)");
+    }
+    else if (c.band6)
+    {
+        parts.push("6 GHz");
+    }
+
+    return parts.join(", ");
+}
+
+/*
+ * The supported channels as ranges per band, e.g.
+ * "2.4 GHz 1-13, 5 GHz 36-64, 100-140, 6 GHz 1-93". 2.4 and 5 GHz
+ * come as a mask over the sensor's channel plan, 6 GHz as a list.
+ */
+function channelRuns(list, stepOf)
+{
+    const runs = [];
+
+    list.forEach(ch =>
+    {
+        const last = runs[runs.length - 1];
+
+        if (last && ch - last.end === stepOf(ch))
+            last.end = ch;
+        else
+            runs.push({ start: ch, end: ch });
+    });
+
+    return runs
+        .map(r => r.start === r.end ? r.start : r.start + "\u2013" + r.end)
+        .join(", ");
+}
+
+function channelsText(c)
+{
+    const bits = c.chans || 0;
+
+    const on = i => Math.floor(bits / 2 ** i) % 2 === 1;
+
+    const ch24 = channels24.filter((ch, i) => on(i));
+    const ch5  = channels5.filter((ch, i) => on(channels24.length + i));
+    const ch6  = c.chans6 || [];
+
+    const parts = [];
+
+    if (ch24.length)
+        parts.push("2.4 GHz " + channelRuns(ch24, () => 1));
+
+    if (ch5.length)
+        parts.push("5 GHz " + channelRuns(ch5, () => 4));
+
+    if (ch6.length)
+        parts.push("6 GHz " + channelRuns(ch6, () => 4));
+
+    return parts.join(", ");
+}
+
+function featureText(c)
+{
+    const flags = [];
+
+    if (c.k) flags.push("11k");
+    if (c.v) flags.push("11v");
+    if (c.r) flags.push("11r");
+    if (c.wmm) flags.push("WMM");
+    if (c.pmf) flags.push("PMF");
+    if (c.band6) flags.push("6 GHz");
+    if (c.mld) flags.push("MLO");
+    else if (mldLinkOwner[c.mac]) flags.push("MLO link");
+
+    return flags.length ? flags.join(", ") : "none advertised";
+}
+
+
+/*
+ * Status codes, 802.11-2020 table 9-50 and 802.11be, as hostapd
+ * names them (ieee802_11_defs.h). The ones a station meets when
+ * associating are worded for that; codes not listed are shown by
+ * number rather than guessed at.
+ */
+const ASSOC_STATUS = {
+    0:   "success",
+    1:   "unspecified failure",
+    2:   "TDLS wakeup schedule rejected, alternative given",
+    3:   "TDLS wakeup schedule rejected",
+    5:   "security disabled",
+    6:   "unacceptable lifetime",
+    7:   "not in the same BSS",
+    10:  "capabilities not supported",
+    11:  "reassociation denied, no association to carry over",
+    12:  "association denied, reason outside the standard",
+    13:  "authentication algorithm not supported",
+    14:  "authentication frame out of sequence",
+    15:  "authentication rejected, challenge failure",
+    16:  "authentication timeout",
+    17:  "denied, AP is at its station limit",
+    18:  "denied, basic rates not supported",
+    19:  "denied, short preamble not supported",
+    22:  "denied, spectrum management required",
+    23:  "denied, power capability not acceptable",
+    24:  "denied, supported channels not acceptable",
+    25:  "denied, short slot time not supported",
+    27:  "denied, HT not supported by the station",
+    28:  "R0 key holder unreachable (FT)",
+    29:  "denied, PCO not supported",
+    30:  "rejected temporarily, try again later",
+    31:  "robust management frame policy violation",
+    32:  "unspecified QoS failure",
+    33:  "denied, insufficient bandwidth for QoS",
+    34:  "denied, poor channel conditions",
+    35:  "denied, QoS not supported by the station",
+    37:  "request declined",
+    38:  "invalid parameters",
+    39:  "rejected with suggested changes",
+    40:  "invalid element",
+    41:  "invalid group cipher",
+    42:  "invalid pairwise cipher",
+    43:  "invalid AKM",
+    44:  "unsupported RSN element version",
+    45:  "invalid RSN capabilities",
+    46:  "cipher suite rejected by policy",
+    47:  "traffic stream not created",
+    48:  "direct link not allowed",
+    49:  "destination station not present",
+    50:  "destination station not a QoS station",
+    51:  "denied, listen interval too large",
+    52:  "invalid FT action frame count",
+    53:  "invalid PMKID",
+    54:  "invalid mobility domain element",
+    55:  "invalid fast BSS transition element",
+    56:  "requested TCLAS not supported",
+    57:  "insufficient TCLAS processing resources",
+    58:  "try another BSS",
+    59:  "GAS advertisement protocol not supported",
+    60:  "no outstanding GAS request",
+    61:  "GAS response not received from the server",
+    62:  "timed out waiting for the GAS response",
+    63:  "GAS response larger than the query limit",
+    64:  "request refused by the home network",
+    65:  "advertisement server unreachable",
+    67:  "request refused by the subscription provider",
+    68:  "request refused, unauthenticated access not supported",
+    72:  "invalid RSN element contents",
+    73:  "U-APSD coexistence not supported",
+    74:  "U-APSD coexistence mode not supported",
+    75:  "bad interval with U-APSD coexistence",
+    76:  "anti-clogging token required (SAE)",
+    77:  "finite cyclic group not supported (SAE)",
+    78:  "cannot find alternative TBTT",
+    79:  "transmission failure",
+    80:  "requested TCLAS not supported",
+    81:  "TCLAS resources exhausted",
+    82:  "rejected, suggested BSS transition",
+    83:  "rejected with schedule",
+    84:  "rejected, no wakeup specified",
+    85:  "success, power save mode",
+    86:  "pending admitting FST session",
+    87:  "performing FST now",
+    88:  "pending, gap in block ack window",
+    89:  "rejected, U-PID setting",
+    92:  "refused for an external reason",
+    93:  "refused, AP out of memory",
+    94:  "rejected, emergency services not supported",
+    95:  "query response outstanding",
+    96:  "rejected, DSE band",
+    97:  "TCLAS processing terminated",
+    98:  "traffic stream schedule conflict",
+    99:  "denied, band and channel suggested",
+    100: "MCCAOP reservation conflict",
+    101: "MAF limit exceeded",
+    102: "MCCA track limit exceeded",
+    103: "denied, spectrum management",
+    104: "denied, VHT not supported by the station",
+    105: "enablement denied",
+    106: "restriction from authorized GDB",
+    107: "authorization deenabled",
+    112: "FILS authentication failure",
+    113: "unknown authentication server",
+    123: "unknown password identifier (SAE)",
+    124: "denied, HE not supported by the station",
+    126: "SAE hash-to-element",
+    127: "SAE-PK",
+    130: "denied, station affiliated with an MLD already associated"
+};
+
+function assocStatusText(code)
+{
+    return ASSOC_STATUS[code] || ("status " + code);
+}
+
+/*
+ * What a status means beyond its name, for the notes. 30 is part
+ * of normal PMF operation: the AP still holds a protected
+ * association of the station and checks it with an SA Query
+ * before it lets the station in again.
+ */
+function assocStatusHint(c)
+{
+    if (c.status !== 30)
+        return "";
+
+    return "the AP still holds a protected (PMF) association of " +
+           "this station and checks it with an SA Query first" +
+           (c.comeback
+               ? "; try again in " + Math.round(c.comeback * 1.024) +
+                 " ms"
+               : "") +
+           ". Usually the next attempt succeeds";
+}
+
+
+/*
+ * Probing is normal; probing without ever getting anywhere is
+ * not. The rate matters rather than the count, because a
+ * station seen for an hour naturally has more probes than one
+ * seen for a minute.
+ */
+function probeRate(c)
+{
+    const seen = Math.max(c.seen || 0, 30);
+
+    return (c.probes || 0) * 60 / seen;
+}
+
+
+/*
+ * snapshot: an entry of the association history, frozen at the
+ * last association request. Its counters and ages stop there, so
+ * the tooltip leaves them out and gives the absolute times.
+ */
+/*
+ * Wi-Fi QoS Management from the Wi-Fi Alliance Capabilities
+ * element (50:6F:9A 0x23): whether an AP or a station takes DSCP
+ * policies (which traffic goes in which access category) and
+ * SCS traffic descriptions. "" without the element.
+ */
+function wfaCapaText(capa)
+{
+    if (capa === undefined)
+        return "";
+
+    const parts = [];
+
+    if (capa & 1) parts.push("DSCP policy");
+    if (capa & 2) parts.push("unsolicited DSCP policy");
+    if (capa & 4) parts.push("SCS traffic description");
+
+    return parts.length ? parts.join(", ") : "element without capabilities";
+}
+
+
+/*
+ * RSN Selection (50:6F:9A 0x2C) of a station's association request:
+ * which of the AP's RSN elements it took. The overrides are what an
+ * AP offers newer clients, WPA3 with GCMP-256 say, next to the RSNE
+ * older ones read.
+ */
+function rsnSelText(sel)
+{
+    if (sel === undefined)
+        return "";
+
+    return ["RSNE", "RSNE Override", "RSNE Override 2"][sel] ||
+           "unknown value " + sel;
+}
+
+
+function clientTooltip(c, snapshot = false)
+{
+    if (c.awdlonly)
+        return awdlOnlyTooltip(c.awdlonly);
+
+    const apName = apNameFor(c.bssid);
+
+    const join = list => list.filter(x => x).join(" \u00b7 ");
+
+    // ---- header -----------------------------------------
+
+    // Same guess as for APs, from the vendor elements of the
+    // station's requests: often all there is behind a random MAC
+    let html = apMakerHeader(c) +
+               "<b>" + c.mac + "</b>" +
+               (c.vendor ? " " + escapeHTML(c.vendor) : "") + "<br>";
+
+    html +=
+        (c.assoc ? "associated with " : "seen at ") +
+        (c.bssid === "00:00:00:00:00:00"
+            ? "no AP (probe requests only)"
+            : (apName === c.bssid
+                   ? c.bssid
+                   : escapeHTML(apName) + " (" + c.bssid + ")"));
+
+    if (apNameFromStation[c.bssid])
+    {
+        html +=
+            " <span style='color:#8fbf8f'>(name learned from a " +
+            "station, no beacon of this AP was heard)</span>";
+    }
+
+    html += "<br>Channel " + c.ch + " \u00b7 RSSI " + c.rssi + " dBm" +
+            (snapshot
+                ? " at the last association request"
+                : " \u00b7 last seen " + c.age + " s ago");
+
+    // ---- radio ------------------------------------------
+
+    const owner = mldLinkOwner[c.mac];
+
+    const chans = channelsText(c);
+
+    html += tipSection("RADIO", [
+        ["PHY", (capsText(c) === "-" ? "nothing advertised"
+                 : capsText(c).split(" | ").join(" \u00b7 ")) +
+            (c.sawassoc ? " (from assoc request)"
+                        : " (from probe request)")],
+        ["Bands", bandsText(c)],
+        ["Channels", chans ? chans + " (from assoc request)" : ""],
+        ["Also", join([c.wmm ? "WMM" : "", c.band6 ? "6 GHz" : ""])],
+        ["QoS Mgmt", wfaCapaText(c.wfacapa)],
+        ["Vendor IEs", vendorOuiText(c)],
+        ["AWDL", awdlOfStation(c.mac)
+            ? escapeHTML(awdlClassText(awdlOfStation(c.mac).cls)) +
+              " \u00b7 AWDL address " + awdlOfStation(c.mac).mac : ""]
+    ]);
+
+    // ---- security ---------------------------------------
+
+    html += tipSection("SECURITY", [
+        [null, join([
+            c.akm ? "AKM " + escapeHTML(c.akm) : "",
+            c.cipher ? "cipher " + escapeHTML(c.cipher) : "",
+            c.pmf ? "PMF" : ""])],
+        ["Selected", rsnSelText(c.rsnsel)
+            ? rsnSelText(c.rsnsel) + " (RSN selection, from assoc request)"
+            : ""]
+    ]);
+
+    // ---- roaming ----------------------------------------
+
+    html += tipSection("ROAMING", [
+        ["11k", c.k ? (rrmText(c.rrm || 0) || "announced") : ""],
+        ["11v", c.v || c.wnm
+            ? (wnmText(c.wnm || 0) || "announced") : ""],
+        ["11r", c.r ? "fast transition" : ""]
+    ]);
+
+    // ---- multi-link -------------------------------------
+
+    if (c.mld)
+    {
+        const ap = networks.find(o => o.bssid === c.bssid);
+
+        let mask = c.mlolinks;
+
+        if (ap && ap.mlolink >= 0)
+            mask |= 1 << ap.mlolink;
+
+        const ids = [];
+
+        for (let i = 0; i < 16; i++)
+            if (mask & (1 << i))
+                ids.push(i);
+
+        // Since 1.68.0 the firmware sends every link with its band
+        const links = c.mloprof ? mloLinkList(c, ap) : null;
+
+        html += tipSection("MULTI-LINK", [
+            ["Non-AP MLD", c.mld +
+                (mldMaxLinks(c) ? ", up to " + mldMaxLinks(c) +
+                                  " links at once" : "")],
+            links
+                ? ["Links", links.map(mloLinkText).join("<br>")]
+                : ["Requested", ids.length ? "links " + ids.join(", ") : ""],
+            links ? ["NSTR", nstrText(links)]
+                  : ["Addresses", (c.mlomacs || [])
+                        .map(l => "link " + l.link + " " + l.mac).join(", ")],
+            ["EML", emlText(c)],
+            ["MLD", mldCapText(c)]
+        ]);
+    }
+    else if (owner)
+    {
+        html += tipSection("MULTI-LINK", [
+            [null, "Link " + owner.link + " of non-AP MLD " + owner.mld +
+                   "; its capabilities are in the entry of " + owner.owner]
+        ]);
+    }
+
+    // ---- traffic ----------------------------------------
+
+    let roaming = "";
+
+    if (c.roams)
+    {
+        roaming = c.roams + " time" + (c.roams === 1 ? "" : "s") +
+                  (c.roamsok ? " (" + c.roamsok + " via assoc request" +
+                               (c.roamsft ? ", " + c.roamsft +
+                                            " of them by fast transition"
+                                          : "") + ")"
+                             : "");
+
+        // Average interval says more than the raw count
+        if (c.seen > 0 && c.roams > 1)
+            roaming += ", one every " + Math.round(c.seen / c.roams) +
+                       " s on average";
+    }
+
+    const changes = (c.roamlog || []).map(r =>
+    {
+        const name = apNameFor(r.bssid);
+
+        return r.ago + " s ago &rarr; " +
+               (name === r.bssid ? r.bssid
+                                 : escapeHTML(name) + " (" + r.bssid + ")") +
+               (r.ft ? " [fast transition]"
+                     : r.ok ? " [assoc request]" : "");
+    });
+
+    html += tipSection("TRAFFIC", snapshot ? [
+        ["Requests", c.assocs + " assoc request" +
+            (c.assocs === 1 ? "" : "s")],
+        ["Probed SSIDs", c.ssids && c.ssids.length
+            ? "(" + c.ssids.length + ", newest first) " +
+              c.ssids.map(x => escapeHTML(x)).join(", ")
+            : ""]
+    ] : [
+        ["To AP", c.up + " frames (" + bytesText(c.upb) + ")"],
+        ["From AP", c.down + " frames (" + bytesText(c.downb) + ")"],
+        ["Requests", c.probes + " probe request" +
+            (c.probes === 1 ? "" : "s") +
+            (c.assocs ? " \u00b7 " + c.assocs + " assoc request" +
+                        (c.assocs === 1 ? "" : "s") : "")],
+        ["Probed SSIDs", c.ssids && c.ssids.length
+            ? "(" + c.ssids.length + ", newest first) " +
+              c.ssids.map(x => escapeHTML(x)).join(", ")
+            : ""],
+        ["Roamed", roaming],
+        ["BSS changes", changes.length
+            ? "(newest last)<br>" + changes.join("<br>") : ""],
+        ["Last peer", c.peer !== "00:00:00:00:00:00"
+            ? c.peer + " (Addr3)" : ""]
+    ]);
+
+    // ---- association ------------------------------------
+
+    let last = "";
+
+    if (c.status >= 0)
+    {
+        // 30 is part of normal PMF operation, see assocStatusHint()
+        const colour = c.status === 0 ? "#8fbf8f"
+                     : c.status === 30 ? "#c8a050" : "#d08080";
+
+        last = "<span style='color:" + colour + "'>" +
+               assocStatusText(c.status) + " (" + c.status + ") from " +
+               escapeHTML(c.statusbss) +
+               (snapshot ? "" : ", " + uptimeText(c.statusago) + " ago") +
+               "</span>" +
+               (c.assocfail > 1
+                   ? " <span class='dim'>(" + c.assocfail +
+                     " rejected in total)</span>"
+                   : "");
+    }
+
+    html += tipSection("ASSOCIATION", [
+        ["Last", last],
+        ["SSID", c.joined ? escapeHTML(c.joined) : ""],
+        ["Max idle", stationIdleText(c.maxidle)],
+        ["First", snapshot && c.firstepoch
+            ? stampText(c.firstepoch, 0) : ""],
+        ["Latest", snapshot && c.lastepoch
+            ? stampText(c.lastepoch, 0) : ""]
+    ]);
+
+    // ---- capture ----------------------------------------
+
+    html += tipSection("CAPTURE", [
+        [null, join([
+            c.pcapf ? c.pcapf + " frame" + (c.pcapf === 1 ? "" : "s") +
+                      " in the buffer"
+                    : "nothing in the buffer",
+            snapshot ? "" : "known for " + c.seen + " s"])]
+    ]);
+
+    return html + tipNotes(stationNotes(c, snapshot));
+}
+
+
+/*
+ * The notes of one station, for its tooltip and the notes column:
+ * elements this sensor does not decode, a rejected association,
+ * probing without ever joining.
+ */
+function stationNotes(c, snapshot)
+{
+    const notes = (c.unk || []).map((code, i) =>
+        ["#e070c0", unknownElementText(c, i)]);
+
+    if (c.status > 0)
+    {
+        const hint = assocStatusHint(c);
+
+        notes.push(["#c8a050", "Last association rejected by " +
+                    escapeHTML(apNameFor(c.statusbss)) + ": " +
+                    assocStatusText(c.status) + " (" + c.status + ")" +
+                    (hint ? "; " + hint : "")]);
+    }
+
+    if (!snapshot && probeRate(c) >= 20 && !c.assoc)
+    {
+        notes.push(["#c8a050", "Probing " + probeRate(c).toFixed(0) +
+                    " times a minute without associating anywhere " +
+                    "the sensor can see"]);
+    }
+
+    return notes;
+}
+
+
+// ==========================================================
+// Network graph events
+// ==========================================================
+
+function networkAt(x, y)
+{
+    for (const l of graphLabels)
+    {
+        if (x >= l.x0 && x <= l.x1 &&
+            y >= l.y0 - 4 && y <= l.y1 + 4)
+        {
+            return l.n;
+        }
+    }
+
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const h of graphHits)
+    {
+        if (x >= h.xl - 2 && x <= h.xr + 2 &&
+            y >= h.y - 6 && y <= h.bottom)
+        {
+            const d = Math.abs(y - h.y);
+
+            if (d < bestDist)
+            {
+                bestDist = d;
+                best = h.n;
+            }
+        }
+    }
+
+    return best;
+}
+
+
+function loadAt(x, y)
+{
+    for (const r of graphLoad)
+    {
+        if (x >= r.x0 && x <= r.x1)
+            return r;
+    }
+
+    return null;
+}
+
+
+/*
+ * The 20 MHz channels a stretch of the hatch covers: those lying
+ * inside it, give or take the 2 MHz bins, or else the one it lies
+ * nearest to. "36\u201348" for a run of them, "1, 6" otherwise.
+ */
+function stretchChannels(f0, f1)
+{
+    const all = [];
+
+    if (f1 < 3000)
+    {
+        for (let ch = 1; ch <= 13; ch++)
+            all.push([ch, 2407 + 5 * ch]);
+
+        all.push([14, 2484]);
+    }
+    else if (f0 < 5925)
+    {
+        for (let ch = 32; ch <= 177; ch += 4)
+            all.push([ch, 5000 + 5 * ch]);
+    }
+    else
+    {
+        for (let ch = 1; ch <= 233; ch += 4)
+            all.push([ch, 5950 + 5 * ch]);
+    }
+
+    let inside = all.filter(([, c]) => c - 10 >= f0 - 2 && c + 10 <= f1 + 2)
+                    .map(([ch]) => ch);
+
+    // Narrower than a channel: the one whose centre is nearest
+    if (!inside.length)
+    {
+        const mid = (f0 + f1) / 2;
+
+        inside = [all.reduce((a, b) =>
+            Math.abs(b[1] - mid) < Math.abs(a[1] - mid) ? b : a)[0]];
+    }
+
+    if (!inside.length)
+        return "";
+
+    const step = f1 < 3000 ? 1 : 4;
+    const run  = inside.every((ch, i) => !i || ch - inside[i - 1] === step);
+
+    return (inside.length === 1 ? "channel " : "channels ") +
+        (run && inside.length > 1
+            ? inside[0] + "\u2013" + inside[inside.length - 1]
+            : inside.join(", "));
+}
+
+
+function loadTooltip(r)
+{
+    const where = r.f0 !== undefined
+        ? stretchChannels(r.f0, r.f1) + " (" + Math.round(r.f0) + "\u2013" +
+          Math.round(r.f1) + " MHz)"
+        : "";
+
+    let html =
+        "<b>Reported airtime " + r.util + " %</b>" +
+        (where ? " on " + where : "") + "<br>" +
+        "Busiest reporter over this stretch of spectrum.<br><br>";
+
+    r.nets
+        .slice()
+        .sort((a, b) => b.util - a.util)
+        .forEach(n =>
+        {
+            html +=
+                escapeHTML(n.ssid || "<hidden>") + " " +
+                escapeHTML(n.bssid) + ": " + n.util + " % (channel " +
+                n.channel + ", " + bandwidthText(n.bandwidth) + ")<br>";
+        });
+
+    html +=
+        "<br><span class='dim'>This is the BSS Load element, " +
+        "not a measurement taken here. Every AP fills it in " +
+        "from its own position, and an AP that omits the " +
+        "element contributes nothing, so an unhatched stretch " +
+        "is not necessarily a quiet one.</span>";
+
+    return html;
+}
+
+
+function setupNetworkGraphEvents()
+{
+    const canvas =
+        document.getElementById("networkGraph");
+
+    canvas.addEventListener("mousemove", ev =>
+    {
+        const rect = canvas.getBoundingClientRect();
+
+        const n = networkAt(
+            ev.clientX - rect.left,
+            ev.clientY - rect.top
+        );
+
+        const newBSSID = n ? n.bssid : null;
+
+        if (newBSSID !== hoverBSSID)
+        {
+            hoverBSSID = newBSSID;
+
+            drawNetworkGraph();
+            highlightTableRow();
+        }
+
+        if (!n)
+        {
+            const load = loadAt(
+                ev.clientX - rect.left,
+                ev.clientY - rect.top
+            );
+
+            if (load)
+                showTip(loadTooltip(load), ev.clientX, ev.clientY);
+            else
+                hideTip();
+
+            return;
+        }
+
+        showTip(networkTooltip(n), ev.clientX, ev.clientY);
+    });
+
+    canvas.addEventListener("click", ev =>
+    {
+        const rect = canvas.getBoundingClientRect();
+
+        const n = networkAt(
+            ev.clientX - rect.left,
+            ev.clientY - rect.top
+        );
+
+        if (n)
+            focusChannel(n.channel);
+    });
+
+    canvas.addEventListener("mouseleave", () =>
+    {
+        hideTip();
+
+        if (hoverBSSID !== null)
+        {
+            hoverBSSID = null;
+
+            drawNetworkGraph();
+            highlightTableRow();
+        }
+    });
+}
+
+
+function highlightTableRow()
+{
+    document.querySelectorAll("#networkTable tr").forEach(tr =>
+    {
+        tr.classList.toggle(
+            "highlight",
+            tr.dataset.bssid === hoverBSSID
+        );
+    });
+}
+
+
+// ==========================================================
+// Station graph
+// ==========================================================
+
+function drawClientGraph()
+{
+    const canvas =
+        document.getElementById("clientGraph");
+
+    const ctx = canvas.getContext("2d");
+
+    const size = resizeCanvas(canvas, ctx);
+
+    const width = size.width;
+    const height = size.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    clientHits = [];
+
+    const groups = {};
+
+    const shown = filteredStations();
+
+    shown.forEach(c =>
+    {
+        const key = c.assoc ? c.bssid : "probe";
+
+        if (!groups[key])
+            groups[key] = [];
+
+        groups[key].push(c);
+    });
+
+    let list = Object.keys(groups).map(key => ({
+        key: key,
+        bssid: key === "probe" ? "" : key,
+        ap: key === "probe" ? null : apForBSSID(key),
+        probeOnly: key === "probe",
+        clients: groups[key].slice().sort(
+            (a, b) => (b.up + b.down + b.probes) -
+                      (a.up + a.down + a.probes)
+        )
+    }));
+
+    list.sort((a, b) => b.clients.length - a.clients.length);
+
+    const assocCount =
+        shown.filter(c => c.assoc).length;
+
+    document.getElementById("clientInfo").innerText =
+        (stationFilterText
+            ? shown.length + " of " + stations.length
+            : stations.length) + " stations (" +
+        assocCount + " associated) on " +
+        list.filter(g => !g.probeOnly).length + " APs";
+
+    if (!list.length)
+    {
+        ctx.fillStyle = "#666";
+        ctx.textAlign = "center";
+        ctx.font = "13px Arial";
+
+        ctx.fillText(
+            "No data or probe frames evaluated yet",
+            width / 2,
+            height / 2
+        );
+
+        return;
+    }
+
+    const maxGroups = 12;
+
+    const shownGroups = list.slice(0, maxGroups);
+
+    const cols = Math.ceil(Math.sqrt(shownGroups.length));
+    const rows = Math.ceil(shownGroups.length / cols);
+
+    const cellW = width / cols;
+    const cellH = height / rows;
+
+    shownGroups.forEach((g, i) =>
+    {
+        const cx = (i % cols) * cellW + cellW / 2;
+        const cy = Math.floor(i / cols) * cellH + cellH / 2;
+
+        const radius = Math.min(cellW, cellH) * 0.36;
+
+        const color =
+            g.probeOnly ? "hsla(0,0%,60%,1)"
+                        : (g.ap ? colorForNetwork(g.ap, 1)
+                                : colorForKey(g.bssid, 1));
+
+        g.clients.forEach((c, k) =>
+        {
+            const angle =
+                (k / g.clients.length) * Math.PI * 2 - Math.PI / 2;
+
+            const x = cx + Math.cos(angle) * radius;
+            const y = cy + Math.sin(angle) * radius;
+
+            const traffic = c.up + c.down;
+
+            ctx.strokeStyle =
+                g.probeOnly ? "rgba(140,140,140,0.35)"
+                            : (g.ap ? colorForNetwork(g.ap, 0.45)
+                                    : colorForKey(g.bssid, 0.45));
+
+            ctx.lineWidth =
+                Math.min(5, 1 + Math.log10(1 + traffic) * 1.6);
+
+            if (g.probeOnly)
+                ctx.setLineDash([3, 3]);
+
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+
+            c._x = x;
+            c._y = y;
+        });
+
+        g.clients.forEach(c =>
+        {
+            const fresh = c.age < 15;
+
+            // Radius scales logarithmically with traffic
+            const traffic = c.up + c.down;
+
+            const r =
+                traffic > 0
+                    ? Math.min(16, 5 + Math.log10(1 + traffic) * 4)
+                    : 4.5;
+
+            c._r = r;
+
+            ctx.beginPath();
+            ctx.arc(c._x, c._y, r, 0, Math.PI * 2);
+
+            ctx.fillStyle =
+                c.assoc
+                    ? (fresh ? "rgba(0,170,255,0.75)"
+                             : "rgba(90,110,125,0.6)")
+                    : "rgba(190,150,60,0.7)";
+
+            ctx.fill();
+
+            ctx.strokeStyle = "#0a0a0a";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = "#cfcfcf";
+            ctx.font = "10px Arial";
+            ctx.textAlign = "center";
+
+            ctx.fillText(
+                c.mac.substring(12),
+                c._x,
+                c._y + c._r + 11
+            );
+
+            clientHits.push({
+                kind: "sta",
+                obj: c,
+                x: c._x,
+                y: c._y,
+                r: c._r + 3
+            });
+        });
+
+        const label =
+            g.probeOnly
+                ? "Probe Requests"
+                : apNameFor(g.bssid);
+
+        ctx.font = "bold 12px Arial";
+
+        const boxW =
+            Math.max(60,
+                Math.min(cellW * 0.8,
+                    ctx.measureText(label).width + 16));
+
+        const boxH = 26;
+
+        ctx.fillStyle = "#111";
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.rect(cx - boxW / 2, cy - boxH / 2, boxW, boxH);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#eee";
+        ctx.textAlign = "center";
+
+        let shortLabel = label;
+
+        while (ctx.measureText(shortLabel).width > boxW - 10 &&
+               shortLabel.length > 3)
+        {
+            shortLabel =
+                shortLabel.substring(0, shortLabel.length - 2);
+        }
+
+        ctx.fillText(shortLabel, cx, cy + 4);
+
+        ctx.fillStyle = "#888";
+        ctx.font = "10px Arial";
+
+        ctx.fillText(
+            (g.ap ? "ch " + g.ap.channel + " | " : "") +
+            g.clients.length + " STA",
+            cx,
+            cy + boxH / 2 + 12
+        );
+
+        clientHits.push({
+            kind: "ap",
+            obj: g,
+            x: cx,
+            y: cy,
+            w: boxW,
+            h: boxH
+        });
+    });
+
+    if (list.length > maxGroups)
+    {
+        ctx.fillStyle = "#777";
+        ctx.font = "11px Arial";
+        ctx.textAlign = "left";
+
+        ctx.fillText(
+            "+" + (list.length - maxGroups) +
+            " more groups in the table only",
+            8,
+            height - 6
+        );
+    }
+}
+
+
+function clientNodeAt(x, y)
+{
+    for (const h of clientHits)
+    {
+        if (h.kind === "sta")
+        {
+            const dx = x - h.x;
+            const dy = y - h.y;
+
+            if (dx * dx + dy * dy <= h.r * h.r)
+                return h;
+        }
+        else
+        {
+            if (Math.abs(x - h.x) <= h.w / 2 &&
+                Math.abs(y - h.y) <= h.h / 2)
+            {
+                return h;
+            }
+        }
+    }
+
+    return null;
+}
+
+
+function setupClientGraphEvents()
+{
+    const canvas =
+        document.getElementById("clientGraph");
+
+    canvas.addEventListener("mousemove", ev =>
+    {
+        const rect = canvas.getBoundingClientRect();
+
+        const hit = clientNodeAt(
+            ev.clientX - rect.left,
+            ev.clientY - rect.top
+        );
+
+        if (!hit)
+        {
+            hideTip();
+            return;
+        }
+
+        if (hit.kind === "sta")
+        {
+            showTip(clientTooltip(hit.obj), ev.clientX, ev.clientY);
+            return;
+        }
+
+        const g = hit.obj;
+
+        let html;
+
+        if (g.probeOnly)
+        {
+            html =
+                "<b>Unassociated stations</b><br>" +
+                g.clients.length +
+                " devices, seen through probe requests only";
+        }
+        else if (g.ap)
+        {
+            html =
+                networkTooltip(g.ap) +
+                "<br><i>Click to restrict the sweep to channel " +
+                g.ap.channel + "</i>";
+        }
+        else
+        {
+            const name = apNameFor(g.bssid);
+
+            html =
+                "<b>" + escapeHTML(name) + "</b><br>" +
+                (name === g.bssid ? "" : g.bssid + "<br>") +
+                "No beacon from this AP right now<br>" +
+                g.clients.length + " stations observed";
+        }
+
+        showTip(html, ev.clientX, ev.clientY);
+    });
+
+    canvas.addEventListener("click", ev =>
+    {
+        const rect = canvas.getBoundingClientRect();
+
+        const hit = clientNodeAt(
+            ev.clientX - rect.left,
+            ev.clientY - rect.top
+        );
+
+        if (!hit)
+            return;
+
+        if (hit.kind === "ap" && hit.obj.ap)
+        {
+            focusChannel(hit.obj.ap.channel);
+            return;
+        }
+
+        if (hit.kind === "sta" && hit.obj.ch)
+            focusChannel(hit.obj.ch);
+    });
+
+    canvas.addEventListener("mouseleave", hideTip);
+}
+
+
+// ==========================================================
+// BLE
+// ==========================================================
+
+function bleMatches(d)
+{
+    if (!bleFilterText)
+        return true;
+
+    const terms =
+        bleFilterText.toLowerCase().split(/\s+/).filter(t => t);
+
+    const haystack = [
+        d.addr, d.name, d.type, d.svc,
+        d.vendor, d.companyName
+    ].join(" ").toLowerCase();
+
+    return terms.every(t => haystack.indexOf(t) >= 0);
+}
+
+
+function filteredBle()
+{
+    return bleDevices.filter(bleMatches);
+}
+
+
+function bleLabel(d)
+{
+    if (d.name)
+        return d.name;
+
+    if (d.companyName)
+        return d.companyName;
+
+    return d.addr.substring(9);
+}
+
+
+function bleTooltip(d)
+{
+    let html =
+        "<b>" + escapeHTML(bleLabel(d)) + "</b><br>" +
+        d.addr + " (" + escapeHTML(d.type) + ")<br>";
+
+    if (d.vendor && d.type === "public")
+        html += "OUI: " + escapeHTML(d.vendor) + "<br>";
+
+    html +=
+        "RSSI " + d.rssi + " dBm (Peak " + d.peak + ")<br>";
+
+    if (d.tx !== 127)
+    {
+        html += "TX Power: " + d.tx + " dBm";
+
+        // Rough path loss, ignoring antenna gain
+        html += " | path loss approx. " + (d.tx - d.rssi) + " dB<br>";
+    }
+
+    if (d.company !== 65535)
+    {
+        html += "Company ID: 0x" +
+            d.company.toString(16).toUpperCase().padStart(4, "0");
+
+        if (d.companyName)
+            html += " (" + escapeHTML(d.companyName) + ")";
+
+        html += "<br>";
+    }
+
+    if (d.svc)
+        html += "Service: " + escapeHTML(d.svc) + "<br>";
+
+    html +=
+        "Advertisements: " + d.adv +
+        " (" + d.rate + "/s)<br>" +
+        "last seen " + d.age + " s ago" +
+        " | known for " + d.seen + " s";
+
+    return html;
+}
+
+
+function drawBleGraph()
+{
+    const canvas = document.getElementById("bleGraph");
+
+    const ctx = canvas.getContext("2d");
+
+    const size = resizeCanvas(canvas, ctx);
+
+    const width = size.width;
+    const height = size.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    bleHits = [];
+
+    const list =
+        filteredBle()
+            .slice()
+            .sort((a, b) => b.rssi - a.rssi)
+            .slice(0, 22);
+
+    if (!list.length)
+    {
+        ctx.fillStyle = "#666";
+        ctx.textAlign = "center";
+        ctx.font = "13px Arial";
+
+        ctx.fillText(
+            scanMode === "ble"
+                ? "No advertisements received yet"
+                : "BLE mode not active",
+            width / 2,
+            height / 2
+        );
+
+        return;
+    }
+
+    const left = 150;
+    const right = width - 60;
+    const top = 14;
+    const bottom = height - 22;
+
+    const RSSI_MIN = -100;
+    const RSSI_MAX = -20;
+
+    function xForRSSI(r)
+    {
+        let v = (r - RSSI_MIN) / (RSSI_MAX - RSSI_MIN);
+
+        v = Math.max(0, Math.min(1, v));
+
+        return left + v * (right - left);
+    }
+
+    // Grid
+    ctx.font = "10px Arial";
+    ctx.textAlign = "center";
+
+    for (let r = RSSI_MIN; r <= RSSI_MAX; r += 20)
+    {
+        const x = xForRSSI(r);
+
+        ctx.strokeStyle = "#292929";
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+        ctx.stroke();
+
+        ctx.fillStyle = "#777";
+        ctx.fillText(r + " dBm", x, bottom + 14);
+    }
+
+    const rowHeight =
+        Math.min(24, (bottom - top) / list.length);
+
+    list.forEach((d, i) =>
+    {
+        const y = top + i * rowHeight;
+        const h = Math.max(6, rowHeight - 5);
+
+        const x = xForRSSI(d.rssi);
+        const xPeak = xForRSSI(d.peak);
+
+        const fresh = d.age < 10;
+
+        // Peak as a bright tick
+        ctx.strokeStyle = "rgba(255,144,48,0.8)";
+        ctx.lineWidth = 1.5;
+
+        ctx.beginPath();
+        ctx.moveTo(xPeak, y);
+        ctx.lineTo(xPeak, y + h);
+        ctx.stroke();
+
+        ctx.fillStyle = colorForKey(d.addr, fresh ? 0.55 : 0.25);
+
+        ctx.fillRect(left, y, x - left, h);
+
+        ctx.strokeStyle = colorForKey(d.addr, 0.9);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(left, y, x - left, h);
+
+        ctx.fillStyle = "#ddd";
+        ctx.font = "11px Arial";
+        ctx.textAlign = "right";
+
+        let label = bleLabel(d);
+
+        if (label.length > 22)
+            label = label.substring(0, 22) + "\u2026";
+
+        ctx.fillText(label, left - 8, y + h - 1);
+
+        ctx.fillStyle = "#999";
+        ctx.textAlign = "left";
+
+        ctx.fillText(d.rssi + " dBm", x + 6, y + h - 1);
+
+        bleHits.push({
+            d: d,
+            x0: 0, x1: right,
+            y0: y, y1: y + h
+        });
+    });
+}
+
+
+function setupBleGraphEvents()
+{
+    const canvas = document.getElementById("bleGraph");
+
+    canvas.addEventListener("mousemove", ev =>
+    {
+        const rect = canvas.getBoundingClientRect();
+
+        const x = ev.clientX - rect.left;
+        const y = ev.clientY - rect.top;
+
+        const hit = bleHits.find(h =>
+            x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
+
+        if (!hit)
+        {
+            hideTip();
+            return;
+        }
+
+        showTip(bleTooltip(hit.d), ev.clientX, ev.clientY);
+    });
+
+    canvas.addEventListener("mouseleave", hideTip);
+}
+
+
+const bleColumns = [
+    { key: "addr",        label: "Address",  type: "str" },
+    { key: "type",        label: "Type",     type: "str" },
+    { key: "name",        label: "Name",     type: "str" },
+    { key: "companyName", label: "Company",  type: "str" },
+    { key: "rssi",        label: "RSSI",     type: "num" },
+    { key: "peak",        label: "Peak",     type: "num" },
+    { key: "tx",          label: "TX",       type: "num" },
+    { key: "rate",        label: "Adv/s",    type: "num" },
+    { key: "adv",         label: "Adverts",  type: "num" },
+    { key: "age",         label: "Age",      type: "num" }
+];
+
+
+function bleCellText(d, key)
+{
+    if (key === "rssi" || key === "peak")
+        return d[key] + " dBm";
+
+    if (key === "tx")
+        return d.tx === 127 ? "-" : d.tx + " dBm";
+
+    if (key === "age")
+        return d.age + " s";
+
+    if (key === "companyName")
+    {
+        if (d.companyName)
+            return d.companyName;
+
+        return d.company === 65535
+            ? "-"
+            : "0x" + d.company.toString(16).toUpperCase()
+                  .padStart(4, "0");
+    }
+
+    return d[key] || "-";
+}
+
+
+function setBleSort(key)
+{
+    if (bleSortKey === key)
+    {
+        bleSortDir = -bleSortDir;
+    }
+    else
+    {
+        bleSortKey = key;
+
+        const col = bleColumns.find(c => c.key === key);
+
+        bleSortDir = (col && col.type === "num") ? -1 : 1;
+    }
+
+    buildBleHead();
+    updateBleTable();
+}
+
+
+function buildBleHead()
+{
+    const thead = document.getElementById("bleHead");
+
+    const tr = document.createElement("tr");
+
+    bleColumns.forEach(c =>
+    {
+        const th = document.createElement("th");
+
+        th.innerHTML =
+            c.label +
+            (bleSortKey === c.key
+                ? " <span class='arrow'>" +
+                  (bleSortDir > 0 ? "\u25B2" : "\u25BC") +
+                  "</span>"
+                : "");
+
+        th.onclick = () => setBleSort(c.key);
+
+        tr.appendChild(th);
+    });
+
+    thead.innerHTML = "";
+    thead.appendChild(tr);
+}
+
+
+function updateBleTable()
+{
+    const tbody = document.getElementById("bleTable");
+
+    const col = bleColumns.find(c => c.key === bleSortKey);
+
+    const list = filteredBle().slice();
+
+    list.sort((a, b) =>
+    {
+        const va = a[bleSortKey];
+        const vb = b[bleSortKey];
+
+        if (col && col.type === "num")
+            return (parseFloat(va) - parseFloat(vb)) * bleSortDir;
+
+        return String(va).localeCompare(
+            String(vb),
+            undefined,
+            { numeric: true, sensitivity: "base" }
+        ) * bleSortDir;
+    });
+
+    tbody.innerHTML = "";
+
+    list.forEach(d =>
+    {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML =
+            bleColumns.map(c =>
+                "<td>" + escapeHTML(String(bleCellText(d, c.key))) +
+                "</td>"
+            ).join("");
+
+        tr.addEventListener("mouseenter", ev =>
+        {
+            showTip(bleTooltip(d), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mousemove", ev =>
+        {
+            showTip(bleTooltip(d), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mouseleave", hideTip);
+
+        pinOnClick(tr, () => bleTooltip(d));
+
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById("bleInfo").innerText =
+        list.length + " of " + bleDevices.length + " devices" +
+        (bleStats
+            ? " | " + bleStats.frames + " advertisements" +
+              (bleStats.drops ? ", " + bleStats.drops + " dropped" : "")
+            : "");
+}
+
+
+// ==========================================================
+// IEEE 802.15.4
+// ==========================================================
+
+let zbData = null;
+
+let zbSortKey = "frames";
+let zbSortDir = -1;
+
+let zbHits = [];
+
+
+function zbTypeText(t)
+{
+    if (t === 0) return "beacon";
+    if (t === 1) return "data";
+    if (t === 2) return "ack";
+    if (t === 3) return "command";
+
+    return "type " + t;
+}
+
+
+function drawZbSpectrum()
+{
+    const canvas = document.getElementById("zbSpectrum");
+
+    const ctx = canvas.getContext("2d");
+
+    const size = resizeCanvas(canvas, ctx);
+
+    const width = size.width;
+    const height = size.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    const left = 58;
+    const right = width - 15;
+    const top = 28;
+    const bottom = height - 42;
+
+    const graphHeight = bottom - top;
+
+    const F_MIN = 2398;
+    const F_MAX = 2487;
+
+    /*
+     * The energy detect floor of this radio sits around -105
+     * to -110 dBm, well below the -100 dBm used for the Wi-Fi
+     * views. Cutting the scale there turned every quiet
+     * channel into a zero height bar, which looked exactly
+     * like no data at all.
+     */
+    const RSSI_MIN = -115;
+    const RSSI_MAX = -20;
+
+    function xForFreqMHz(f)
+    {
+        const v =
+            (Math.max(F_MIN, Math.min(F_MAX, f)) - F_MIN) /
+            (F_MAX - F_MIN);
+
+        return left + v * (right - left);
+    }
+
+    function yForRSSI(r)
+    {
+        let v = (r - RSSI_MIN) / (RSSI_MAX - RSSI_MIN);
+
+        v = Math.max(0, Math.min(1, v));
+
+        return bottom - v * graphHeight;
+    }
+
+    // Overlapping Wi-Fi channels in the background
+    if (document.getElementById("zbOverlay").checked)
+    {
+        [[1, 2412], [6, 2437], [11, 2462]].forEach(w =>
+        {
+            const x0 = xForFreqMHz(w[1] - 11);
+            const x1 = xForFreqMHz(w[1] + 11);
+
+            ctx.fillStyle = "rgba(0,120,190,0.10)";
+            ctx.fillRect(x0, top, x1 - x0, bottom - top);
+
+            ctx.strokeStyle = "rgba(0,150,230,0.35)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x0, top, x1 - x0, bottom - top);
+
+            ctx.fillStyle = "rgba(120,190,230,0.8)";
+            ctx.font = "11px Arial";
+            ctx.textAlign = "center";
+
+            ctx.fillText(
+                "Wi-Fi " + w[0],
+                (x0 + x1) / 2,
+                top - 8
+            );
+        });
+    }
+
+    // Grid
+    ctx.font = "11px Arial";
+    ctx.textAlign = "left";
+
+    for (let r = RSSI_MAX; r >= RSSI_MIN; r -= 20)
+    {
+        const y = yForRSSI(r);
+
+        ctx.strokeStyle = "#292929";
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(right, y);
+        ctx.stroke();
+
+        ctx.fillStyle = "#777";
+        ctx.fillText(r + " dBm", 4, y + 4);
+    }
+
+    // Mark the measured noise floor of the radio
+    ctx.fillStyle = "#555";
+    ctx.fillText("-115 dBm", 4, yForRSSI(RSSI_MIN) + 4);
+
+    ctx.strokeStyle = "#444";
+
+    ctx.beginPath();
+    ctx.moveTo(left, bottom);
+    ctx.lineTo(right, bottom);
+    ctx.stroke();
+
+    if (!zbData || !zbData.channels.length)
+    {
+        ctx.fillStyle = "#666";
+        ctx.font = "13px Arial";
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+            "Waiting for the first sweep",
+            (left + right) / 2,
+            (top + bottom) / 2
+        );
+
+        return;
+    }
+
+    const maxFrames =
+        Math.max(1, ...zbData.channels.map(c => c.frames));
+
+    zbHits = [];
+
+    zbData.channels.forEach(c =>
+    {
+        // 2 MHz wide, drawn a little wider to stay visible
+        const x0 = xForFreqMHz(c.freq - 1.4);
+        const x1 = xForFreqMHz(c.freq + 1.4);
+
+        const current = (c.ch === zbData.current);
+        const locked = (c.ch === zbData.locked);
+
+        zbHits.push({
+            ch: c.ch,
+            x0: xForFreqMHz(c.freq - 2.5),
+            x1: xForFreqMHz(c.freq + 2.5),
+            y0: top,
+            y1: bottom + 32
+        });
+
+        if (locked)
+        {
+            ctx.fillStyle = "rgba(255,200,80,0.10)";
+            ctx.fillRect(x0 - 4, top, x1 - x0 + 8, bottom - top);
+
+            ctx.strokeStyle = "rgba(255,200,80,0.7)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x0 - 4, top, x1 - x0 + 8, bottom - top);
+        }
+
+        // Energy detect level
+        if (c.ed !== 127)
+        {
+            // Always leave a visible sliver, even at the floor
+            const y = Math.min(yForRSSI(c.ed), bottom - 2);
+
+            ctx.fillStyle = current
+                ? "rgba(120,200,255,0.55)"
+                : "rgba(70,130,180,0.45)";
+
+            ctx.fillRect(x0, y, x1 - x0, bottom - y);
+
+            ctx.strokeStyle = "rgba(140,210,255,0.9)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x0, y, x1 - x0, bottom - y);
+        }
+
+        // Strongest decoded frame
+        if (c.max > -127)
+        {
+            const y = yForRSSI(c.max);
+
+            ctx.strokeStyle = "rgba(255,144,48,0.95)";
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.moveTo(x0 - 2, y);
+            ctx.lineTo(x1 + 2, y);
+            ctx.stroke();
+        }
+
+        // Frame count as a small bar above the axis
+        if (c.frames > 0)
+        {
+            const h = 14 * (c.frames / maxFrames);
+
+            ctx.fillStyle = "rgba(120,220,120,0.8)";
+            ctx.fillRect(x0, bottom + 2, x1 - x0, h);
+        }
+
+        ctx.fillStyle = current ? "#fff" : "#999";
+        ctx.font = current ? "bold 10px Arial" : "10px Arial";
+        ctx.textAlign = "center";
+
+        ctx.fillText(c.ch, (x0 + x1) / 2, bottom + 30);
+    });
+
+    ctx.fillStyle = "#666";
+    ctx.font = "10px Arial";
+    ctx.textAlign = "right";
+
+    ctx.fillText(
+        "blue = energy detect, orange = strongest frame, " +
+        "green = frame count",
+        right,
+        top - 8
+    );
+}
+
+
+let zbWaterfallData = null;
+
+
+function setZbScan(mode)
+{
+    // Switch the panes right away, the device follows
+    if (zbData)
+    {
+        zbData.scan = mode;
+        applyZbScanUI();
+    }
+
+    zbWaterfallData = null;
+
+    queueCommand("/api/mode?zbscan=" + mode);
+}
+
+
+function applyZbScanUI()
+{
+    const energy = (zbData && zbData.scan === 1);
+
+    document.getElementById("zbScanFramesBtn")
+        .classList.toggle("active", !energy);
+
+    document.getElementById("zbScanEnergyBtn")
+        .classList.toggle("active", energy);
+
+    document.getElementById("zbFramesPane").style.display =
+        energy ? "none" : "block";
+
+    document.getElementById("zbEnergyPane").style.display =
+        energy ? "block" : "none";
+}
+
+
+async function updateZbWaterfall()
+{
+    if (!zbData || zbData.scan !== 1 || scanMode !== "zb")
+        return;
+
+    try
+    {
+        const range =
+            document.getElementById("zbRange").value;
+
+        const response =
+            await api("/api/zbwaterfall?range=" + range,
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        zbWaterfallData = await response.json();
+
+        document.getElementById("zbRateInfo").innerText =
+            zbWaterfallData.rate + " sweeps/s, " +
+            zbWaterfallData.rows.length + " rows shown";
+
+        drawZbWaterfall();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+function drawZbWaterfall()
+{
+    const canvas = document.getElementById("zbWaterfall");
+
+    const ctx = canvas.getContext("2d");
+
+    const size = resizeCanvas(canvas, ctx);
+
+    const width = size.width;
+    const height = size.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    if (!zbWaterfallData || !zbWaterfallData.rows.length)
+        return;
+
+    const rows = zbWaterfallData.rows;
+
+    // Same frequency mapping as the spectrum above
+    const left = 58;
+    const right = width - 15;
+
+    const F_MIN = 2398;
+    const F_MAX = 2487;
+
+    function xForFreqMHz(f)
+    {
+        const v =
+            (Math.max(F_MIN, Math.min(F_MAX, f)) - F_MIN) /
+            (F_MAX - F_MIN);
+
+        return left + v * (right - left);
+    }
+
+    const rowHeight = height / rows.length;
+
+    for (let y = 0; y < rows.length; y++)
+    {
+        const values = rows[y].v;
+
+        for (let c = 0; c < values.length; c++)
+        {
+            const level = values[c];
+
+            if (level === 127)
+                continue;
+
+            const freq = 2405 + 5 * c;
+
+            const x0 = xForFreqMHz(freq - 2.5);
+            const x1 = xForFreqMHz(freq + 2.5);
+
+            // Floor at -115 dBm, same as the spectrum
+            let v = (level + 115) / 95;
+
+            v = Math.max(0, Math.min(1, v));
+
+            let rr, gg, bb;
+
+            if (v < 0.33)
+            {
+                const t = v / 0.33;
+
+                rr = 0;
+                gg = Math.round(40 + 80 * t);
+                bb = Math.round(80 + 120 * t);
+            }
+            else if (v < 0.66)
+            {
+                const t = (v - 0.33) / 0.33;
+
+                rr = Math.round(50 + 205 * t);
+                gg = Math.round(120 + 100 * (1 - t));
+                bb = Math.round(200 * (1 - t));
+            }
+            else
+            {
+                const t = (v - 0.66) / 0.34;
+
+                rr = 255;
+                gg = Math.round(100 * (1 - t));
+                bb = 0;
+            }
+
+            ctx.fillStyle =
+                "rgb(" + rr + "," + gg + "," + bb + ")";
+
+            ctx.fillRect(
+                x0,
+                y * rowHeight,
+                Math.ceil(x1 - x0) + 1,
+                Math.ceil(rowHeight) + 1
+            );
+        }
+    }
+
+    // Wi-Fi channel edges on top
+    if (document.getElementById("zbOverlay").checked)
+    {
+        [[1, 2412], [6, 2437], [11, 2462]].forEach(w =>
+        {
+            const x0 = xForFreqMHz(w[1] - 11);
+            const x1 = xForFreqMHz(w[1] + 11);
+
+            ctx.strokeStyle = "rgba(255,255,255,0.25)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+
+            ctx.beginPath();
+            ctx.moveTo(x0, 0);
+            ctx.lineTo(x0, height);
+            ctx.moveTo(x1, 0);
+            ctx.lineTo(x1, height);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = "rgba(220,235,245,0.7)";
+            ctx.font = "11px Arial";
+            ctx.textAlign = "center";
+
+            ctx.fillText("Wi-Fi " + w[0], (x0 + x1) / 2, 12);
+        });
+    }
+}
+
+
+function setupZbEvents()
+{
+    const canvas = document.getElementById("zbSpectrum");
+
+    canvas.addEventListener("click", async ev =>
+    {
+        if (!zbData)
+            return;
+
+        const rect = canvas.getBoundingClientRect();
+
+        const x = ev.clientX - rect.left;
+        const y = ev.clientY - rect.top;
+
+        const hit = zbHits.find(h =>
+            x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
+
+        if (!hit)
+            return;
+
+        // Clicking the locked channel again resumes the sweep
+        const target = (zbData.locked === hit.ch) ? -1 : hit.ch;
+
+        queueCommand("/api/mode?zbch=" + target);
+    });
+}
+
+
+const zbColumns = [
+    { key: "addr",   label: "Address", type: "str" },
+    { key: "pan",    label: "PAN ID",  type: "str" },
+    { key: "ch",     label: "Channel", type: "num" },
+    { key: "rssi",   label: "RSSI",    type: "num" },
+    { key: "lqi",    label: "LQI",     type: "num" },
+    { key: "type",   label: "Last frame", type: "num" },
+    { key: "frames", label: "Frames",  type: "num" },
+    { key: "age",    label: "Age",     type: "num" }
+];
+
+
+function zbCellText(n, key)
+{
+    if (key === "rssi")
+        return n.rssi + " dBm";
+
+    if (key === "age")
+        return n.age + " s";
+
+    if (key === "type")
+        return zbTypeText(n.type);
+
+    if (key === "addr")
+        return n.addr + (n.ext ? " (ext)" : "");
+
+    return n[key];
+}
+
+
+function setZbSort(key)
+{
+    if (zbSortKey === key)
+    {
+        zbSortDir = -zbSortDir;
+    }
+    else
+    {
+        zbSortKey = key;
+
+        const col = zbColumns.find(c => c.key === key);
+
+        zbSortDir = (col && col.type === "num") ? -1 : 1;
+    }
+
+    buildZbHead();
+    updateZbTable();
+}
+
+
+function buildZbHead()
+{
+    const thead = document.getElementById("zbHead");
+
+    const tr = document.createElement("tr");
+
+    zbColumns.forEach(c =>
+    {
+        const th = document.createElement("th");
+
+        th.innerHTML =
+            c.label +
+            (zbSortKey === c.key
+                ? " <span class='arrow'>" +
+                  (zbSortDir > 0 ? "\u25B2" : "\u25BC") +
+                  "</span>"
+                : "");
+
+        th.onclick = () => setZbSort(c.key);
+
+        tr.appendChild(th);
+    });
+
+    thead.innerHTML = "";
+    thead.appendChild(tr);
+}
+
+
+function updateZbTable()
+{
+    const tbody = document.getElementById("zbTable");
+
+    if (!zbData)
+        return;
+
+    const col = zbColumns.find(c => c.key === zbSortKey);
+
+    const list = zbData.nodes.slice();
+
+    list.sort((a, b) =>
+    {
+        const va = a[zbSortKey];
+        const vb = b[zbSortKey];
+
+        if (col && col.type === "num")
+            return (va - vb) * zbSortDir;
+
+        return String(va).localeCompare(
+            String(vb),
+            undefined,
+            { numeric: true, sensitivity: "base" }
+        ) * zbSortDir;
+    });
+
+    tbody.innerHTML = "";
+
+    list.forEach(n =>
+    {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML =
+            zbColumns.map(c =>
+                "<td>" + escapeHTML(String(zbCellText(n, c.key))) +
+                "</td>"
+            ).join("");
+
+        tbody.appendChild(tr);
+    });
+
+    const pans = new Set(list.map(n => n.pan));
+
+    let info;
+
+    if (!zbData.available)
+    {
+        info = "IEEE 802.15.4 is not compiled into this core build";
+    }
+    else
+    {
+        info =
+            list.length + " nodes in " + pans.size + " PANs | " +
+            zbData.frames + " frames" +
+            " | " + zbData.edok + " energy readings" +
+            (zbData.edfail ? ", " + zbData.edfail + " failed" : "") +
+            ", rx armed " + zbData.rxarmed + "x" +
+            (zbData.drops ? ", " + zbData.drops + " dropped" : "") +
+            (zbData.rxerrors
+                ? ", " + zbData.rxerrors + " rx errors"
+                : "") +
+            " | channel " + zbData.current +
+            (zbData.locked >= 0
+                ? " (locked, click again to resume sweeping)"
+                : " (sweeping, click a channel to lock onto it)");
+
+        if (zbData.scan === 0 && !zbData.frames)
+        {
+            info +=
+                " | nothing decoded yet, the energy detect bars" +
+                " work without traffic";
+        }
+
+        if (zbData.note)
+            info += " | " + zbData.note;
+    }
+
+    document.getElementById("zbInfo").innerText = info;
+}
+
+
+// ==========================================================
+// Network table
+// ==========================================================
+
+/*
+ * Fixed widths in px, padding included. With automatic layout
+ * the browser re-measured the columns on every update, and the
+ * whole table shifted sideways whenever a longer vendor name or
+ * a three-digit age appeared. SSID takes whatever is left.
+ */
+const columns = [
+    { key: "ssid",      label: "SSID",     type: "str" },
+    { key: "bssid",     label: "BSSID",    type: "str", width: 132 },
+    { key: "vendor",    label: "Vendor",   type: "str", width: 148 },
+    { key: "band",      label: "Band",     type: "str", width: 60 },
+    { key: "channel",   label: "Channel",  type: "num", width: 78 },
+    { key: "bandwidth", label: "Width",    type: "num", width: 64 },
+    { key: "nss",       label: "NSS",      type: "num", width: 54 },
+    { key: "sec",       label: "Security", type: "str", width: 126 },
+    { key: "std",       label: "Standard", type: "num", width: 96 },
+    { key: "caps",      label: "Capabilities", type: "str", width: 120 },
+    { key: "clients",   label: "Stations", type: "num", width: 76 },
+    { key: "rssi",      label: "RSSI",     type: "num", width: 76 },
+    { key: "age",       label: "Age",      type: "num", width: 54 }
+];
+
+
+/*
+ * A single number for the notes column.
+ *
+ * The weights are a judgement, not a measurement: one red
+ * outranks any number of amber, one amber any number of blue.
+ * That is the order someone scanning the table wants, but it
+ * is worth knowing that the number itself means nothing.
+ */
+function noteScore(n)
+{
+    return noteScoreOf(networkNotes(n));
+}
+
+
+function noteScoreOf(notes)
+{
+    let red = 0, amber = 0, pink = 0, blue = 0;
+
+    notes.forEach(note =>
+    {
+        if (note[0] === "#d08080") red++;
+        else if (note[0] === "#c8a050") amber++;
+        else if (note[0] === "#e070c0") pink++;
+        else blue++;
+    });
+
+    // Red outweighs any number of amber, amber any number of blue,
+    // blue any number of pink: an unknown element is the least a
+    // reader has to act on
+    return red * 1000000 + amber * 10000 + blue * 100 + pink;
+}
+
+
+/*
+ * BSS colour (802.11ax): HE stations ignore frames of another
+ * colour for spatial reuse. An AP switches when it finds a
+ * neighbour on the channel using its colour, announcing the new
+ * one over a few beacons; bcc is [new colour, seconds since, how
+ * many switches seen].
+ */
+function bssColorText(n)
+{
+    const parts = [];
+
+    if (n.color)
+        parts.push(n.color[0] + (n.color[1] ? " (disabled)" : ""));
+
+    if (n.bcc)
+        parts.push("switch to " + n.bcc[0] + " announced " +
+                   uptimeText(n.bcc[1]) + " ago" +
+                   (n.bcc[2] > 1 ? ", " + n.bcc[2] + " switches seen" : ""));
+
+    return parts.join(" \u00b7 ");
+}
+
+
+/*
+ * BSS Max Idle Period (90): how long the AP keeps a station that
+ * sends nothing associated; a sleeping station has to send a
+ * keep-alive within it. Units of 1000 TU, 1.024 s.
+ */
+// [asked, options, granted, options] of a station
+function stationIdleText(v)
+{
+    if (!v)
+        return "";
+
+    return [v[0] ? "asks " + maxIdleText(v.slice(0, 2)) : "",
+            v[2] ? "AP grants " + maxIdleText(v.slice(2, 4)) : ""]
+        .filter(x => x).join(" \u00b7 ");
+}
+
+
+function maxIdleText(v)
+{
+    if (!v || !v[0])
+        return "";
+
+    return Math.round(v[0] * 1.024) + " s" +
+        (v[1] & 1 ? ", protected keep-alive" : "");
+}
+
+
+/*
+ * The beacon timestamp runs from when the BSS started, usually
+ * when the AP booted. Some APs start it elsewhere, so anything
+ * beyond three years is not taken for an uptime.
+ */
+function tsfUpText(n)
+{
+    if (n.tsfup === undefined)
+        return "";
+
+    const up = n.tsfup > 3 * 365 * 86400
+        ? "timer not counting from the start"
+        : "\u2248 " + uptimeText(n.tsfup) + " (beacon timestamp)";
+
+    return up + (n.tsfreset
+        ? ", reset " + uptimeText(n.tsfreset[1]) + " ago" +
+          (n.tsfreset[0] > 1 ? " (" + n.tsfreset[0] + " resets seen)" : "")
+        : "");
+}
+
+
+/*
+ * An IBSS has no AP: its stations take turns sending the beacon,
+ * all with the same BSSID. The ATIM window is how long they stay
+ * awake after each beacon to announce buffered frames.
+ */
+function ibssText(n)
+{
+    if (!n.ibss)
+        return "";
+
+    return "IBSS, no access point: the stations send the beacons " +
+        "in turn" +
+        (n.atim === undefined ? ""
+            : n.atim ? ", ATIM window " + n.atim + " TU"
+            : ", ATIM window 0 (no power save)");
+}
+
+
+/*
+ * The same idea as the Features column on the stations page,
+ * for the AP side. Only things a client would act on: what it
+ * can use for roaming, and whether management frames are
+ * protected. Anything odd about the BSS lives in the notes
+ * column, not here.
+ */
+function apCapsText(n)
+{
+    const flags = [];
+
+    // No AP at all: a client joins it differently
+    if (n.ibss) flags.push("Ad-hoc");
+
+    if (n.k) flags.push("11k");
+    if (n.v) flags.push("11v");
+    if (n.r) flags.push("11r");
+
+    if (n.mfpr) flags.push("PMF req");
+    else if (n.mfpc) flags.push("PMF");
+
+    if (n.hs20) flags.push("HS2.0");
+    if (n.preauth) flags.push("Pre-Auth");
+    if (n.owetrans) flags.push("OWE-TM");
+    if (n.wps) flags.push("WPS");
+    if (n.mbssid) flags.push("MBSSID");
+    if (n.mld) flags.push("MLO");
+
+    return flags.length ? flags.join(", ") : "-";
+}
+
+
+function cellValue(n, key)
+{
+    if (key === "band")
+        return isBand24(n.channel) ? "2.4" : "5";
+
+    if (key === "notes")
+        return noteScore(n);
+
+    if (key === "caps")
+        return apCapsText(n);
+
+    return n[key];
+}
+
+
+function meshPathText(id)
+{
+    if (id === 0) return "HWMP";
+    if (id === 1) return "vendor specific";
+
+    return "id " + id;
+}
+
+
+function meshMetricText(id)
+{
+    if (id === 0) return "airtime";
+    if (id === 1) return "vendor specific";
+
+    return "id " + id;
+}
+
+
+function meshAuthText(id)
+{
+    if (id === 0) return "none";
+    if (id === 1) return "SAE";
+    if (id === 2) return "802.1X";
+
+    return "id " + id;
+}
+
+
+/*
+ * NAN (Wi-Fi Aware) beacons come from a cluster ID, 50:6F:9A:01:xx:xx,
+ * not from an AP. They carry no SSID and would look like a hidden
+ * network otherwise.
+ */
+function isNan(n)
+{
+    return /^50:6F:9A:01:/i.test(n.bssid || "");
+}
+
+/*
+ * The NAN element of a cluster beacon, [master preference, random
+ * factor, the anchor master's preference and random factor, hops to
+ * the anchor master], -1 where the attribute was missing. A master
+ * preference of 0 means the device cannot become master; 0 hops
+ * means the sender is the anchor master itself.
+ * "master preference 128, random factor 37 · anchor master 2 hops away
+ * (preference 254, random factor 9)"
+ */
+function nanText(n)
+{
+    if (!Array.isArray(n.nan))
+        return "";
+
+    const [pref, rand, amPref, amRand, hops] = n.nan;
+    const parts = [];
+
+    if (pref >= 0)
+        parts.push("master preference " + pref +
+                   (pref === 0 ? " (not master capable)" : "") +
+                   ", random factor " + rand);
+
+    if (amPref >= 0)
+        parts.push(hops === 0
+            ? "is the anchor master"
+            : "anchor master " + hops + " hop" + (hops > 1 ? "s" : "") +
+              " away (preference " + amPref + ", random factor " +
+              amRand + ")");
+
+    return parts.join(" \u00b7 ");
+}
+
+function ssidLabel(n)
+{
+    return isNan(n) ? "NAN cluster (Wi-Fi Aware)" : n.ssid;
+}
+
+function cellText(n, key)
+{
+    if (key === "ssid")
+    {
+        if (isNan(n))
+            return ssidLabel(n);
+
+        if (n.mesh)
+            return n.ssid + " [mesh]";
+
+        return n.resolved ? (n.ssid + " *") : n.ssid;
+    }
+
+    if (key === "band")
+        return isBand24(n.channel) ? "2.4 GHz" : "5 GHz";
+
+    if (key === "bandwidth")
+        return bandwidthText(n.bandwidth);
+
+    if (key === "nss")
+        return n.nss ? n.nss + "SS" : "-";
+
+    if (key === "std")
+    {
+        /*
+         * The highest generation is the last entry of the list
+         * anyway, so spelling it out twice only costs width.
+         * Without a list the short form still has to carry it.
+         */
+        const list = modeList(n.modes);
+
+        return list ? n.std + "  \u00b7  " + list : stdShort(n.std);
+    }
+
+    if (key === "caps")
+        return apCapsText(n);
+
+    if (key === "rssi")
+        return n.rssi + " dBm";
+
+    if (key === "age")
+        return n.age + " s";
+
+    if (key === "clients")
+        return n.sta >= 0 ? (n.clients + " (" + n.sta + ")") : n.clients;
+
+    if (key === "sec")
+    {
+        let s = n.sec;
+
+        if (n.mfpr)
+            s += " +PMF";
+
+        return s;
+    }
+
+    return n[key];
+}
+
+
+function setSort(key)
+{
+    if (sortKey === key)
+    {
+        sortDir = -sortDir;
+    }
+    else
+    {
+        sortKey = key;
+
+        const col = columns.find(c => c.key === key);
+
+        sortDir = (col && col.type === "num") ? -1 : 1;
+    }
+
+    buildTableHead();
+    updateNetworkTable();
+}
+
+
+/*
+ * The notes of one BSS boiled down to a few characters.
+ *
+ * The table cannot carry the texts, but it can say that there
+ * is something to read, and of which kind, so the eye finds
+ * the rows worth hovering over.
+ */
+function noteBadges(n)
+{
+    const badges = noteBadgesOf(networkNotes(n));
+
+    if (!n.cfgn)
+        return badges;
+
+    // A changed configuration is neither good nor bad: no colour.
+    // Dimmed for a BSS that does not ring the bell.
+    const delta = n.cfgmute
+        ? "<span class='dim' title='configuration changed, " +
+          "not notified'>\u0394</span>"
+        : "<span title='configuration changed'>\u0394</span>";
+
+    return networkNotes(n).length ? badges + " " + delta : delta;
+}
+
+
+/*
+ * The configuration changes the sensor saw, newest first:
+ * [seconds ago, what, from, to]. A restart has the uptime it
+ * ended as "from".
+ */
+/*
+ * The CHANGES section, with the checkbox whether this BSS rings the
+ * bell beside its title (kept on the sensor); also without changes
+ * for a BSS that was muted, so it can be turned back on.
+ */
+function configChangeSection(n)
+{
+    const rows = configChangeRows(n);
+
+    if (!rows.length && !n.cfgmute)
+        return "";
+
+    const notify = snapshotView ? "" :
+        " <label class='tipNotify'><input type='checkbox'" +
+        (n.cfgmute ? "" : " checked") +
+        " onclick='event.stopPropagation()'" +
+        " onchange='window.setCfgNotify(\"" + n.bssid + "\", this.checked)'>" +
+        " notify about changes</label>";
+
+    return "<div class='tipSec'>CHANGES" + notify + "</div>" + tipRows(rows);
+}
+
+function configChangeRows(n)
+{
+    if (!n.cfgch)
+        return [];
+
+    // The bell's list keeps more of them, 64 for all BSSs together
+    const fromBell = snapshotView ? [] : cfgList.changes
+        .filter(c => c[2] === n.bssid)
+        .map(c => [c[1] + Math.round((Date.now() - cfgFetchAt) / 1000),
+                   c[4], c[5], c[6]]);
+
+    const list = (fromBell.length > n.cfgch.length ? fromBell : n.cfgch)
+        .slice().sort((a, b) => a[0] - b[0]);
+
+    // What came in together shares one row
+    const rows = [];
+
+    list.forEach(([ago, what, from, to]) =>
+    {
+        const last = rows[rows.length - 1];
+        const text = configChangeText(what, from, to);
+
+        if (last && Math.abs(last.ago - ago) <= 2)
+            last[1] += "<br>" + text;
+        else
+            rows.push(Object.assign([agoSpan(secondsText(ago) + " ago", ago,
+                                             Date.now()), text],
+                                    { ago: ago }));
+    });
+
+    const older = n.cfgn - list.length;
+
+    if (older > 0)
+        rows.push([null, "<span class='dim'>" + older + " earlier change" +
+            (older === 1 ? "" : "s") + " no longer kept, " + n.cfgn +
+            " since the sensor started</span>"]);
+
+    return rows;
+}
+
+
+function noteBadgesOf(notes)
+{
+    if (!notes.length)
+        return "<span class='dim'>-</span>";
+
+    // Left to right by weight: unknown, state of the air, odd,
+    // worth fixing
+    const groups = [
+        ["#e070c0", "?"],
+        ["#7aaed0", "%"],
+        ["#c8a050", "!"],
+        ["#d08080", "\u2715"]
+    ];
+
+    return groups
+        .map(g =>
+        {
+            const count =
+                notes.filter(note => note[0] === g[0]).length;
+
+            if (!count)
+                return "";
+
+            // Beyond four the row would get wider than it is worth
+            return "<span style='color:" + g[0] + "'>" +
+                   g[1].repeat(Math.min(count, 4)) +
+                   (count > 4 ? "+" : "") + "</span>";
+        })
+        .filter(x => x)
+        .join(" ");
+}
+
+
+function buildTableHead()
+{
+    const thead =
+        document.getElementById("networkHead");
+
+    const tr = document.createElement("tr");
+
+    columns.forEach(c =>
+    {
+        const th = document.createElement("th");
+
+        th.innerHTML =
+            c.label +
+            (sortKey === c.key
+                ? " <span class='arrow'>" +
+                  (sortDir > 0 ? "\u25B2" : "\u25BC") +
+                  "</span>"
+                : "");
+
+        if (c.key === "clients")
+        {
+            th.title =
+                "Observed stations (BSS load figure from the AP)";
+        }
+
+        if (c.width)
+            th.style.width = c.width + "px";
+
+        th.onclick = () => setSort(c.key);
+
+        tr.appendChild(th);
+    });
+
+    const thNotes = document.createElement("th");
+
+    thNotes.innerHTML =
+        "\u26a0" +
+        (sortKey === "notes"
+            ? " <span class='arrow'>" +
+              (sortDir > 0 ? "\u25B2" : "\u25BC") +
+              "</span>"
+            : "");
+
+    thNotes.title =
+        "Hints that the tooltip spells out. Pink is an element this " +
+        "sensor does not decode, blue the current state of the " +
+        "air, amber something odd but harmless, red something that " +
+        "should be fixed. Sorting weights one red above any number " +
+        "of amber, one amber above any number of blue and one blue " +
+        "above any number of pink.";
+
+    thNotes.onclick = () => setSort("notes");
+
+    thNotes.style.width = "50px";
+
+    tr.appendChild(thNotes);
+
+    const th = document.createElement("th");
+
+    th.innerHTML = "pcap";
+    th.title =
+        "What of this AP is in the capture buffer right now, " +
+        "as a pcap file for Wireshark. The newest beacon is " +
+        "always held, further frames are probe responses and " +
+        "whatever else is enabled. The count is a snapshot: the " +
+        "ring drops its oldest entries once it is full.";
+
+    th.style.cursor = "default";
+    th.style.width = "88px";
+
+    tr.appendChild(th);
+
+    thead.innerHTML = "";
+    thead.appendChild(tr);
+}
+
+
+let sixGhzList = [];
+
+
+function updateSixTable()
+{
+    const tbody = document.getElementById("sixTable");
+
+    tbody.innerHTML = "";
+
+    const list = sixGhzList.slice();
+
+    list.sort((a, b) => a.ch - b.ch);
+
+    list.forEach(e =>
+    {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML =
+            "<td>" +
+            (e.ssid
+                ? escapeHTML(e.ssid)
+                : "<span class='dim'>unknown</span>") +
+            (e.same ? " <span class='dim'>(same SSID)</span>" : "") +
+            "</td>" +
+            "<td>" + escapeHTML(e.bssid) + "</td>" +
+            "<td>" + e.ch + "</td>" +
+            "<td>" + e.freq + " MHz</td>" +
+            "<td>" + (e.width ? e.width + " MHz" : "-") + "</td>" +
+            "<td>" +
+            (e.psd === 127 ? "-" : (e.psd / 2) + " dBm/MHz") +
+            "</td>" +
+            "<td>" + sixReporterCell(e) + "</td>" +
+            "<td>" + e.reports + "</td>" +
+            "<td>" + e.age + " s</td>";
+
+        tr.addEventListener("mouseenter", ev =>
+        {
+            showTip(sixTooltip(e), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mousemove", ev =>
+        {
+            showTip(sixTooltip(e), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mouseleave", hideTip);
+
+        pinOnClick(tr, () => sixTooltip(e));
+
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById("sixInfo").innerText =
+        list.length
+            ? list.length + " BSS announced out of band"
+            : "none announced by any AP in range";
+}
+
+
+/*
+ * The AP that announced a 6 GHz BSS: from the network table while it
+ * is there, else from what the entry kept of it, since the table ages
+ * out after a minute (sooner when it is full) and the 6 GHz list
+ * after two. Firmware before 1.72.1 kept nothing, the address alone
+ * is left then.
+ */
+function sixReporter(e)
+{
+    const live = networks.find(o => o.bssid === e.reporter);
+    const known = apNameFor(e.reporter);
+
+    const name = known !== e.reporter ? known : (e.repssid || "");
+    const ch = live ? live.channel : (e.repch || 0);
+
+    return { name, ch, gone: !live };
+}
+
+// "Hall · 5 GHz ch 36", dim "gone" when it left the table
+function sixReporterCell(e)
+{
+    const r = sixReporter(e);
+
+    return escapeHTML(r.name || e.reporter) +
+        (r.ch ? " \u00b7 " + bandOfChannel(r.ch) + " ch " + r.ch : "") +
+        (r.gone ? " <span class='dim'>(gone)</span>" : "");
+}
+
+function sixTooltip(e)
+{
+    const r = sixReporter(e);
+
+    let html =
+        "<b>" + escapeHTML(e.ssid || "unknown SSID") + "</b><br>" +
+        e.bssid + "<br>" +
+        "6 GHz channel " + e.ch + " | " + e.freq + " MHz" +
+        (e.width ? " | " + e.width + " MHz wide" : "") + "<br>" +
+        "Operating class " + e.opclass + "<br>";
+
+    if (e.psd !== 127)
+        html += "Transmit PSD: " + (e.psd / 2) + " dBm/MHz<br>";
+
+    html +=
+        "Announced by " +
+        (r.name ? escapeHTML(r.name) + " (" + e.reporter + ")"
+                : e.reporter) +
+        (r.ch ? ", " + bandOfChannel(r.ch) + " ch " + r.ch : "") +
+        "<br>" +
+        (r.gone
+            ? "<span class='dim'>That AP is no longer in the network " +
+              "table: pushed out by newer ones when the table is " +
+              "full, while this list still holds its announcement." +
+              "</span><br>"
+            : "");
+
+    html +=
+        (e.colocated
+            ? "Co-located with the announcing AP"
+            : "Not marked as co-located") + "<br>";
+
+    if (e.same)
+        html += "Carries the same SSID as the announcing AP<br>";
+
+    if (e.unsolicited)
+    {
+        html +=
+            "Sends unsolicited probe responses, so clients find " +
+            "it faster<br>";
+    }
+
+    if (!e.ssid && e.shortssid)
+    {
+        html +=
+            "Short SSID 0x" +
+            (e.shortssid >>> 0).toString(16).toUpperCase() +
+            ", no known network hashes to it<br>";
+    }
+
+    html +=
+        e.reports + " reports | last " + e.age + " s ago";
+
+    return html;
+}
+
+
+function updateNetworkTable()
+{
+    const tbody =
+        document.getElementById("networkTable");
+
+    const col =
+        (sortKey === "notes")
+            ? { key: "notes", type: "num" }
+            : columns.find(c => c.key === sortKey);
+
+    const list = filteredNetworks().slice();
+
+    list.sort((a, b) =>
+    {
+        const va = cellValue(a, sortKey);
+        const vb = cellValue(b, sortKey);
+
+        // Equal values (one SSID, many BSSIDs) keep a fixed order
+        return (col && col.type === "num"
+                    ? (va - vb) * sortDir
+                    : String(va).localeCompare(
+                          String(vb),
+                          undefined,
+                          { numeric: true, sensitivity: "base" }
+                      ) * sortDir) ||
+               a.bssid.localeCompare(b.bssid);
+    });
+
+    tbody.innerHTML = "";
+
+    list.forEach(n =>
+    {
+        const tr = document.createElement("tr");
+
+        tr.dataset.bssid = n.bssid;
+
+        tr.innerHTML =
+            columns.map(c =>
+                "<td>" + escapeHTML(String(cellText(n, c.key))) + "</td>"
+            ).join("") +
+            "<td>" + noteBadges(n) + "</td>" +
+            "<td>" +
+            (n.pcapb || n.pcapf
+                ? "<a class='dl' target='_blank' " +
+                  "onclick='return apiLink(event, this)' " +
+                  "href='/api/pcap?ta=" + n.bssid + "'>" +
+                  (n.pcapb ? "beacon" : "frames") +
+                  (n.pcapf ? " +" + n.pcapf : "") + "</a>"
+                : "<span class='dim'>none</span>") +
+            "</td>";
+
+        tr.addEventListener("mouseenter", ev =>
+        {
+            hoverBSSID = n.bssid;
+
+            drawNetworkGraph();
+            highlightTableRow();
+
+            showTip(networkTooltip(n), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mousemove", ev =>
+        {
+            showTip(networkTooltip(n), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mouseleave", () =>
+        {
+            hideTip();
+
+            hoverBSSID = null;
+
+            drawNetworkGraph();
+            highlightTableRow();
+        });
+
+        pinOnClick(tr, () => networkTooltip(n));
+
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById("filterInfo").innerText =
+        (list.length === networks.length
+            ? networks.length + " networks"
+            : list.length + " of " + networks.length +
+              " networks match") +
+        (liveData && liveData.netcap
+            ? ", " + liveData.netcap + " slots"
+            : "");
+}
+
+
+// ==========================================================
+// Station table
+// ==========================================================
+
+// Fixed widths as in the network table; AP takes what is left
+const clientColumns = [
+    { key: "mac",    label: "Station", type: "str", width: 132 },
+    { key: "vendor", label: "Vendor",  type: "str", width: 156 },
+    { key: "ap",     label: "AP",      type: "str" },
+    { key: "ch",     label: "Channel", type: "num", width: 74 },
+    { key: "rssi",   label: "RSSI",    type: "num", width: 76 },
+    { key: "up",     label: "To AP",   type: "num", width: 80 },
+    { key: "down",   label: "From AP", type: "num", width: 80 },
+    { key: "probes", label: "Probes",  type: "num", width: 70 },
+    { key: "std",    label: "PHY",     type: "num", width: 64 },
+    { key: "nss",    label: "NSS",     type: "num", width: 56 },
+    { key: "width",  label: "Max width", type: "num", width: 92 },
+    { key: "feat",   label: "Features", type: "str", width: 170 },
+    { key: "age",    label: "Age",     type: "num", width: 60 },
+    { key: "notes",  label: "\u26a0",  type: "num", width: 50 }
+];
+
+/*
+ * The history keeps a snapshot taken at the last association
+ * request. Counters and ages in it stop there and drift apart
+ * from the live table, so they are left out: what the history
+ * is for is what the station could do and where it joined.
+ */
+const histColumns = [
+    { key: "mac",    label: "Station", type: "str", width: 132 },
+    { key: "vendor", label: "Vendor",  type: "str", width: 156 },
+    { key: "ap",     label: "AP at association", type: "str" },
+    { key: "ch",     label: "Channel", type: "num", width: 74 },
+    { key: "rssi",   label: "RSSI",    type: "num", width: 76 },
+    { key: "std",    label: "PHY",     type: "num", width: 64 },
+    { key: "nss",    label: "NSS",     type: "num", width: 56 },
+    { key: "width",  label: "Max width", type: "num", width: 92 },
+    { key: "feat",   label: "Features", type: "str", width: 170 },
+    { key: "assocs", label: "Assocs",  type: "num", width: 72 },
+    { key: "last",   label: "Last association", type: "num", width: 150 },
+    { key: "notes",  label: "\u26a0",  type: "num", width: 50 }
+];
+
+
+function clientValue(c, key, snapshot = false)
+{
+    if (key === "notes")
+        return noteScoreOf(stationNotes(c, snapshot));
+
+    if (key === "last")
+        return c.lastepoch || 0;
+
+    if (key === "feat")
+        return featureText(c);
+
+    if (key === "ap")
+    {
+        if (c.awdlonly)
+            return "AWDL only";
+
+        if (!c.assoc && c.bssid === "00:00:00:00:00:00")
+            return "-";
+
+        return apNameFor(c.bssid);
+    }
+
+    return c[key];
+}
+
+
+function clientCellText(c, key)
+{
+    if (key === "last")
+        return c.lastepoch ? stampText(c.lastepoch, 0) : "-";
+
+    if (key === "rssi")
+        return c.rssi + " dBm";
+
+    if (key === "age")
+        return c.age + " s";
+
+    if (key === "std")
+        return c.std ? stdShort(c.std) : "-";
+
+    if (key === "nss")
+        return c.nss ? c.nss + "SS" : "-";
+
+    if (key === "width")
+        return c.width ? c.width + " MHz" : "-";
+
+    return clientValue(c, key);
+}
+
+
+/*
+ * Sort column and direction of one station table. The history
+ * starts with the newest association; a key a table does not have
+ * sorts it by address.
+ */
+function clientSortFor(columns, history)
+{
+    if (history && !clientSortChosen)
+        return ["last", -1];
+
+    if (!columns.find(c => c.key === clientSortKey))
+        return ["mac", 1];
+
+    return [clientSortKey, clientSortDir];
+}
+
+
+function setClientSort(key)
+{
+    clientSortChosen = true;
+
+    if (clientSortKey === key)
+    {
+        clientSortDir = -clientSortDir;
+    }
+    else
+    {
+        clientSortKey = key;
+
+        const col = clientColumns.concat(histColumns)
+            .find(c => c.key === key);
+
+        clientSortDir = (col && col.type === "num") ? -1 : 1;
+    }
+
+    buildClientHead();
+    updateClientTable();
+    fillAssocHistory();
+}
+
+
+function buildClientHead()
+{
+    ["clientHead", "clientHeadProbe", "clientHeadHist"].forEach(id =>
+    {
+        const thead = document.getElementById(id);
+
+        const tr = document.createElement("tr");
+
+        const columns =
+            id === "clientHeadHist" ? histColumns : clientColumns;
+
+        const [key, dir] =
+            clientSortFor(columns, id === "clientHeadHist");
+
+        columns.forEach(c =>
+        {
+            const th = document.createElement("th");
+
+            th.innerHTML =
+                c.label +
+                (key === c.key
+                    ? " <span class='arrow'>" +
+                      (dir > 0 ? "\u25B2" : "\u25BC") +
+                      "</span>"
+                    : "");
+
+            if (c.key === "up" || c.key === "down")
+                th.title = "Frame counts, byte counts in the tooltip";
+
+            if (c.key === "notes")
+                th.title =
+                    "Hints that the tooltip spells out. Pink is an " +
+                    "element this sensor does not decode, amber " +
+                    "something odd: a rejected association, probing " +
+                    "without ever joining. Sorting puts amber above " +
+                    "any number of pink.";
+
+            if (c.key === "rssi" && id === "clientHeadHist")
+                th.title = "As heard with the association request";
+
+            if (c.key === "width")
+                th.title =
+                    "Widest channel the station supports, from its " +
+                    "capability elements. Not the width of the " +
+                    "channel it is on: 320 MHz exists in 6 GHz only.";
+
+            if (c.width)
+                th.style.width = c.width + "px";
+
+            th.onclick = () => setClientSort(c.key);
+
+            tr.appendChild(th);
+        });
+
+        const th = document.createElement("th");
+
+        th.innerHTML = "pcap";
+        th.title =
+            "Frames of this station in the capture buffer right " +
+            "now, as a pcap file for Wireshark. A station found " +
+            "through data frames alone has nothing here, since " +
+            "only management frames are recorded.";
+
+        th.style.cursor = "default";
+        th.style.width = "92px";
+
+        tr.appendChild(th);
+
+        thead.innerHTML = "";
+        thead.appendChild(tr);
+    });
+}
+
+
+function fillClientTable(tbodyId, list, columns = clientColumns,
+                         snapshot = false)
+{
+    const tbody = document.getElementById(tbodyId);
+
+    const [sortKey, sortDir] = clientSortFor(columns, snapshot);
+
+    const col = columns.find(c => c.key === sortKey);
+
+    list.sort((a, b) =>
+    {
+        const va = clientValue(a, sortKey, snapshot);
+        const vb = clientValue(b, sortKey, snapshot);
+
+        return (col && col.type === "num"
+                    ? (va - vb) * sortDir
+                    : String(va).localeCompare(
+                          String(vb),
+                          undefined,
+                          { numeric: true, sensitivity: "base" }
+                      ) * sortDir) ||
+               a.mac.localeCompare(b.mac);
+    });
+
+    tbody.innerHTML = "";
+
+    list.forEach(c =>
+    {
+        const tr = document.createElement("tr");
+
+        // Green marks a station whose capabilities come from a
+        // real association request, not just a probe
+        if (c.assocs > 0)
+            tr.classList.add("assocSeen");
+
+        tr.innerHTML =
+            columns.map(col2 =>
+                "<td>" +
+                (col2.key === "notes"
+                    ? noteBadgesOf(stationNotes(c, snapshot))
+                    : escapeHTML(String(clientCellText(c, col2.key)))) +
+                "</td>"
+            ).join("") +
+            "<td>" +
+            (c.pcapf
+                ? "<a class='dl' target='_blank' " +
+                  "onclick='return apiLink(event, this)' " +
+                  "href='/api/pcap?ta=" + c.mac + "'>" +
+                  c.pcapf + " frame" + (c.pcapf === 1 ? "" : "s") +
+                  "</a>"
+                : "<span class='dim'>none</span>") +
+            "</td>";
+
+        tr.addEventListener("mouseenter", ev =>
+        {
+            showTip(clientTooltip(c, snapshot), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mousemove", ev =>
+        {
+            showTip(clientTooltip(c, snapshot), ev.clientX, ev.clientY, true);
+        });
+
+        tr.addEventListener("mouseleave", hideTip);
+
+        pinOnClick(tr, () => clientTooltip(c, snapshot));
+
+        tbody.appendChild(tr);
+    });
+}
+
+
+/*
+ * The station filter, like the one for BSSIDs: every word has to
+ * match somewhere in what the table and the tooltip say about a
+ * station, its address, vendor and AP, probed SSIDs, capabilities,
+ * security, the guessed maker and chip, its vendor elements and
+ * unknown elements. Graph, both live tables and the history follow.
+ */
+function stationMatches(c)
+{
+    if (!stationFilterText)
+        return true;
+
+    const terms =
+        stationFilterText.toLowerCase().split(/\s+/).filter(t => t);
+
+    const m = apMakers(c);
+
+    const haystack = [
+        c.mac,
+        c.vendor,
+        c.bssid !== "00:00:00:00:00:00" ? c.bssid : "",
+        c.bssid ? apNameFor(c.bssid) : "",
+        c.apssid,
+        c.joined,
+        (c.ssids || []).join(" "),
+        "ch:" + c.ch,
+        capsText(c),
+        bandsText(c),
+        channelsText(c),
+        c.akm, c.cipher, c.pmf ? "pmf" : "",
+        c.wmm ? "wmm" : "",
+        c.wfacapa !== undefined
+            ? "qos management " + wfaCapaText(c.wfacapa) : "",
+        c.rsnsel !== undefined
+            ? "rsn selection " + rsnSelText(c.rsnsel) : "",
+        c.k ? "11k " + rrmText(c.rrm || 0) : "",
+        c.v || c.wnm ? "11v " + wnmText(c.wnm || 0) : "",
+        c.r ? "11r" : "",
+        c.roamsft ? "fast transition ft roam" : "",
+        c.maxidle ? "max idle" : "",
+        c.mld ? "mlo mld " + c.mld : "",
+        c.assoc ? "associated" : "probing",
+        m.makers.join(" "),
+        m.chips.map(x => x + " chip").join(" "),
+        (c.voui || []).map(v => v[2]).join(" "),
+        stationNotes(c, false).map(x => x[1]).join(" "),
+        awdlOf(c) ? "awdl apple " + awdlClassText(awdlOf(c).cls) : ""
+    ].join(" ").toLowerCase();
+
+    return terms.every(t => haystack.indexOf(t) >= 0);
+}
+
+
+function filteredStations()
+{
+    return stations.filter(stationMatches);
+}
+
+
+function clearStationFilter()
+{
+    document.getElementById("stationFilter").value = "";
+
+    stationFilterText = "";
+
+    updateClientTable();
+    drawClientGraph();
+    fillAssocHistory();
+}
+
+
+function updateClientTable()
+{
+    /*
+     * Two lists: stations for which a BSS is known, and those
+     * only ever seen probing. A station keeps its entry when it
+     * finally associates, it simply moves over.
+     */
+    const shown = filteredStations();
+
+    const assoc = shown.filter(c => c.assoc);
+    const awdl  = awdlOnlyStations().filter(stationMatches);
+    const probe = shown.filter(c => !c.assoc).concat(awdl);
+
+    fillClientTable("clientTable", assoc);
+    fillClientTable("clientTableProbe", probe);
+
+    const withAssocReq =
+        assoc.filter(c => c.assocs > 0).length;
+
+    document.getElementById("clientAssocInfo").innerText =
+        assoc.length + " stations, " + withAssocReq +
+        " with a captured association request";
+
+    document.getElementById("clientProbeInfo").innerText =
+        probe.length + " stations" +
+        (awdl.length ? ", " + awdl.length + " of them over AWDL only" : "");
+
+    document.getElementById("assocTabCount").innerText =
+        "(" + assoc.length + ")";
+
+    document.getElementById("probeTabCount").innerText =
+        "(" + probe.length + ")";
+}
+
+
+/*
+ * AWDL device class from the Version TLV. iPhone, iPad and Watch
+ * share one.
+ */
+function awdlClassText(cls)
+{
+    return {
+        1: "Mac (macOS)",
+        2: "iPhone, iPad or Watch (iOS, watchOS)",
+        8: "Apple TV (tvOS)"
+    }[cls] || (cls >= 0 ? "Apple, class " + cls : "Apple, class not sent");
+}
+
+// The AWDL sender that named this station as its own address
+function awdlOfStation(mac)
+{
+    return awdlDevices.find(d => d.sta === mac);
+}
+
+// The AWDL sender of a station row, an AWDL-only one included
+function awdlOf(c)
+{
+    return c.awdlonly || awdlOfStation(c.mac);
+}
+
+/*
+ * AWDL senders that name no station seen: an iPhone on no Wi-Fi
+ * network gives its AWDL address as its own and sends nothing
+ * else under it. They get a row of their own among the stations
+ * not associated, so that their tooltip can be looked at, in a
+ * snapshot too.
+ */
+function awdlOnlyStations()
+{
+    return awdlDevices
+        .filter(d => !stations.some(c => c.mac === d.sta ||
+                                         c.mac === d.mac))
+        .map(d => ({
+            mac: d.mac, vendor: "", bssid: "00:00:00:00:00:00",
+            assoc: 0, ch: d.ch, rssi: d.rssi, age: d.age,
+            seen: d.seen, up: 0, down: 0, probes: 0, std: 0, nss: 0,
+            width: 0, pcapf: 0, awdlonly: d
+        }));
+}
+
+// "10.0" from the Version TLV, major and minor in the nibbles
+function awdlVersionText(ver)
+{
+    return ver ? (ver >> 4) + "." + (ver & 15) : "";
+}
+
+function awdlOnlyTooltip(d)
+{
+    const zero = "00:00:00:00:00:00";
+
+    return "<b>" + d.mac + "</b> AWDL address<br>" +
+        "Only heard over AWDL (Apple Wireless Direct Link), no Wi-Fi " +
+        "frame of its own under this address<br>" +
+        "Channel " + d.ch + " \u00b7 RSSI " + d.rssi + " dBm \u00b7 " +
+        "last seen " + d.age + " s ago" +
+        tipSection("AWDL", [
+            ["Device", escapeHTML(awdlClassText(d.cls))],
+            ["Version", awdlVersionText(d.ver)],
+            ["Country", escapeHTML(d.cc || "")],
+            ["Wi-Fi", d.bssid && d.bssid !== zero
+                ? "on " + escapeHTML(apNameFor(d.bssid)) +
+                  (apNameFor(d.bssid) === d.bssid ? "" : " (" + d.bssid + ")") +
+                  (d.bch ? ", channel " + d.bch : "")
+                : (d.bssid ? "on no network" : "")],
+            ["Station", d.sta && d.sta !== d.mac
+                ? d.sta + " (not seen)" : ""],
+            ["Frames", d.frames + " AWDL frame" + (d.frames === 1 ? "" : "s") +
+                ", first " + d.seen + " s ago"]
+        ]);
+}
+
+
+// The station table shown; the choice is kept in this browser
+function showStationPane(id)
+{
+    document.querySelectorAll(".stationPane").forEach(e =>
+        e.classList.toggle("active", e.id === id));
+
+    document.querySelectorAll(".subTab").forEach(e =>
+        e.classList.toggle("active", e.dataset.pane === id));
+
+    try
+    {
+        localStorage.setItem("stationPane", id);
+    }
+    catch (e)
+    {
+    }
+}
+
+
+function escapeHTML(text)
+{
+    return String(text)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+}
+
+
+// ==========================================================
+// HTTP updates
+// ==========================================================
+
+async function updateLive()
+{
+    if (paused || scanMode !== "wifi")
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/live",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        liveData = await response.json();
+
+        // Fast sweep: keep the click until the device agrees
+        if (fastWanted !== null)
+        {
+            if (liveData.fast === (fastWanted ? 1 : 0))
+            {
+                fastWanted  = null;
+                fastRetries = 0;
+            }
+            else if (++fastRetries > 3)
+            {
+                fastRetries = 0;
+
+                sendFastSweep(fastWanted);
+            }
+        }
+        else
+        {
+            document.getElementById("fastSweep").checked =
+                (liveData.fast === 1);
+        }
+
+        // Capture settings, same idea
+        if (capWanted !== null)
+        {
+            if (liveData.capture === (capWanted.on ? 1 : 0) &&
+                liveData.capmask === capWanted.mask)
+            {
+                capWanted  = null;
+                capRetries = 0;
+            }
+            else if (++capRetries > 3)
+            {
+                capRetries = 0;
+
+                sendCapture(capWanted);
+            }
+        }
+        else
+        {
+            document.getElementById("captureOn").checked =
+                (liveData.capture === 1);
+
+            document.getElementById("capBeacons").checked =
+                (liveData.capmask & 1) !== 0;
+
+            document.getElementById("capProbes").checked =
+                (liveData.capmask & 2) !== 0;
+
+            document.getElementById("capAssoc").checked =
+                (liveData.capmask & 4) !== 0;
+
+            document.getElementById("capOther").checked =
+                (liveData.capmask & 8) !== 0;
+        }
+
+        document.getElementById("captureInfo").innerText =
+            (lastCommandError ? "[" + lastCommandError + "] " : "") +
+            "cmd " + cmdSent + " sent" +
+            (cmdFailed ? ", " + cmdFailed + " failed" : "") +
+            (pendingCommands.length
+                ? ", " + pendingCommands.length + " queued"
+                : "") +
+            " | types 0x" +
+            Number(liveData.capmask).toString(16).toUpperCase() +
+            (liveData.capture ? "" : " (capture off)") + " | " +
+            liveData.pcapcount + " of " + liveData.pcapcap +
+            " frames + " + liveData.assoc + "/" + liveData.assoccap +
+            " assoc + " + liveData.beacons + " beacons, " +
+            liveData.pcaptotal + " captured in total" +
+            (lastStatus && lastStatus.utc
+                ? " | clock " + lastStatus.utc + " " +
+                  (lastStatus.tzlabel || "UTC")
+                : "");
+
+        syncChannelBoxes(liveData.chans);
+
+        updateScanInfo();
+
+        // The channel is shown in the badge next to the
+        // version, the status line is only for transient
+        // messages now
+        if (!lastCommandError)
+            clearStatus();
+
+        drawSpectrum();
+    }
+    catch (e)
+    {
+        showOffline();
+    }
+}
+
+
+async function updateHistory()
+{
+    if (paused || scanMode !== "wifi" || !liveData)
+        return;
+
+    try
+    {
+        const range =
+            document.getElementById("historyTime").value;
+
+        const response =
+            await api(
+                "/api/history?range=" + range,
+                { cache: "no-store" }
+            );
+
+        historyData = await response.json();
+
+        drawWaterfall();
+        drawSpectrum();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+async function updateNetworks()
+{
+    if (paused || scanMode !== "wifi")
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/networks",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        const result = await response.json();
+
+        networks = result.networks;
+        sixGhzList = result.sixghz || [];
+
+        rememberApNames();
+
+        updateNetworkTable();
+        updateSixTable();
+
+        drawNetworkGraph();
+
+        highlightTableRow();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+async function updateClients()
+{
+    if (paused || scanMode !== "wifi")
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/clients",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        const result = await response.json();
+
+        stations = result.clients;
+        awdlDevices = result.awdl || [];
+
+        rememberStationApNames();
+
+        rebuildMldLinks();
+
+        updateClientTable();
+
+        drawClientGraph();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+function fillAssocHistory()
+{
+    const tbody = document.getElementById("assocHistTable");
+    const info  = document.getElementById("assocHistInfo");
+
+    const count = document.getElementById("histTabCount");
+
+    if (!assocHistory)
+    {
+        tbody.innerHTML = "";
+        info.innerText  = "";
+        count.innerText = "";
+
+        return;
+    }
+
+    const shown = assocHistory.clients.filter(stationMatches);
+
+    // Own columns without the counters, same tooltips and pcap links
+    fillClientTable("assocHistTable", shown, histColumns, true);
+
+    count.innerText = "(" + shown.length + ")";
+
+    const stamps = assocHistory.clients
+        .map(c => c.lastepoch)
+        .filter(e => e > 1600000000);
+
+    const newest = stamps.length ? Math.max(...stamps) : 0;
+
+    info.innerText =
+        assocHistory.clients.length + " of " +
+        assocHistory.slots + " slots" +
+        (newest ? ", last association " + stampText(newest, 0) : "") +
+        (assocHistory.dropped
+            ? ", " + assocHistory.dropped +
+              " older entries overwritten"
+            : "");
+}
+
+
+/*
+ * Absolute time once the clock has been set, an age before
+ * that. A permanent record is worth little with relative
+ * timestamps only.
+ */
+function stampText(epoch, ago)
+{
+    if (epoch > 1600000000)
+    {
+        // Shift, then read back as UTC, so the device offset
+        // applies rather than whatever the browser sits in
+        const d = new Date((epoch + tzOffsetSeconds()) * 1000);
+
+        return d.toISOString().slice(0, 16).replace("T", " ");
+    }
+
+    return uptimeText(ago) + " ago";
+}
+
+
+function tzOffsetSeconds()
+{
+    return (lastStatus && lastStatus.tz ? lastStatus.tz : 0) * 60;
+}
+
+
+// ==========================================================
+// IE catalog
+// ==========================================================
+
+let catalogData = null;
+
+
+function setCatalog(on)
+{
+    queueCommand("/api/catalog?enable=" + (on ? 1 : 0), () =>
+        updateCatalog(true));
+}
+
+window.setCatalog = setCatalog;
+
+
+function clearCatalog()
+{
+    if (!confirm("Discard the IE catalog and its pcap file?"))
+        return;
+
+    queueCommand("/api/catalogclear", () => updateCatalog(true));
+}
+
+window.clearCatalog = clearCatalog;
+
+
+/*
+ * Vendor specific elements by OUI and type, as far as known:
+ * Wireshark's dissector and hostapd's ieee802_11_defs.h.
+ */
+const VENDOR_IE_NAMES = {
+    0x0050F201: "WPA", 0x0050F202: "WMM", 0x0050F204: "WPS",
+    0x00A04000: "Apple Device IE, accessory such as CarPlay",
+    0x000B8601: "Aruba AP element (subtype 4 is ARM)",
+    0x000C4200: "MikroTik radio name",
+    0x08000900: "HP printer info",
+    0x00904C04: "Broadcom VHT (2.4 GHz 256-QAM)",
+    0x00137401: "QCA HE Capabilities (pre-802.11ax)",
+    0x00137402: "QCA HE Operation (pre-802.11ax)",
+    0x00904C33: "HT Capabilities (pre-802.11n)",
+    0x00904C34: "HT Information (pre-802.11n)",
+    0x506F9A09: "P2P (Wi-Fi Direct)", 0x506F9A0A: "Wi-Fi Display",
+    0x506F9A10: "Hotspot 2.0 Indication", 0x506F9A12: "OSEN",
+    0x506F9A23: "Wi-Fi Alliance Capabilities (QoS Management)",
+    0xFA0BBC0D: "Drone Remote ID (ASTM F3411)",
+    0x506F9A13: "NAN (Wi-Fi Aware)", 0x506F9A16: "MBO-OCE", 0x506F9A1A: "DPP",
+    0x506F9A1E: "DPP Configurator Connectivity",
+    0x506F9A1B: "Multi-AP (EasyMesh)",
+    0x506F9A1C: "OWE Transition Mode",
+    0x506F9A29: "RSNE Override", 0x506F9A2A: "RSNE Override 2",
+    0x506F9A2B: "RSNXE Override", 0x506F9A2C: "RSN Selection",
+    0x00037F01: "Atheros Advanced Capability",
+    0x00409603: "Cisco CCX version", 0x00409614: "Cisco CCX client MFP",
+    0x0050F211: "Microsoft Network Cost",
+    0x5C5B3501: "Mist AP name",
+    0x00301A01: "Firmware version"
+};
+
+/*
+ * Short maker names for the OUIs of vendor elements, for the list
+ * of what the sensor reads: an element without a name of its own
+ * shows as "<maker> proprietary". MAKER_NAMES and WIFI_CHIP_OUIS
+ * are asked first.
+ */
+const VENDOR_IE_MAKERS = {
+    "0000F0": "Samsung", "0012FB": "Samsung", "001632": "Samsung",
+    "30CDA7": "Samsung", "000393": "Apple", "0017F2": "Apple",
+    "00040E": "AVM", "000456": "Cambium", "001349": "Zyxel",
+    "001392": "Ruckus", "001F41": "Ruckus", "00146C": "NETGEAR",
+    "00156D": "Ubiquiti", "00180A": "Cisco Meraki", "004096": "Cisco",
+    "001C62": "LG", "003192": "TP-Link", "0050F2": "Microsoft",
+    "00A057": "LANCOM", "743170": "Arcadyan", "94BBAE": "Husqvarna",
+    "C83A6B": "Roku", "F832E4": "ASUS", "AC853D": "HUAWEI",
+    "000B82": "Grandstream",
+    "506F9A": "Wi-Fi Alliance"
+};
+
+// "00-00-00-00" for the misplaced suite of a network
+function suiteBadText(n)
+{
+    return [24, 16, 8, 0].map(s => ((n.suitebad[1] >>> s) & 255)
+        .toString(16).toUpperCase().padStart(2, "0")).join("-");
+}
+
+
+// "Apple proprietary" for a vendor element without a name
+function vendorIeName(key)
+{
+    const name = VENDOR_IE_NAMES[key >>> 0];
+
+    if (name)
+        return name;
+
+    const oui = ouiText(key).replace(/:/g, "");
+
+    if (NO_MAKER_OUIS.includes(oui))
+        return "proprietary, the OUI names no maker";
+
+    const maker = MAKER_NAMES[oui] || WIFI_CHIP_OUIS[oui] ||
+                  VENDOR_IE_MAKERS[oui];
+
+    return maker ? maker + " proprietary"
+                 : "proprietary, OUI without a known maker";
+}
+
+
+// "00:17:F2" from the upper three bytes of a key
+function ouiText(key)
+{
+    return [key >>> 24, (key >>> 16) & 255, (key >>> 8) & 255]
+        .map(b => b.toString(16).toUpperCase().padStart(2, "0"))
+        .join(":");
+}
+
+
+function catalogName(e)
+{
+    const vendor = e.vn ? " (" + escapeHTML(e.vn) + ")" : "";
+
+    switch (e.k)
+    {
+        case 0: return ["Element", escapeHTML(elementName(e.id))];
+        case 1: return ["Element", escapeHTML(elementName(256 + e.id))];
+        case 2: return ["Vendor", ouiText(e.id) + " type " +
+                                  (e.id & 255) +
+                                  (VENDOR_IE_NAMES[e.id >>> 0]
+                                      ? " " + VENDOR_IE_NAMES[e.id >>> 0]
+                                      : "") + vendor];
+        case 3: return ["AKM", ouiText(e.id) + " suite " +
+                               (e.id & 255) + vendor];
+        default: return ["Cipher", ouiText(e.id) + " suite " +
+                                   (e.id & 255) + vendor];
+    }
+}
+
+
+/*
+ * How many devices sent it besides the example: the catalog keeps
+ * frames of up to ten senders per row. " (+3 more senders)"
+ */
+function senderText(e)
+{
+    const others = (e.snd || 1) - 1;
+
+    if (e.sndmore)
+        return " (+" + others + " or more senders)";
+
+    return others > 0
+        ? " (+" + others + " more sender" + (others > 1 ? "s" : "") + ")"
+        : "";
+}
+
+
+/*
+ * The element split into the catalog's columns, so a narrow
+ * screen need not squeeze it all into one: [type, number or OUI,
+ * vendor, vendor type or suite number, name]. Unescaped text.
+ */
+function catalogCells(e)
+{
+    const vendor = e.vn || "";
+
+    // Decoded in part but kept in the catalog, as the firmware says
+    const reads = (catalogData && catalogData.reads) || {};
+    const part = (reads.part || [107]).includes(e.id);
+    const vpart = (reads.vpart || [0x00A04000]).includes(e.id >>> 0);
+
+    switch (e.k)
+    {
+        case 0: return ["Element", String(e.id), "", "",
+                        (IE_NAMES[e.id] || "unnamed") +
+                        (part ? " (parsed)" : "")];
+        case 1: return ["Element", "ext " + e.id, "", "",
+                        IE_EXT_NAMES[e.id] || "unnamed"];
+        case 2: return ["Vendor", ouiText(e.id), vendor, e.id & 255,
+                        (VENDOR_IE_NAMES[e.id >>> 0] || "") +
+                        (vpart ? " (parsed)" : "")];
+        case 3: return ["AKM", ouiText(e.id), vendor, e.id & 255, ""];
+        default: return ["Cipher", ouiText(e.id), vendor, e.id & 255,
+                         ""];
+    }
+}
+
+
+/*
+ * [epoch, clock source, boot]: a real time when the sensor had
+ * a clock, otherwise the boot and the time since it.
+ */
+function catalogTime(t)
+{
+    if (t[1] === 0)
+        return "boot " + t[2] + ", +" +
+               (t[0] < 60 ? t[0] + " s" : uptimeText(t[0]));
+
+    const tz = (lastStatus && lastStatus.tz) || 0;
+
+    return new Date((t[0] + tz * 60) * 1000).toISOString()
+        .replace("T", " ").substring(0, 19);
+}
+
+
+/*
+ * Catalog order, chosen by clicking a column head like in the
+ * network and station tables: type and number by default. A time
+ * is [at, clock, boot]; "at" is UTC once the clock was set and
+ * the seconds since the start before, so boot first, then "at".
+ * Each order is ascending; numbers and times start descending.
+ */
+const CATALOG_ORDER = {
+    type:   (a, b) => a.k - b.k || a.id - b.id,
+    id:     (a, b) => a.k - b.k || a.id - b.id,
+    sub:    (a, b) => catalogCells(a)[3] - catalogCells(b)[3],
+    name:   (a, b) => catalogCells(a)[4].localeCompare(catalogCells(b)[4]),
+    vendor: (a, b) => (a.vn || "").localeCompare(b.vn || ""),
+    in:     (a, b) => a.in - b.in,
+    count:  (a, b) => a.n - b.n,
+    first:  (a, b) => a.f[2] - b.f[2] || a.f[0] - b.f[0],
+    last:   (a, b) => a.l[2] - b.l[2] || a.l[0] - b.l[0],
+    mac:    (a, b) => a.mac.localeCompare(b.mac),
+    ch:     (a, b) => a.ch - b.ch,
+    frames: (a, b) => a.fr - b.fr
+};
+
+const CATALOG_DESC_FIRST = ["count", "first", "last", "frames"];
+
+let catalogSortKey = "id";
+let catalogSortDir = 1;
+
+try
+{
+    const saved = (localStorage.getItem("catalogSort") || "").split(":");
+
+    if (CATALOG_ORDER[saved[0]])
+    {
+        catalogSortKey = saved[0];
+        catalogSortDir = saved[1] === "-1" ? -1 : 1;
+    }
+}
+catch (e)
+{
+    // Private mode or storage disabled, not important
+}
+
+function setCatalogSort(key)
+{
+    if (catalogSortKey === key)
+        catalogSortDir = -catalogSortDir;
+    else
+    {
+        catalogSortKey = key;
+        catalogSortDir = CATALOG_DESC_FIRST.includes(key) ? -1 : 1;
+    }
+
+    try
+    {
+        localStorage.setItem("catalogSort",
+                             catalogSortKey + ":" + catalogSortDir);
+    }
+    catch (e)
+    {
+        // Private mode or storage disabled, not important
+    }
+
+    fillCatalog();
+}
+
+// Arrow in the head of the sorted column
+function catalogHeadArrows()
+{
+    document.querySelectorAll("#catalogHead th[data-sort]").forEach(th =>
+    {
+        if (!th.dataset.label)
+        {
+            th.dataset.label = th.innerText;
+            th.onclick = () => setCatalogSort(th.dataset.sort);
+        }
+
+        th.innerHTML = escapeHTML(th.dataset.label) +
+            (th.dataset.sort === catalogSortKey
+                ? " <span class='arrow'>" +
+                  (catalogSortDir > 0 ? "\u25B2" : "\u25BC") + "</span>"
+                : "");
+    });
+}
+
+
+function fillCatalog()
+{
+    const d = catalogData;
+
+    if (!d)
+        return;
+
+    document.getElementById("catalogEnable").checked = d.enabled === 1;
+
+    catalogHeadArrows();
+
+    const rows = d.entries.slice().sort((a, b) =>
+        CATALOG_ORDER[catalogSortKey](a, b) * catalogSortDir ||
+        CATALOG_ORDER.id(a, b));
+
+    document.getElementById("catalogTable").innerHTML = rows.map(e =>
+    {
+        const name = catalogName(e)[1];
+        const cells = catalogCells(e).map(c => escapeHTML(String(c)));
+
+        return "<tr>" +
+            cells.map(c => "<td title=\"" + c + "\">" + c + "</td>")
+                .join("") +
+            "<td>" + seenInText(e.in) + "</td>" +
+            "<td>" + e.n + "</td>" +
+            "<td>" + catalogTime(e.f) + "</td>" +
+            "<td>" + catalogTime(e.l) + "</td>" +
+            "<td title='" + escapeHTML(e.ssid) + "'>" + e.mac +
+                (e.ssid ? " " + escapeHTML(e.ssid) : "") +
+                senderText(e) + "</td>" +
+            "<td>" + e.ch + "</td>" +
+            "<td>" + e.fr + "</td>" +
+            "<td>" + (e.fr
+                ? "<a class='dl' target='_blank' download='" +
+                  catalogFileName(e, name) + "' " +
+                  "onclick='return apiLink(event, this)' " +
+                  "href='/api/catalog.pcap?k=" + e.k + "&id=" +
+                  e.id + "'>pcap</a>"
+                : "") + "</td>" +
+            "</tr>";
+    }).join("") ||
+        "<tr><td colspan='13' class='small'>" +
+        (d.enabled ? "Nothing unknown seen yet."
+                   : "Recording is off.") + "</td></tr>";
+
+    // Static, filled once
+    const reads = document.getElementById("catalogReadsBody");
+
+    if (d.reads && !reads.dataset.done)
+    {
+        reads.innerHTML = catalogReadsHTML(d.reads);
+        reads.dataset.done = "1";
+    }
+
+    document.getElementById("catalogInfo").innerText =
+        " \u00b7 " + d.entries.length + " of " + d.max + " rows" +
+        (d.lost ? ", " + d.lost + " sightings lost, table full" : "");
+
+    document.getElementById("catalogStore").innerText =
+        d.fs
+            ? "pcap " + Math.round(d.pcap / 1024) + " of " +
+              Math.round(d.pcapmax / 1024) + " kB, flash " +
+              Math.round(d.used / 1024) + " of " +
+              Math.round(d.total / 1024) + " kB used"
+            : "no file system, nothing is kept";
+}
+
+
+/*
+ * "What this sensor reads", from the lists the firmware sends with
+ * the catalog: element numbers by how far they are read, vendor
+ * elements by OUI and type, AKM and cipher suites with their names.
+ */
+function catalogReadsHTML(r)
+{
+    const el = id => id + " " + (IE_NAMES[id] || "unnamed");
+    const ext = id => "ext " + id + " " + (IE_EXT_NAMES[id] || "unnamed");
+    const vendor = key => ouiText(key) + " type " + (key & 255) + " " +
+        vendorIeName(key);
+    const suite = ([key, name]) =>
+        ouiText(key) + " " + (key & 255) + " " + name;
+
+    const groups = [
+        ["Decoded and shown",
+         r.dec.filter(id => !r.part.includes(id)).map(el)
+             .concat(r.decx.map(ext))],
+        ["Decoded in part, still catalogued",
+         r.part.map(el).concat(r.vpart.map(vendor))],
+        ["Recognised, not shown",
+         r.pass.map(el).concat(r.passx.map(ext))],
+        ["Vendor elements decoded", r.vend.map(vendor)],
+        ["Vendor elements reviewed, content not shown",
+         (r.vrev || []).map(vendor)],
+        ["AKM suites with a name", r.akm.map(suite)],
+        ["Cipher suites with a name", r.cipher.map(suite)]
+    ];
+
+    return groups.map(([title, items]) =>
+        "<div class='readsGroup'>" + title + " (" + items.length + ")</div>" +
+        items.map(t => "<span class='readsItem'>" + escapeHTML(t) +
+                       "</span>").join("")).join("") +
+        "<div class='readsGroup'>Everything else</div>" +
+        "<span class='readsItem'>goes into the table above when " +
+        "heard while recording is on. The OUI of every vendor " +
+        "element, listed here or not, names maker or chip under " +
+        "BEST GUESS in the network tooltip.</span>";
+}
+
+
+/*
+ * The firmware's file name for one entry plus the element's name,
+ * "element-ie73-20-40-bss-intolerant-channel-report.pcap".
+ */
+function catalogFileName(e, name)
+{
+    const hex = (e.id >>> 8).toString(16).toUpperCase().padStart(6, "0");
+
+    const base =
+        e.k === 0 ? "element-ie" + e.id
+        : e.k === 1 ? "element-ext" + e.id
+        : "element-" + ["vendor", "akm", "cipher"][e.k - 2] + "-" +
+          hex + "-" + (e.id & 255);
+
+    // The name without its number, OUI, type and vendor
+    const words = name.replace(/<[^>]*>|&[a-z]+;/g, "")
+        .replace(/\([^)]*\)/g, "")
+        .replace(/^[0-9A-F:]+ (type|suite) [0-9]+/i, "")
+        .replace(/^(ext )?[0-9]+ /, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+
+    return base + (words && words !== "unnamed" ? "-" + words : "") +
+           ".pcap";
+}
+
+
+// The catalog's state for the System table on the settings page
+function catalogSystemText(c)
+{
+    if (!c)
+        return "";
+
+    if (!c.fs)
+        return "no file system, nothing is kept";
+
+    return (c.enabled ? "recording" : "off") + ", " +
+           c.rows + " of " + c.max + " rows, flash " +
+           Math.round(c.used / 1024) + " of " +
+           Math.round(c.total / 1024) + " kB used";
+}
+
+
+async function updateCatalog(force)
+{
+    if (!force && (paused || scanMode !== "wifi"))
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/catalog",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        catalogData = await response.json();
+
+        fillCatalog();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+async function updateAssocHistory()
+{
+    if (paused || scanMode !== "wifi")
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/assochistory",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        assocHistory = await response.json();
+
+        // Its BSSIDs may be long gone from the live tables
+        rememberStationApNames(assocHistory.clients);
+
+        rebuildMldLinks();
+
+        fillAssocHistory();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+async function updateBle()
+{
+    if (scanMode === "zb")
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/ble",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        const result = await response.json();
+
+        bleDevices = result.devices;
+
+        bleStats = {
+            frames: result.frames,
+            drops: result.drops
+        };
+
+        document.getElementById("bleActive").checked =
+            (result.active === 1);
+
+        if (scanMode === "ble")
+        {
+            clearStatus();
+        }
+
+        updateBleTable();
+
+        drawBleGraph();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+let deviceOnline = false;
+
+let lastStatus = null;
+
+
+async function updateStatus()
+{
+    try
+    {
+        const response =
+            await api("/api/status",
+                        { cache: "no-store", signal: timeoutSignal(3000) });
+
+        const st = await response.json();
+
+        lastStatus = st;
+
+        deviceOnline = true;
+
+        checkChanges(st);
+
+        // The sensor answers again: drop "Not connected" or
+        // "Connection lost", whichever view is open
+        clearOfflineText();
+
+        // Scan state last and padded, so the badge keeps its
+        // width while the sweep runs
+        document.getElementById("version").innerText =
+            "v" + st.version +
+            " | " + st.oui + " OUIs" +
+            // Web clients mean nothing over USB; same width either way
+            (snapshotView ? " |  snapshot"
+             : usbLink ? " |   via USB"
+                       : " | " + String(st.clients).padStart(2) +
+                         (st.clients === 1 ? " client " : " clients")) +
+            (st.static ? " | static IP " + st.ip : "") +
+            " | scan: " + st.scan;
+
+        const serverMode =
+            st.mode === 1 ? "ble"
+                          : (st.mode === 2 ? "zb" : "wifi");
+
+        if (serverMode !== scanMode)
+        {
+            scanMode = serverMode;
+
+            // Stay on the settings page if that is what is open
+            if (uiPage !== "settings")
+                uiPage = scanMode;
+
+            applyModeUI();
+
+            // Pull fresh data for the mode we just landed in
+            if (scanMode === "wifi")
+            {
+                updateLive();
+                updateNetworks();
+                updateClients();
+            }
+            else if (scanMode === "ble")
+            {
+                updateBle();
+            }
+            else
+            {
+                updateZb();
+            }
+        }
+
+        if (scanMode !== "wifi")
+        {
+
+        }
+    }
+    catch (e)
+    {
+        deviceOnline = false;
+
+        showOffline();
+    }
+}
+
+
+async function updateZb()
+{
+    if (scanMode !== "zb")
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/zb",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        zbData = await response.json();
+
+        if (scanMode === "zb")
+        {
+            clearStatus();
+        }
+
+        applyZbScanUI();
+
+        updateZbTable();
+
+        drawZbSpectrum();
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+// ==========================================================
+// Settings page
+// ==========================================================
+
+function kB(bytes)
+{
+    return (bytes / 1024).toFixed(1) + " kB";
+}
+
+
+function uptimeText(seconds)
+{
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const sec = seconds % 60;
+
+    if (d)
+        return d + " d " + h + " h " + m + " min";
+
+    if (h)
+        return h + " h " + m + " min " + sec + " s";
+
+    return m + " min " + sec + " s";
+}
+
+
+function fillRows(tbodyId, rows)
+{
+    const tbody = document.getElementById(tbodyId);
+
+    tbody.innerHTML = "";
+
+    rows.forEach(r =>
+    {
+        const tr = document.createElement("tr");
+
+        // An optional third entry turns the value into a link
+        const value = escapeHTML(String(r[1]));
+
+        tr.innerHTML =
+            "<td>" + escapeHTML(r[0]) + "</td>" +
+            "<td>" +
+            (r[2]
+                ? "<a class=\"dl\" href=\"" + escapeHTML(r[2]) + "\"" +
+                  " target=\"_blank\" rel=\"noopener\">" + value + "</a>"
+                : value) +
+            "</td>";
+
+        tbody.appendChild(tr);
+    });
+}
+
+
+/*
+ * Firmware update: the file goes to /api/ota, the sensor writes
+ * it into its other slot and restarts; the page waits until the
+ * new version answers and reloads.
+ */
+let otaBusy = false;
+
+function otaInfoText(o)
+{
+    if (!o)
+        return "";
+
+    if (!o.other)
+        return "not possible yet: this sensor still has the old " +
+               "partition table without a second slot, flash it " +
+               "over USB once";
+
+    return "running from " + o.slot +
+           (o.pending ? " (new, not confirmed yet)" : "") +
+           " \u00b7 " + o.other + ": " +
+           (o.prev ? "v" + o.prev : "empty") +
+           (o.failed ? " (did not start properly, rolled back)" : "") +
+           " \u00b7 slots of " + (o.size / 1048576).toFixed(2) + " MB";
+}
+
+function showOta(o)
+{
+    document.getElementById("otaInfo").innerText = otaInfoText(o);
+
+    const back = document.getElementById("otaRollback");
+
+    back.style.display = o && o.rollback && !otaBusy ? "" : "none";
+    back.innerText = "Back to v" + ((o && o.prev) || "?");
+}
+
+function otaStatus(text)
+{
+    document.getElementById("otaStatus").innerText = text;
+}
+
+// Polls until the sensor answers with the expected version
+function waitForFirmware(version, since)
+{
+    api("/api/system", { cache: "no-store", signal: timeoutSignal(3000) })
+        .then(r => r.json())
+        .then(sys =>
+        {
+            if (!version || sys.version === version)
+            {
+                // Over USB a reload would drop the link, which only a
+                // tap on USB opens again
+                if (usbReconnect)
+                {
+                    usbReconnect = false;
+                    otaBusy = false;
+                    otaStatus("v" + sys.version + " running");
+                    // It started without a clock, and no page load
+                    // follows to hand it over
+                    sendBrowserTime();
+                    updateSystem();
+                    updateStatus();
+                    return;
+                }
+
+                otaStatus("v" + sys.version + " running, reloading");
+                setTimeout(() => location.reload(), 1000);
+            }
+            else
+                throw new Error("still v" + sys.version);
+        })
+        .catch(() =>
+        {
+            const secs = Math.round((Date.now() - since) / 1000);
+
+            if (secs > 120)
+            {
+                otaBusy = false;
+                usbReconnect = false;
+                otaStatus("no answer with v" + version + " after 2 min; " +
+                          "a firmware that does not start goes back " +
+                          "to the previous one on its own");
+                return;
+            }
+
+            otaStatus("restarting, waiting " + secs + " s");
+            setTimeout(() => waitForFirmware(version, since), 2000);
+        });
+}
+
+function uploadFirmware()
+{
+    const file = document.getElementById("otaFile").files[0];
+
+    if (!file)
+    {
+        otaStatus("choose wlanscout.ino.bin first");
+        return;
+    }
+
+    if (otaBusy ||
+        !confirm("Write " + file.name + " (" +
+                 Math.round(file.size / 1024) + " kB) and restart " +
+                 "the sensor?"))
+        return;
+
+    otaBusy = true;
+
+    if (usbLink)
+    {
+        uploadFirmwareUsb(file);
+        return;
+    }
+
+    const form = new FormData();
+
+    form.append("firmware", file, file.name);
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = e =>
+    {
+        if (e.lengthComputable)
+            otaStatus("uploading " +
+                      Math.round(100 * e.loaded / e.total) + " %");
+    };
+
+    xhr.onload = () =>
+    {
+        let answer = {};
+
+        try { answer = JSON.parse(xhr.responseText); } catch (e) { }
+
+        if (!answer.ok)
+        {
+            otaBusy = false;
+            otaStatus("refused: " + (answer.error || "HTTP " + xhr.status));
+            return;
+        }
+
+        otaStatus("v" + answer.version + " written, restarting");
+        setTimeout(() => waitForFirmware(answer.version, Date.now()), 3000);
+    };
+
+    xhr.onerror = () =>
+    {
+        otaBusy = false;
+        otaStatus("upload failed, connection lost");
+    };
+
+    xhr.open("POST", "/api/ota");
+    xhr.send(form);
+}
+
+/*
+ * The same over USB: the bytes behind "PUT /api/ota?len=N", see
+ * usbApiRequest() in the firmware. The sensor restarts, comes back
+ * as a new USB device and is taken up again (the "connect" handler);
+ * the requests from then on also confirm the new firmware, which
+ * otherwise goes back to the previous one after five minutes.
+ */
+async function uploadFirmwareUsb(file)
+{
+    try
+    {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+
+        const response = await usbLink.request(
+            "/api/ota?len=" + bytes.length, bytes,
+            { timeout: 300000,
+              progress: (done, all) => otaStatus("uploading over USB " +
+                  Math.round(100 * done / all) + " %") });
+
+        const answer = await response.json();
+
+        if (!answer.ok)
+            throw new Error(answer.error);
+
+        usbReconnect = true;
+
+        otaStatus("v" + answer.version + " written, restarting");
+        setTimeout(() => waitForFirmware(answer.version, Date.now()), 3000);
+    }
+    catch (e)
+    {
+        otaBusy = false;
+        otaStatus("refused: " + (e.message || e));
+    }
+}
+
+function rollbackFirmware()
+{
+    const back = document.getElementById("otaRollback").innerText;
+
+    if (otaBusy || !confirm(back + " and restart the sensor?"))
+        return;
+
+    otaBusy = true;
+    usbReconnect = !!usbLink;
+
+    api("/api/otarollback", { cache: "no-store" })
+        .then(r => r.json())
+        .then(answer =>
+        {
+            if (!answer.ok)
+                throw new Error(answer.error);
+
+            otaStatus("restarting");
+            setTimeout(() => waitForFirmware("", Date.now()), 4000);
+        })
+        .catch(e =>
+        {
+            otaBusy = false;
+            otaStatus("rollback failed: " + e.message);
+        });
+}
+
+window.uploadFirmware   = uploadFirmware;
+window.rollbackFirmware = rollbackFirmware;
+
+
+async function updateSystem()
+{
+    if (uiPage !== "settings")
+        return;
+
+    try
+    {
+        const response =
+            await api("/api/system",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        const sys = await response.json();
+
+        const modeName =
+            sys.counters.mode === 1 ? "BLE"
+                : (sys.counters.mode === 2 ? "802.15.4" : "Wi-Fi");
+
+        const clockName =
+            sys.clock === 2 ? "NTP"
+                : sys.clock === 1 ? "browser"
+                : sys.clock === 3
+                    ? "Wi-Fi time advertisement " +
+                      (sys.clockapn
+                          ? "(median of " + sys.clockapn + " APs)"
+                          : "of " + sys.clockap) +
+                      ", set " + uptimeText(sys.clockapago) + " ago"
+                : "not set";
+
+        const tzField = document.getElementById("tzSelect");
+
+        if (tzField && document.activeElement !== tzField)
+            tzField.value = String(sys.tz || 0);
+
+        const nameField = document.getElementById("sensorName");
+
+        if (document.activeElement !== nameField)
+            nameField.value = sys.sensor || "";
+
+        const adjustText =
+            Math.abs(sys.ntpadjust) >= 1000
+                ? (sys.ntpadjust / 1000).toFixed(1) + " s"
+                : sys.ntpadjust + " ms";
+
+        const syncText =
+            sys.ntpsync
+                ? (sys.ntpsync + " " + (sys.tzlabel || "UTC") + ", " +
+                   uptimeText(sys.ntpago) + " ago" +
+                   (sys.ntpadjust
+                       ? ", corrected by " + adjustText
+                       : ", first sync"))
+                : "never";
+
+        // The log shows times in the display offset, so say which
+        document.getElementById("logTimeHead").innerText =
+            "Time (" + (sys.tzlabel || "UTC") + ")";
+
+        fillRows("sysTable", [
+            ["Firmware", "v" + sys.version],
+            ["Source", "github.com/Oposum01/wlanscout",
+                "https://github.com/Oposum01/wlanscout"],
+            ["Author", "jf [at] simonwunderlich . de",
+                "https://www.simonwunderlich.de/"],
+            ["Uptime", uptimeText(sys.uptime)],
+            ["Boot", sys.boot ? "#" + sys.boot + " since the first start" : ""],
+            ["Scanner mode", modeName],
+            ["Clock source", clockName],
+            ["Device time", sys.utc + " " + (sys.tzlabel || "UTC")],
+            ["Last clock sync", syncText],
+            ["NTP server", sys.ntpserver +
+                ", asked every " +
+                Math.round(sys.ntpinterval / 60) + " min"],
+            ["Clock corrections", sys.ntpcount +
+                " above 50 ms since start" +
+                (sys.uptime > 3600
+                    ? ", one every " +
+                      (sys.ntpcount
+                          ? (sys.uptime / 3600 / sys.ntpcount).toFixed(1)
+                          : "-") + " h"
+                    : "")],
+            ["OUI entries", sys.oui]
+        ]);
+
+        showOta(sys.ota);
+
+        const net = sys.net;
+
+        // What the firmware would ask DHCP for now, see buildHostname()
+        const hostnameFor = (name, mac) =>
+        {
+            const part = (name || "").toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+                .substring(0, 32).replace(/-+$/, "");
+
+            return "wlanscout-" + (part ||
+                (mac || "").replace(/:/g, "").toLowerCase().slice(-6));
+        };
+
+        fillRows("netTable", [
+            ["Address", net.ip +
+                (net.static ? " (static fallback)" : " (DHCP)")],
+            ["Gateway", net.gw],
+            ["Subnet mask", net.mask],
+            ["DNS", net.dns],
+            ["MAC", net.mac],
+            ["Hostname", net.hostname
+                ? net.hostname +
+                  (net.hostname !== hostnameFor(sys.sensor, net.mac)
+                      ? " (the new name follows after a restart)" : "")
+                : ""],
+            ["Link", net.link
+                ? (net.speed + " Mbps, " +
+                   (net.duplex ? "full duplex" : "half duplex"))
+                : "down"],
+            ["Failed DHCP attempts", net.dhcptries],
+            ["DHCP client", net.dhcpstate]
+        ].concat(net.lease ? [["DHCP lease", leaseText(net.lease)]] : []));
+
+        fillCpu(sys);
+
+        fillCrash(sys);
+
+        const mem = sys.mem;
+
+        fillRows("memTable", [
+            ["Internal heap free", kB(mem.heap) +
+                " of " + kB(mem.heaptotal)],
+            ["Internal heap minimum since boot", kB(mem.heapmin)],
+            ["Largest free internal block", kB(mem.block)],
+            ["PSRAM free", kB(mem.psramfree) +
+                " of " + kB(mem.psramtotal)]
+        ]);
+
+        // Allocations
+        const head = document.getElementById("allocHead");
+
+        head.innerHTML =
+            "<tr><th>Buffer</th><th>Size</th><th>Located in</th>" +
+            "<th></th></tr>";
+
+        const tbody = document.getElementById("allocTable");
+
+        tbody.innerHTML = "";
+
+        let sumPsram = 0;
+        let sumInternal = 0;
+
+        sys.alloc.forEach(a =>
+        {
+            if (a.psram)
+                sumPsram += a.bytes;
+            else
+                sumInternal += a.bytes;
+
+            const tr = document.createElement("tr");
+
+            /*
+             * Only the buffers that hold captured data can be
+             * emptied; the rest of the list is just inventory.
+             */
+            const clears = {
+                "pcap ring":     "ring",
+                "beacon slots":  "beacons",
+                "assoc ring":    "assoc",
+                "assoc history": "history"
+            };
+
+            const what = clears[a.name];
+
+            /*
+             * The history holds station records, not frames,
+             * so there is nothing to export as pcap from it.
+             */
+            const canDownload = (what && what !== "history");
+
+            tr.innerHTML =
+                "<td>" + escapeHTML(a.name) + "</td>" +
+                "<td>" + kB(a.bytes) + "</td>" +
+                "<td>" + (a.psram ? "PSRAM" : "internal") + "</td>" +
+                "<td>" +
+                (canDownload
+                    ? "<button class='small' onclick=\"" +
+                      "apiDownload('/api/pcap?src=" + what +
+                      "')\">download all</button> "
+                    : "") +
+                (what
+                    ? "<button class='small' onclick=\"uiAction(" +
+                      "window.clearBuffer, '" + what + "')\">" +
+                      "clear</button>"
+                    : "") +
+                "</td>";
+
+            tbody.appendChild(tr);
+        });
+
+        const trSum = document.createElement("tr");
+
+        trSum.innerHTML =
+            "<td><b>Total</b></td>" +
+            "<td><b>" + kB(sumPsram + sumInternal) + "</b></td>" +
+            "<td>" + kB(sumPsram) + " PSRAM, " +
+            kB(sumInternal) + " internal</td>" +
+            "<td></td>";
+
+        tbody.appendChild(trSum);
+
+        const c = sys.counters;
+        const p = sys.pcap;
+
+        const maskText = [];
+
+        if (p.mask & 1) maskText.push("beacons and probe responses");
+        if (p.mask & 2) maskText.push("probe requests");
+        if (p.mask & 4) maskText.push("association requests");
+        if (p.mask & 8) maskText.push("action, auth and deauth");
+
+        fillRows("idTable", [
+            ["Sensor id", sys.sensor && sys.sensorid
+                ? sys.sensorid : "-"],
+            ["Sensor name", sys.sensor || "not set"],
+            ["Export schema", "/api/export, schema 1"]
+        ]);
+
+        fillRows("cntTable", [
+            ["Sweeps completed", c.sweeps],
+            ["Channels selected", c.selected],
+            ["Channels in the current plan", c.plan +
+                (c.fast ? " (fast sweep)" : " (standard sweep)")],
+            ["Management frames dropped", c.mgmtdrops],
+            ["Data frames dropped", c.datadrops],
+            ["Frames with a bad FCS", c.fcs],
+            ["Capture", p.enabled ? "on" : "off"],
+            ["Captured frame types",
+                (maskText.length ? maskText.join(", ") : "none") +
+                " (0x" +
+                Number(p.mask).toString(16).toUpperCase() + ")"],
+            ["Frames in the ring", p.count + " of " + p.cap +
+                " (" + kB(p.bytes) + " of frame data)"],
+            ["Beacons held, newest per AP",
+                p.beacons + " of " + p.beaconslots +
+                " slots (" + p.beacontotal + " seen in total)"],
+            ["Association requests in their own ring",
+                p.assoc + " of " + p.assoccap +
+                " (" + p.assoctotal + " captured in total)"],
+            ["Frames captured in total", p.total],
+            ["Buffer reserved", kB(p.slot * p.cap) +
+                ", " + p.slot + " bytes per slot"],
+            ["IE catalog", catalogSystemText(sys.catalog)]
+        ]);
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+
+    await updateLog();
+}
+
+
+async function setTimezone(minutes)
+{
+    queueCommand("/api/mode?tz=" + encodeURIComponent(minutes));
+}
+
+
+window.setTimezone = setTimezone;
+
+
+function saveSensorName()
+{
+    const name = document.getElementById("sensorName").value;
+
+    queueCommand("/api/mode?name=" + encodeURIComponent(name));
+}
+
+
+// "820 ms", "1.9 s", "350 µs"
+function durationText(us)
+{
+    if (us >= 1000000)
+        return (us / 1000000).toFixed(1) + " s";
+
+    if (us >= 1000)
+        return Math.round(us / 1000) + " ms";
+
+    return us + " µs";
+}
+
+// The lease as lwIP holds it: state, time, what is left, renewals
+function leaseText(l)
+{
+    const min = sec => Math.round(sec / 60) + " min";
+    let text = l.state;
+
+    if (l.time !== undefined)
+        text += ", " + min(l.time) + " from " + l.server +
+                ", " + min(l.left) + " left";
+
+    if (l.renew !== undefined)
+        text += ", next renewal in " + min(l.renew);
+
+    return text + ", renewed " +
+           (l.renewals === 1 ? "once" : l.renewals + " times") +
+           " since start";
+}
+
+/*
+ * The core dump the last crash left in flash, until it is
+ * deleted. It is decoded on a PC with esp-coredump and the .elf
+ * of the firmware that crashed.
+ */
+function fillCrash(sys)
+{
+    const box = document.getElementById("crashBox");
+    const c   = sys.crash;
+
+    if (!c)
+    {
+        box.style.display = "none";
+        box.innerHTML = "";
+        return;
+    }
+
+    box.style.display = "";
+    box.innerHTML =
+        "<b>Core dump of the last crash</b><br>" +
+        escapeHTML(c.cause) + " in task " + escapeHTML(c.task) +
+        " at " + escapeHTML(c.pc) + " (return address " +
+        escapeHTML(c.ra) + ")<br>" +
+        "<span class='small'>" +
+        (c.same ? "Written by the firmware running now"
+                : "Written by another firmware than the one running now") +
+        " (ELF " + escapeHTML(c.elf) + "), " + kB(c.size) +
+        ". Decode it with esp-coredump and the .elf of that firmware." +
+        "</span><br>" +
+        "<button onclick=\"apiDownload('/api/coredump')\">" +
+        "Download core dump</button> " +
+        "<button onclick='deleteCoreDump()'>Delete</button>";
+}
+
+function deleteCoreDump()
+{
+    if (!confirm("Delete the core dump?"))
+        return;
+
+    queueCommand("/api/coredump?erase=1", () => updateSystem());
+}
+
+window.deleteCoreDump = deleteCoreDump;
+
+/*
+ * Answers the sensor gave up because the client stopped reading
+ * or closed the connection: [count, seconds since the last, client]
+ */
+function givenUpText([count, ago, who])
+{
+    return !count ? "none since start"
+        : count + " since start, the last " + secondsText(ago) +
+          " ago to " + who;
+}
+
+// One of the loop arrays: [round, request, its path, queue fill]
+function requestText(l)
+{
+    return l[1] ? durationText(l[1]) + " (" + l[2] + ")" : "-";
+}
+
+/*
+ * The CPU section of Settings from /api/system: load, temperature,
+ * longest loop() round and request, the management queue, and the
+ * tasks with their share and stack. Older firmware sends none of
+ * it, the section then says so.
+ */
+function fillCpu(sys)
+{
+    const l = sys.loop;
+    const q = l ? l.queue : 0;
+
+    document.getElementById("cpuInfo").innerText =
+        sys.cpu ? "last " + sys.cpu.win + " s" : "";
+
+    fillRows("cpuTable", !l ? [["CPU", "not reported by this firmware"]] : [
+        ["Load", sys.cpu ? (sys.cpu.load / 10).toFixed(1) + " %"
+                         : "first value after 10 s"],
+        ["Chip temperature", sys.temp !== undefined
+            ? sys.temp.toFixed(1) + " °C" : "-"],
+        ["Longest loop() round", durationText(l.win[0]) +
+            " (last 10 s), " + durationText(l.boot[0]) + " since start"],
+        ["Longest request", requestText(l.win) + " (last 10 s), " +
+            requestText(l.boot) + " since start"],
+        ["Management queue, highest fill", l.win[3] + " of " + q +
+            " (last 10 s), " + l.boot[3] + " since start" +
+            (l.boot[3] >= q ? ": it ran full, frames were dropped" : "")]
+    ].concat(l.givenup ? [["Answers given up", givenUpText(l.givenup)]] : []));
+
+    const tbody = document.getElementById("cpuTasks");
+
+    tbody.innerHTML = "";
+
+    ((sys.cpu && sys.cpu.tasks) || []).forEach(([name, share, stack]) =>
+    {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML =
+            "<td>" + escapeHTML(name) + "</td>" +
+            "<td>" + (share / 10).toFixed(1) + " %</td>" +
+            "<td>" + stack + " bytes</td>";
+
+        tbody.appendChild(tr);
+    });
+}
+
+
+// The page of the event log shown, 0 the newest
+let logPage = 0;
+
+const LOG_PAGE_SIZE = 20;
+
+let logEntries = [];
+
+function showLogPage(page)
+{
+    const pages = Math.max(1, Math.ceil(logEntries.length / LOG_PAGE_SIZE));
+
+    logPage = Math.min(Math.max(0, page), pages - 1);
+
+    const tbody = document.getElementById("logTable");
+
+    tbody.innerHTML = "";
+
+    logEntries.slice(logPage * LOG_PAGE_SIZE, (logPage + 1) * LOG_PAGE_SIZE)
+        .forEach(e =>
+    {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML =
+            "<td>" + escapeHTML(e.at) + "</td>" +
+            // -1: an earlier boot whose time is not known
+            "<td>" + (e.ago >= 0 ? uptimeText(e.ago) + " ago" : "") +
+            "</td>" +
+            "<td>" + escapeHTML(e.who) + "</td>" +
+            "<td>" + escapeHTML(e.text) + "</td>";
+
+        tbody.appendChild(tr);
+    });
+
+    // One page needs no choice
+    const pager = document.getElementById("logPages");
+
+    pager.innerHTML = "";
+
+    if (pages < 2)
+        return;
+
+    const button = (label, to, active, disabled) =>
+    {
+        const b = document.createElement("button");
+
+        b.innerText = label;
+        b.disabled = disabled;
+
+        if (active)
+            b.classList.add("active");
+
+        b.onclick = () => showLogPage(to);
+
+        pager.appendChild(b);
+    };
+
+    button("\u2039 newer", logPage - 1, false, logPage === 0);
+
+    for (let i = 0; i < pages; i++)
+        button(String(i + 1), i, i === logPage, false);
+
+    button("older \u203a", logPage + 1, false, logPage === pages - 1);
+}
+
+window.showLogPage = showLogPage;
+
+async function updateLog()
+{
+    try
+    {
+        const response =
+            await api("/api/log",
+                        { cache: "no-store", signal: timeoutSignal(4000) });
+
+        const log = await response.json();
+
+        // The page stays when new entries come in on top
+        logEntries = log.entries;
+
+        showLogPage(logPage);
+
+        document.getElementById("logInfo").innerText =
+            log.entries.length + " shown, kept across restarts; " +
+            log.total + " since the last start";
+    }
+    catch (e)
+    {
+        console.log(e);
+    }
+}
+
+
+// ==========================================================
+// Initialization
+// ==========================================================
+
+createChannels();
+
+loadChannelPlan();
+
+updateScanInfo();
+
+buildTableHead();
+buildClientHead();
+buildBleHead();
+buildZbHead();
+
+setupNetworkGraphEvents();
+setupClientGraphEvents();
+setupBleGraphEvents();
+setupZbEvents();
+
+document.getElementById("zbRange").addEventListener(
+    "change",
+    () => { zbWaterfallData = null; }
+);
+
+document.getElementById("bleFilter").addEventListener("input", ev =>
+{
+    bleFilterText = ev.target.value.trim();
+
+    updateBleTable();
+    drawBleGraph();
+});
+
+document.querySelectorAll(".channelBox input").forEach(
+    e => e.addEventListener("change", updateScanInfo)
+);
+
+document.getElementById("stationFilter").addEventListener("input", ev =>
+{
+    stationFilterText = ev.target.value.trim();
+
+    updateClientTable();
+    drawClientGraph();
+    fillAssocHistory();
+});
+
+document.getElementById("filter").addEventListener("input", ev =>
+{
+    filterText = ev.target.value.trim();
+
+    updateNetworkTable();
+    drawNetworkGraph();
+});
+
+/*
+ * One request at a time.
+ *
+ * The device runs a single-threaded web server behind a W5500
+ * with a handful of sockets. Half a dozen independent timers
+ * firing in parallel exhausted those sockets, requests were
+ * left hanging and the page stopped refreshing by itself.
+ * Polling sequentially in one loop keeps exactly one request
+ * in flight.
+ */
+function sleep(ms)
+{
+    return new Promise(r => setTimeout(r, ms));
+}
+
+
+// Counted up before each round: -1 makes the first round 0, which
+// fetches everything at once instead of the tables only in round 4
+let pollTick = -1;
+
+
+async function pollLoop()
+{
+    for (;;)
+    {
+        pollTick++;
+
+        pollBusy = true;
+
+        await drainCommands();
+
+        await updateStatus();
+
+        if (uiPage === "settings")
+        {
+            await updateSystem();
+
+            if (pollTick % 10 === 0)
+                await updateSnapshots();
+        }
+        else if (!paused && deviceOnline)
+        {
+            if (scanMode === "wifi")
+            {
+                await updateLive();
+
+                if (pollTick % 4 === 0)
+                {
+                    await updateNetworks();
+                    await updateClients();
+                    await updateHistory();
+                }
+
+                // Changes rarely, so it need not share the fast lane
+                if (pollTick % 20 === 0)
+                    await updateAssocHistory();
+
+                if (pollTick % 10 === 0 &&
+                    document.getElementById("catalogView")
+                        .classList.contains("active"))
+                {
+                    await updateCatalog();
+                }
+            }
+            else if (scanMode === "ble")
+            {
+                await updateBle();
+            }
+            else
+            {
+                await updateZb();
+
+                if (zbData && zbData.scan === 1)
+                    await updateZbWaterfall();
+            }
+        }
+
+        pollBusy = false;
+
+        await sleep(500);
+    }
+}
+
+const timeRanges = [
+    [120000,   "2 min"],
+    [1800000,  "30 min"],
+    [3600000,  "1 h"],
+    [7200000,  "2 h"],
+    [14400000, "4 h"],
+    [28800000, "8 h"]
+];
+
+const rangeSelect = document.getElementById("historyTime");
+
+timeRanges.forEach(r =>
+{
+    const opt = document.createElement("option");
+
+    opt.value = r[0];
+    opt.text = r[1];
+
+    rangeSelect.appendChild(opt);
+});
+
+rangeSelect.addEventListener("change", () =>
+{
+    updateHistory();
+    drawSpectrum();
+});
+
+document.getElementById("spectrumLegend").innerHTML =
+    "<span style='color:#00aaff'>&#9632;</span> live " +
+    "<span style='color:#ff9030'>&#9632;</span> max hold " +
+    "<span style='color:#9aa'>&#9632;</span> average " +
+    "(over the selected time range)";
+
+window.addEventListener("resize", () =>
+{
+    drawSpectrum();
+    drawWaterfall();
+    drawNetworkGraph();
+    drawClientGraph();
+    drawBleGraph();
+    drawZbSpectrum();
+    drawZbWaterfall();
+});
+
+applyModeUI();
+
+/*
+ * The panel starts collapsed from the markup. Only reopen it
+ * when it was explicitly left open, so a failure anywhere in
+ * here can no longer end with it expanded.
+ */
+try
+{
+    if (localStorage.getItem("scanPanelOpen") === "1")
+        toggleScanPanel(true);
+}
+catch (e)
+{
+    // Private mode or storage disabled, stay collapsed
+}
+
+// WebUSB needs a secure context, which the sensor's own http page
+// is not: the button only shows on a static https copy
+if (navigator.usb && isStaticPage())
+    document.getElementById("usbBtn").style.display = "";
+
+try
+{
+    const pane = localStorage.getItem("stationPane");
+
+    if (pane && document.getElementById(pane))
+        showStationPane(pane);
+}
+catch (e)
+{
+    // Private mode or storage disabled, Associated stays
+}
+
+/*
+ * Puts each table of the page into a scrolling .tableWrap. The
+ * tooltip builds its own small tables later and is left alone.
+ */
+function wrapTables()
+{
+    document.querySelectorAll("table").forEach(t =>
+    {
+        if (t.parentElement.classList.contains("tableWrap"))
+            return;
+
+        const wrap = document.createElement("div");
+
+        wrap.className = "tableWrap";
+
+        t.parentNode.insertBefore(wrap, t);
+        wrap.appendChild(t);
+    });
+}
+
+wrapTables();
+
+// Hand the browser clock over, so the pcap carries real
+// timestamps instead of time since boot
+function sendBrowserTime()
+{
+    queueCommand("/api/time?epoch=" + Math.floor(Date.now() / 1000));
+}
+
+// A static copy has no sensor yet: it sends the time on connecting
+if (!isStaticPage())
+    sendBrowserTime();
+
+/*
+ * Always land in Wi-Fi mode when the page is opened. An
+ * exclusive mode left running from an earlier session is
+ * confusing, and the Wi-Fi views are the ones most people
+ * want to see first.
+ */
+setMode("wifi");
+
+pollLoop();
+
+</script>
+
+</body>
+
+</html>
+
+)HTML";
+
+#endif // INDEX_HTML_H

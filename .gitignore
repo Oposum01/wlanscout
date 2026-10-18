@@ -1,0 +1,7 @@
+# Raw IEEE registry download, only needed to regenerate oui_table.h
+oui.csv
+
+# Test runs
+__pycache__/
+.pytest_cache/
+.venv/

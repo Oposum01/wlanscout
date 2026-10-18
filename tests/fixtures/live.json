@@ -1,0 +1,353 @@
+{
+ "version": "9.99.9",
+ "oui": 40316,
+ "currentChannel": 36,
+ "netcap": 160,
+ "chans": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  36,
+  40,
+  44,
+  48,
+  52,
+  56,
+  60,
+  64,
+  100,
+  104,
+  108,
+  112,
+  116,
+  120,
+  124,
+  128,
+  132,
+  136,
+  140,
+  144,
+  149,
+  153,
+  157,
+  161,
+  165,
+  169,
+  173,
+  177
+ ],
+ "pcapcount": 241,
+ "pcapcap": 6000,
+ "pcaptotal": 241,
+ "beacons": 55,
+ "beacontotal": 10255,
+ "assoc": 0,
+ "assoccap": 300,
+ "capture": 1,
+ "capmask": 15,
+ "fast": 1,
+ "plan": 10,
+ "heap": 110396,
+ "psram": 2915064,
+ "drops": 0,
+ "fcs": 0,
+ "channels": [
+  {
+   "ch": 1,
+   "band": "2.4",
+   "packets": 15,
+   "peak": -56,
+   "avg": -71.8
+  },
+  {
+   "ch": 2,
+   "band": "2.4",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 3,
+   "band": "2.4",
+   "packets": 1,
+   "peak": -94,
+   "avg": -94.0
+  },
+  {
+   "ch": 4,
+   "band": "2.4",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 5,
+   "band": "2.4",
+   "packets": 5,
+   "peak": -83,
+   "avg": -83.6
+  },
+  {
+   "ch": 6,
+   "band": "2.4",
+   "packets": 3,
+   "peak": -84,
+   "avg": -84.7
+  },
+  {
+   "ch": 7,
+   "band": "2.4",
+   "packets": 9,
+   "peak": -83,
+   "avg": -83.8
+  },
+  {
+   "ch": 8,
+   "band": "2.4",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 9,
+   "band": "2.4",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 10,
+   "band": "2.4",
+   "packets": 2,
+   "peak": -66,
+   "avg": -66.5
+  },
+  {
+   "ch": 11,
+   "band": "2.4",
+   "packets": 23,
+   "peak": -64,
+   "avg": -78.7
+  },
+  {
+   "ch": 12,
+   "band": "2.4",
+   "packets": 1,
+   "peak": -65,
+   "avg": -65.0
+  },
+  {
+   "ch": 13,
+   "band": "2.4",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 36,
+   "band": "5",
+   "packets": 20,
+   "peak": -40,
+   "avg": -66.2
+  },
+  {
+   "ch": 40,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 44,
+   "band": "5",
+   "packets": 2,
+   "peak": -83,
+   "avg": -83.5
+  },
+  {
+   "ch": 48,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 52,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 56,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 60,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 64,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 100,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 104,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 108,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 112,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 116,
+   "band": "5",
+   "packets": 8,
+   "peak": -61,
+   "avg": -70.5
+  },
+  {
+   "ch": 120,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 124,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 128,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 132,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 136,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 140,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 144,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 149,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 153,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 157,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 161,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 165,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 169,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 173,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  },
+  {
+   "ch": 177,
+   "band": "5",
+   "packets": 0,
+   "peak": -127,
+   "avg": -127
+  }
+ ]
+}

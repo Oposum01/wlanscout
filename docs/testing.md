@@ -1,0 +1,79 @@
+# Tests
+
+`tests/` holds browser tests for the web page in
+`source/wlanscout/index_html.h`. They
+run on a PC, no sensor needed: the page is cut out of `index_html.h`,
+loaded into a Playwright browser, and every `/api/...` request is
+answered from the JSON files in `tests/fixtures/`.
+
+```
+python3 -m venv .venv
+.venv/bin/pip install -r tests/requirements.txt
+.venv/bin/python -m playwright install firefox
+.venv/bin/python -m pytest -n auto tests
+```
+
+Firefox is the default, the browser the page is used with on phones.
+`--engine chromium` switches; `--browser-path /usr/bin/chromium` uses
+an installed browser instead of the one Playwright downloads.
+
+`-n auto` (pytest-xdist) runs the tests on all CPU cores, each worker
+with a browser of its own; the tests need no server or port, so they
+do not get in each other's way. With 24 cores a run takes about
+25 seconds per browser, one after the other (without `-n`) over two
+minutes in Firefox.
+
+| File | Covers |
+|------|--------|
+| `test_interworking.py` | Interworking (107): network type, flags, venue, HESSID, "probably Vehicular", filter |
+| `test_makers.py` | the BEST GUESS block: maker and chip rules (chip OUIs, takeover names, the BSSID's vendor not counted, excluded OUIs, MikroTik vs DD-WRT, short names for long registry entries, Sophos' reversed OUI, Texas Instruments and Intel as chip, hostapd's QCA elements naming nobody), Broadcom compatibility elements, Apple Device IE, tooltip of a car with CarPlay, the same guess in the station tooltip, Device: Printer |
+| `test_catalog.py` | IE catalog: columns, as wide as the network table with long cells wrapping, *(parsed)* marks, sorting by column head and keeping it, pcap file names, the *What this sensor reads* list with a name or the maker for every vendor element (Mist's AP name, Mojo Networks under Arista, DJI and Xirrus under Cambium also as maker, DPP Configurator Connectivity, NETGEAR and Quantenna as maker, no maker for 00:00:00), Nintendo's AKM and cipher suite, the names of the QCA pre-802.11ax elements |
+| `test_twins.py` | evil twins: two beacon timers alternating under one BSSID, not after a restart; weaker security than the other BSSs of an SSID on other devices, not for BSSs of one device or with too few peers; PMF and Country outliers; the beacon-gap row only when it says something |
+| `test_dtim.py` | the TIM: DTIM period with its time, buffered group traffic and waiting stations in LOAD, the amber note above 3 only, `dtim10` in the filter |
+| `test_beacon_gaps.py` | beacons faster than their interval: the amber note with its share and half an interval, none for a few late beacons or too few gaps, the LOAD row, `fastbeacons` in the filter |
+| `test_bell.py` | the bell in the header: hidden on older firmware, the count of unread changes, the list with restarts and hidden SSIDs, read once opened and after a reload, a click filters to the BSSID, the list inside a phone screen, a flapping entry fetched again when it is updated, a long list scrolling, the changes of one BSS at once as one entry, muted BSSs out of the count and listed with unmute, mute from the list, the notify checkbox in the title of the tooltip's CHANGES, also for a muted BSS without changes, sorted by the last change, read as it was in a snapshot, none in a snapshot without the list, the time of a change on hover |
+| `test_config_changes.py` | configuration changes: the CHANGES section with old values struck through, a restart with its uptime, a flapping BSS, the count of earlier ones; the `Δ` in the hint column, none without changes; `changed` in the filter |
+| `test_elements.py` | Quiet, measurement pilot, admission capacity, WMM ACM note, beacon protection, Advertisement Protocol, AP name, NAN clusters with master preference and anchor master, RSNE Override, Wi-Fi Direct and Miracast, MBO-OCE with its notes, HP printer model (never a serial), operating mode, WPS device name, their filter terms |
+| `test_stations.py` | the station filter: maker and chip, probed SSIDs, address, count and Clear; an AP name from a beacon replaces the one learned from a station, hint included; default order by address, the history by newest association; one table per tab, counts in the tabs, the tab kept |
+| `test_awdl.py` | AWDL: the line in the tooltip of the station an AWDL sender names, none for others or from older firmware, the device classes, no table of its own, a row under Probing only for a sender that names no station seen (tooltip with class, version, country, network; an iPhone on no network), the station filter, Flush empties it |
+| `test_suitebad.py` | a suite under a misplaced OUI: amber note naming WPA or RSN and the suite, none without the field, the filter; a WPA element without an AKM (blue, naming the RSN security), its filter term |
+| `test_tooltip.py` | the network tooltip: notes sorted red, amber, blue, pink; WPS on the security line, the hidden-SSID note (also for a name learned, not for mesh, NAN or OWE), Broadcom's 256-QAM element in 2.4 GHz (Wi-Fi 6 and Wi-Fi 4 wording, not in 5 GHz, not twice with VHT elements), a country other than the majority (only with five or more and more than half), pre-authentication without 802.1X, the advice to switch 802.11b off with a 1 Mbit/s basic rate, no basic rate marked, 40 MHz Intolerant red on a 40 MHz BSS, a 2.4 GHz channel between the usual plans, no 802.11n (advising a new device), open without OWE (advising OWE), the same SSID with other security on this device, several countries for one SSID, SAE without PMF red for an access point but blue for a mesh point, the basic rates in the filter ("none" when none is marked), label column as narrow as its labels, vendor elements grouped per OUI, no centre channel at 20 MHz, the WPS note; WPS device name and manufacturer with model in quotes (“HP G5J38A”) on the security line and in the filter, a Display PIN method without lock is red |
+| `test_graph.py` | the channel axis of the BSSID graph: with one channel focused it still names every channel of the shown range |
+| `test_station_notes.py` | the notes of a station: unknown elements and a rejected association in the ⚠ column and the tooltip, status names with their number, 30 amber with the SA Query hint and comeback time, sorting by it, the filter, the column in the history |
+| `test_pin.py` | with a mouse a click on a network or station row pins its tooltip: it takes the mouse and has its ✕, stays while the pointer moves over other rows, closes by Escape, ✕ or a click outside, another row's click pins that one; the hint at its foot only while it follows the mouse; no pinning on a touch screen |
+| `test_touch.py` | a click on a network or station row keeps the sweep, the tooltip's ✕, a tap elsewhere closes it (a mouse click does not), the tooltip stays on a phone screen, a tall one fits the screen height and scrolls inside, opening at its top; a tall one opened by a tap stays open, although it lands under the finger; the mouse events a phone sends after a tap when the page changes under the finger neither swap, move nor reopen the tooltip, a real mouse still opens it by hovering |
+| `test_static.py` | `tools/make_static.py`: the files, a manifest Chrome accepts for installing (name and short name "wlanscout+", start URL, standalone, 192 and 512 px icons of those sizes), the service worker keeping every file under the firmware version, the page linking both, the sensor's own page without them, the copy running without script errors; with `--firmware` the flasher (titled "wlanscout+ flasher") and the four parts at their addresses, next to it or with `--parts-dir` in a folder of their own, not kept offline, a build of another version refused |
+| `test_usb.py` | the page as a static https copy over WebUSB, against a simulated sensor (`fake_usb.js`, answers in small pieces with empty packets between, takes a PUT with its bytes): USB button only there, nothing over HTTP, tables filled over USB, device filter and no reset (DTR on, RTS off), query arguments, answers in order and a 404, pcap download, unplugging, a firmware update over USB (PUT with the image, the sensor back on USB and taken up again without a reload, a wrong image refused, no reconnect without an update; the bytes in pieces with the sensor's go-ahead in between, never more in flight than its receive queue holds, the go-ahead not taken from inside an answer; a USB request given up by its signal, a closed link refusing requests), the "Not connected" line fits a phone screen and goes once connected, the browser time sent on connecting and again after a firmware update over USB (the sensor's own page still sends it at load), the status badge says "via USB" instead of web clients |
+| `test_multilink.py` | the multi-link split note (one device, several single-link AP MLDs: names and security that differ, consecutive BSSIDs with the same name, not for one MLD with two links, other devices, a lone MLD, a guest beside the main network on one radio, or a link 1); a multi-link station's tooltip: one line per link by band (association link, link ID, widest channel, address), NSTR link pairs by band and each pair once, a profile without band, the old rows for a firmware before 1.68.0 |
+| `test_snapshot.py` | snapshots: a file opened shows its networks without asking the sensor, the bar and the badge say so, back to live, the history per time range, a missing answer, settings changes refused but the clock passed on, a file that is no snapshot, the list in Settings newest first with View, Take snapshot, the static copy with no sensor; the camera button on every view, green or red, its message outlasting a poll round with a status message, icon only and within a 360 px screen; Keep: the boxes from the sensor's setting, a change sent as bits, disabled with older firmware; the bar naming what was left out (BLE and 802.15.4 by default); names in the list and the bar, Rename starting from the old name and URL encoding the new one, cancelling sends nothing; Export per snapshot and Export all as ZIP files any ZIP tool accepts (CRC, deflate, names with number and name), ZIP import from elsewhere (deflated, stored, folders, other files skipped) and of the old single-JSON export, View file on a ZIP showing the newest, makeZip and readZip round trip, a broken ZIP refused, Clear all after asking (not when cancelled, a note when there is nothing), Import of one file over HTTP (multipart, name as argument, length matching the bytes), of a whole export oldest first, cancelled, refused by the sensor, not a snapshot, over USB as a PUT with the bytes behind the line; View shows the number on this sensor; a part left out answers 404 instead of coming live from the sensor; a pcap link in a snapshot adds why its frames may be missing, still downloads when they are there, and stays a plain link outside a snapshot; a part left out (the spectrum) puts no "Connection lost" in the status line |
+| `test_release.py` | `tools/make_release.py`: `firmware/` with the four images, `merged.bin` and `FLASH.txt` of the version, the page at the top (`index.html`, service worker, manifest, icons, `.nojekyll`) and the flasher loading from `firmware/` without copies, files of an older release removed, a build of another version or one with a part missing refused |
+| `test_ibss.py` | ad-hoc networks: `Ad-hoc` in the Capabilities column, the tooltip with the ATIM window (0 meaning no power save), nothing from older firmware, the filter on `ibss`, `adhoc`, `ad-hoc` |
+| `test_wfa.py` | Wi-Fi Alliance Capabilities: QoS Management in the AP and station tooltip, none without the element; RSN selection in the station tooltip (RSNE, Override, Override 2, unknown); the filters on both; the catalog name |
+| `test_drone.py` | Drone Remote ID: BEST GUESS (DJI from the maker code, Drone, height, pilot link to OpenStreetMap), other aircraft types, the REMOTE ID section (status, speed, altitudes, both positions, EU class, self-ID, age), without location or pilot, emergency as a red note, the filter, the catalog name |
+| `test_bss_extras.py` | BSS colour and announced switches with the blue note from the second one, uptime from the beacon timestamp (not beyond three years, a recent reset as note), BSS Max Idle Period of AP and station, fast transition roams |
+| `test_airtime.py` | the reported airtime hatch: the channels a stretch covers on 2.4, 5 and 6 GHz (a run, a single one, the nearest for a stretch narrower than a channel), the tooltip naming them with the frequencies and each reporter's channel and width, hidden SSIDs not escaped twice, the hatch keeping its frequencies |
+| `test_eventlog.py` | the event log with entries of earlier starts: no age for one without a clock, the reason of a start, the count line, 20 entries to a page with the page choice (newer, numbers, older), the page kept over a refresh, no choice for one page |
+| `test_lease.py` | the DHCP lease row in Settings: state, lease time, server, time left, next renewal and renewals; before the first acknowledgement; no row from older firmware |
+| `test_crash.py` | the core dump box in the event log: cause, task, address, return address, the firmware it came from, Download and Delete with its question; no box without a dump |
+| `test_cpu.py` | the CPU section in Settings: load, chip temperature, longest loop() round and request with its path, the management queue running full, the tasks, the answers given up; before the first window, older firmware; the author's address in Settings written so that it is not harvested ("jf [at] simonwunderlich . de"), nowhere in the page as a plain address |
+| `test_flush.py` | the Flush buttons: the network table and the 6 GHz list emptied after asking, nothing sent when cancelled, the station table likewise, both at the top right above their graph, within a phone screen, greyed out with its reason while a snapshot is shown and usable again back to live |
+| `test_sixghz.py` | the 6 GHz list: the announcing AP from the network table while it is there, its name and channel kept by the entry once it left (marked gone, explained in the tooltip), the address alone from older firmware |
+| `test_page_gz.py` | `index_html_gz.h` unpacks to exactly the page in `index_html.h` with its size recorded, and `tools/make_page_gz.py` writes the same bytes again |
+| `test_order.py` | the network table starts sorted by SSID, one SSID's BSSIDs by address |
+| `test_json_utf8.py` | the firmware's JSON strings: valid UTF-8 kept, a byte outside it as `\u00XX`, quotes and backslashes escaped, control characters dropped; compiled on the PC with g++ (skipped without) |
+| `test_layout.py` | at 390 px the page stays as wide as the screen, every table scrolls in its own box, no script errors; status messages on their own line under the header (a long one used to squeeze it on a tablet), hidden when empty; Pause the last header button, with its symbol; the header buttons as one right-aligned group, on one line at tablet width, nothing past the edge at 360 px; the view tabs in the order BSSIDs, Stations, RSSI spectrum, IE catalog, their names shortened on a phone ("RSSI spec.", "IE cat.") so all four fit one line; the first round fetches the tables; a click writes nothing to the browser console, a handler that throws still shows as "click failed" |
+
+The fixtures are made up: locally administered MACs (`02:00:00:…`),
+documentation addresses (`192.0.2.x`), invented SSIDs. Real captures
+do not belong there. A test can swap one before the page loads:
+
+```python
+def test_something(app):
+    app.api["networks"]["networks"][0]["iw"] = "030A03"
+    app.open()
+    ...
+```
+
+The firmware itself (the C++ parsers) is not covered yet; it is
+checked on a sensor and against tshark with
+`tools/check_against_tshark.py`.

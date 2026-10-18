@@ -1,0 +1,133 @@
+{
+ "clients": [
+  {
+   "mac": "02:00:00:00:01:01",
+   "vendor": "",
+   "bssid": "00:00:00:00:00:00",
+   "assoc": 0,
+   "apssid": "",
+   "pcapf": 50,
+   "prev": "00:00:00:00:00:00",
+   "roams": 0,
+   "roamsok": 0,
+   "roamlog": [],
+   "peer": "00:00:00:00:00:00",
+   "rssi": -95,
+   "ch": 6,
+   "up": 0,
+   "down": 0,
+   "upb": 0,
+   "downb": 0,
+   "status": -1,
+   "statusago": 0,
+   "statusbss": "00:00:00:00:00:00",
+   "assocfail": 0,
+   "probes": 5,
+   "assocs": 0,
+   "sawassoc": 0,
+   "joined": "",
+   "std": 3,
+   "width": 20,
+   "nss": 0,
+   "k": 0,
+   "v": 0,
+   "rrm": 0,
+   "wnm": 0,
+   "opcl": [],
+   "chans": 0,
+   "chans6": [],
+   "unk": [],
+   "unkin": [],
+   "r": 0,
+   "band6": 0,
+   "wmm": 0,
+   "pmf": 0,
+   "akm": "",
+   "cipher": "",
+   "ssids": [
+    "Office"
+   ],
+   "age": 1,
+   "seen": 232,
+   "voui": [
+    [
+     "0017F2",
+     10,
+     "Apple"
+    ],
+    [
+     "001018",
+     2,
+     "Broadcom"
+    ],
+    [
+     "00904C",
+     4,
+     "Epigram"
+    ]
+   ]
+  },
+  {
+   "mac": "02:00:00:00:01:02",
+   "vendor": "",
+   "bssid": "00:00:00:00:00:00",
+   "assoc": 0,
+   "apssid": "",
+   "pcapf": 50,
+   "prev": "00:00:00:00:00:00",
+   "roams": 0,
+   "roamsok": 0,
+   "roamlog": [],
+   "peer": "00:00:00:00:00:00",
+   "rssi": -95,
+   "ch": 6,
+   "up": 0,
+   "down": 0,
+   "upb": 0,
+   "downb": 0,
+   "status": -1,
+   "statusago": 0,
+   "statusbss": "00:00:00:00:00:00",
+   "assocfail": 0,
+   "probes": 5,
+   "assocs": 0,
+   "sawassoc": 0,
+   "joined": "",
+   "std": 3,
+   "width": 20,
+   "nss": 0,
+   "k": 0,
+   "v": 0,
+   "rrm": 0,
+   "wnm": 0,
+   "opcl": [],
+   "chans": 0,
+   "chans6": [],
+   "unk": [],
+   "unkin": [],
+   "r": 0,
+   "band6": 0,
+   "wmm": 0,
+   "pmf": 0,
+   "akm": "",
+   "cipher": "",
+   "ssids": [
+    "Home"
+   ],
+   "age": 1,
+   "seen": 232,
+   "voui": [
+    [
+     "0000F0",
+     34,
+     "Samsung"
+    ],
+    [
+     "8CFDF0",
+     1,
+     "Qualcomm"
+    ]
+   ]
+  }
+ ]
+}
