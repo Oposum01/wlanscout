@@ -110,29 +110,43 @@ crossover cable to a PC. Wiring, pin table and details in
 
 ## Quick start
 
-1. Install **esp32 by Espressif Systems** (3.3.0 or later) in the
-   Arduino Boards Manager.
-2. Open `source/wlanscout/wlanscout.ino`, select **ESP32C5 Dev Module** with Flash Size
-   **16MB (128Mb)** and PSRAM **Enabled**, then upload. The partition
-   table comes with the sketch (`partitions.csv`, two 6.25 MB slots for
-   updates over the network); the Partition Scheme menu is ignored.
-3. Connect Ethernet, read the address off the serial console
-   (115200 baud) and open `http://<address>/`. Without a DHCP server the
-   sensor falls back to `192.168.1.1` by itself.
+### Sensor on a phone
 
-Ready-made images are in `firmware/`, with `FLASH.txt` saying which
-file goes where, for esptool or an update over the network.
-
-**Without Ethernet**, on a phone: the top of this repository is the
-static copy of the page; published with GitHub Pages (or copied to any
-https web space), open it in Chrome on the phone, plug the board's USB-C port marked **USB** into the phone
-and press **USB**. The same copy can flash the firmware from the phone
-and be installed as an app. Details in
-[Sensor on a phone over USB](docs/usb.md).
+1. Open the flasher **<https://oposum01.github.io/wlanscout/flash.html>**
+   in Chrome on the phone, plug the board's USB-C port marked **USB**
+   (not UART) into the phone and tap **Flash firmware**.
+2. When it is done, unplug the board once and plug it back in, or press
+   the reset button (**RST**) on the ESP32-C5 board once.
+3. Open the app **<https://oposum01.github.io/wlanscout/>** in Chrome
+   and install it from the menu (*Install app*); it then also starts
+   without a network.
+4. Start it, tap **USB** and allow the board.
 
 ![The board in its MagSafe case on the back of a phone, lid off, with a short angled USB-C cable](docs/images/28-phone-sensor-open.jpg)
 
-Step by step, with the reasons behind each setting, in
+Updates come from *Settings → Firmware update* with `wlanscout.ino.bin`
+of the [latest release](https://github.com/Oposum01/wlanscout/releases/latest),
+or again from the flasher. Details in
+[Sensor on a phone over USB](docs/usb.md).
+
+### Sensor on Ethernet
+
+1. Flash the firmware: with the flasher from a phone as above, with
+   esptool and the images in `firmware/` (`FLASH.txt` says which file
+   goes where), or built from source, see below.
+2. Wire up the W5500 as in the [pin table](docs/hardware.md) and connect
+   it to a switch.
+3. Power the board over USB-C and read the address off the serial
+   console (115200 baud). Without a DHCP server the sensor falls back to
+   `192.168.1.1` by itself.
+4. Open `http://<address>/` in a browser.
+
+### Building from source
+
+Install **esp32 by Espressif Systems** (3.3.0 or later) in the Arduino
+Boards Manager, open `source/wlanscout/wlanscout.ino`, select **ESP32C5
+Dev Module** with Flash Size **16MB (128Mb)** and PSRAM **Enabled**,
+then upload. Step by step, with the reasons behind each setting, in
 [Installation](docs/install.md).
 
 ---
