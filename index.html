@@ -470,6 +470,27 @@ tbody tr.assocSeen.highlight {
     background: #2b4a3a;
 }
 
+/* The "?" beside the filter and the list it opens */
+.helpBtn {
+    min-width: 2.2em;
+    font-weight: bold;
+}
+
+.filterHelp {
+    margin: -2px 0 12px 0;
+    padding: 8px 10px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    background: #151515;
+    font-size: 0.9em;
+    line-height: 1.5;
+}
+
+.filterHelp code {
+    color: #9fd0ff;
+    white-space: nowrap;
+}
+
 .networkControls {
     display: flex;
     flex-wrap: wrap;
@@ -1205,6 +1226,12 @@ Detected WLAN networks
 Clear
 </button>
 
+<button class="helpBtn"
+        title="What the filter finds"
+        onclick="window.toggleFilterHelp('filterHelp')">
+?
+</button>
+
 <button class="restoreBtn"
         style="display:none"
         onclick="window.restoreDefaultChannels()">
@@ -1221,6 +1248,8 @@ Flush
 </button>
 
 </div>
+
+<div id="filterHelp" class="filterHelp" style="display:none"></div>
 
 
 <canvas id="networkGraph"></canvas>
@@ -1373,6 +1402,12 @@ Stations per AP
 Clear
 </button>
 
+<button class="helpBtn"
+        title="What the filter finds"
+        onclick="window.toggleFilterHelp('stationFilterHelp')">
+?
+</button>
+
 <button class="restoreBtn"
         style="display:none"
         onclick="window.restoreDefaultChannels()">
@@ -1389,6 +1424,8 @@ Flush
 </button>
 
 </div>
+
+<div id="stationFilterHelp" class="filterHelp" style="display:none"></div>
 
 
 <canvas id="clientGraph"></canvas>
@@ -2883,6 +2920,86 @@ function flushTable(what)
 }
 
 window.flushTable = flushTable;
+
+/*
+ * What the filters find beyond the plain text of the table: the
+ * terms the code adds itself, each with what it stands for. Every
+ * word typed has to match somewhere, as part of a word too, case
+ * does not matter. test_filter_help.py checks that each finds what
+ * it says.
+ */
+const FILTER_HELP = [
+    ["ch:36", "channel, exactly"],
+    ["80mhz", "width (20mhz \u2026 320mhz)"],
+    ["2.4ghz", "band, or 5ghz"],
+    ["wifi6", "standard (wifi4 \u2026 wifi7), also ax"],
+    ["wpa3", "security as in the table (open, owe, wpa2-eap \u2026)"],
+    ["sae", "AKM (psk, eap, owe \u2026), also in the RSNE Override"],
+    ["ccmp", "cipher (tkip, gcmp-256 \u2026)"],
+    ["pmf:required", "PMF required, capable or off"],
+    ["wps", "WPS on"],
+    ["de", "country, two letters"],
+    ["2ss", "spatial streams"],
+    ["mesh", "802.11s mesh point"],
+    ["ibss", "ad hoc, also adhoc"],
+    ["mlo", "multi-link (Wi-Fi 7)"],
+    ["drone", "Remote ID, also remote id"],
+    ["changed", "configuration changed (the bell)"],
+    ["fastbeacons", "beacons faster than their interval"],
+    ["probetsf0", "timestamp 0 in every probe response"],
+    ["dtim:3", "DTIM period, exactly"],
+    ["mdid:4a2b", "802.11r mobility domain"],
+    ["ranging", "FTM frames seen with this BSSID"],
+    ["ftm responder", "FTM announced (also ftm initiator)"],
+    ["colour change", "BSS colour change announced"],
+    ["broken suite", "cipher suite under a misplaced OUI"],
+    ["basic rates 1", "a basic rate (basic rates none: none marked)"],
+    ["headunit", "a car's (Car Connectivity Consortium element, CarPlay accessory)"],
+    ["broadcom chip", "Wi-Fi chip from the vendor elements"]
+];
+
+const STATION_FILTER_HELP = [
+    ["ch:36", "channel, exactly"],
+    ["associated", "with an AP, or probing"],
+    ["wifi6", "standard (wifi4 \u2026 wifi7), also ax"],
+    ["sae", "AKM of its association (psk \u2026)"],
+    ["pmf", "PMF"],
+    ["wmm", "WMM"],
+    ["11k", "radio measurement, also 11v, 11r"],
+    ["ft roam", "a fast transition (802.11r) seen"],
+    ["ranging", "FTM requests seen"],
+    ["mlo", "multi-link (Wi-Fi 7)"],
+    ["awdl", "Apple Wireless Direct Link, also apple"],
+    ["broadcom chip", "Wi-Fi chip from the vendor elements"]
+];
+
+function filterHelpHtml(list, what)
+{
+    return "Every word has to match somewhere in what the table and " +
+        "the tooltip say about " + what + ", each on its own and as " +
+        "part of a word too: names, addresses, vendor, the tooltip's " +
+        "lines and its notes (<code>tkip</code>, <code>evil twin</code> " +
+        "\u2026). Further terms:<br>" + list.map(([term, meaning]) =>
+            "<code>" + escapeHTML(term) + "</code> " + escapeHTML(meaning))
+        .join(" \u00b7 ");
+}
+
+function toggleFilterHelp(id)
+{
+    const box = document.getElementById(id);
+
+    if (box.style.display === "none")
+    {
+        box.innerHTML = id === "filterHelp"
+            ? filterHelpHtml(FILTER_HELP, "a BSS")
+            : filterHelpHtml(STATION_FILTER_HELP, "a station");
+        box.style.display = "";
+    }
+    else
+        box.style.display = "none";
+}
+
+window.toggleFilterHelp = toggleFilterHelp;
 
 
 function toggleScanPanel(force)
@@ -5827,6 +5944,34 @@ function drawWaterfall()
 // Filter
 // ==========================================================
 
+/*
+ * key:value terms, compared exactly rather than as part of a word:
+ * ch:1 is channel 1 and not 11 or 100. Anything else with a colon,
+ * a piece of a MAC address for instance, is searched as text.
+ */
+const FILTER_KEYS = {
+    ch:   (n, v) => String(n.channel) === v,
+    dtim: (n, v) => !!n.dtim && String(n.dtim[0]) === v,
+    pmf:  (n, v) => v === (n.mfpr ? "required" : n.mfpc ? "capable" : "off"),
+    mdid: (n, v) => !!n.mdid &&
+        n.mdid[0].toString(16).padStart(4, "0") === v.replace(/^0x/, "")
+};
+
+const STATION_FILTER_KEYS = {
+    ch: (c, v) => String(c.ch) === v
+};
+
+// One term against a haystack, or exactly when it is key:value
+function termMatches(t, x, haystack, keys)
+{
+    const kv = t.match(/^([a-z]+):(.+)$/);
+
+    if (kv && keys[kv[1]])
+        return keys[kv[1]](x, kv[2]);
+
+    return haystack.indexOf(t) >= 0;
+}
+
 function matchesFilter(n)
 {
     if (!filterText)
@@ -5840,9 +5985,10 @@ function matchesFilter(n)
         n.bssid,
         n.cfgn ? "changed configuration" : "",
         beaconsTooFast(n) ? "fastbeacons" : "",
-        n.dtim ? "dtim" + n.dtim[0] : "",
+        probeTsfZero(n) ? "probetsf0" : "",
+        // FTM frames seen, not the capability ("ftm responder")
+        n.ftm ? "ranging" : "",
         n.vendor,
-        "ch:" + n.channel,
         n.channel,
         bandwidthText(n.bandwidth).replace(" ", ""),
         n.sec,
@@ -5906,14 +6052,15 @@ function matchesFilter(n)
         quietText(n) ? "quiet " + quietText(n) : "",
         aacText(n) ? "admission " + aacText(n) : "",
         apMakers(n).makers.join(" "),
-        n.acc ? "apple accessory carplay " + appleAccText(n) : "",
+        n.acc ? "apple accessory carplay headunit " + appleAccText(n) : "",
+        (n.voui || []).some(v => v[0] === "04DF69") ? "car headunit" : "",
         (n.voui || []).map(v => v[2]).join(" "),
         apMakers(n).chips.map(c => c + " chip").join(" "),
         (n.unk || []).map((c, i) => unknownElementText(n, i)).join(" "),
         networkNotes(n).map(note => note[1]).join(" ")
     ].join(" ").toLowerCase();
 
-    return terms.every(t => haystack.indexOf(t) >= 0);
+    return terms.every(t => termMatches(t, n, haystack, FILTER_KEYS));
 }
 
 
@@ -5973,6 +6120,54 @@ function groupChanges(changes)
     return groups;
 }
 
+// The same changes, field by field
+function sameChanges(a, b)
+{
+    return a.length === b.length && a.every((c, i) =>
+        c[4] === b[i][4] && c[5] === b[i][5] && c[6] === b[i][6]);
+}
+
+/*
+ * One entry per device: a radio that sends several SSIDs changes its
+ * BSS colour, channel or width in all their beacons at once. Groups
+ * of BSSIDs of one device with the same changes at most 2 s apart
+ * are one entry, {bssids, ssids, changes}, and count once.
+ */
+function bellGroups()
+{
+    const out = [];
+
+    groupChanges(bellChanges()).forEach(g =>
+    {
+        const twin = out.find(o =>
+            Math.abs(o.changes[0][1] - g[0][1]) <= 2 &&
+            sameChanges(o.changes, g) &&
+            o.bssids.some(b => nearAddress(b, g[0][2])));
+
+        if (twin)
+        {
+            twin.bssids.push(g[0][2]);
+            twin.ssids.push(g[0][3]);
+            twin.numbers = twin.numbers.concat(g.map(c => c[0]));
+        }
+        else
+            out.push({ bssids: [g[0][2]], ssids: [g[0][3]], changes: g,
+                       numbers: g.map(c => c[0]) });
+    });
+
+    return out;
+}
+
+// What the filter takes for an entry: the BSSID, or for several of
+// one radio the part they share, ":61:B4:B7:3D:F8"
+function bellFilterKey(bssids)
+{
+    const tail = bssids[0].slice(2);
+
+    return bssids.length > 1 && bssids.every(b => b.slice(2) === tail)
+        ? tail : bssids[0];
+}
+
 // The changes of the BSSs that ring the bell
 function bellChanges()
 {
@@ -5987,8 +6182,8 @@ function bellChanges()
 function fillBell()
 {
     const from   = cfgSeenFrom();
-    const unread = groupChanges(bellChanges())
-        .filter(g => g.some(c => c[0] > from)).length;
+    const unread = bellGroups()
+        .filter(g => g.numbers.some(n => n > from)).length;
     const count  = document.getElementById("bellCount");
 
     count.innerText = unread > 99 ? "99+" : String(unread);
@@ -5996,7 +6191,11 @@ function fillBell()
     // A snapshot's list is read as it was, nothing in it is new
     count.classList.toggle("on", unread > 0 && !snapshotView);
 
-    document.getElementById("bellBtn").title = snapshotView
+    // Not over the open list's title
+    document.getElementById("bellBtn").title =
+        document.getElementById("changesPanel").classList.contains("open")
+        ? ""
+        : snapshotView
         ? "Configuration changes up to this snapshot"
         : unread
         ? unread + " new configuration change" + (unread === 1 ? "" : "s")
@@ -6104,9 +6303,33 @@ function changeText([, , , , what, from, to])
     return configChangeText(what, from, to);
 }
 
+// WPS Config Methods, as the WPS note names them
+function wpsMethodNames(m)
+{
+    const names = [];
+
+    if (m & 0x0004) names.push("Label");
+    if (m & 0x0008) names.push("Display");
+    if (m & 0x0100) names.push("Keypad");
+    if (m & (0x0080 | 0x0200 | 0x0400)) names.push("Push Button");
+    if (m & 0x0040) names.push("NFC");
+
+    return names;
+}
+
 // One change: a restart, a flapping BSS or a field with both values
 function configChangeText(what, from, to)
 {
+    // The sensor sends the bitmask, "0x0688" or "-"
+    if (what === "WPS methods")
+    {
+        const named = v => v === "-" ? "-"
+            : wpsMethodNames(parseInt(v, 16)).join(", ") || v;
+
+        from = named(from);
+        to   = named(to);
+    }
+
     if (what === "restart")
         return "AP restarted, was up " + uptimeText(Number(from));
 
@@ -6131,24 +6354,28 @@ function fillChanges(newFrom)
     const ago   = snapshotView ? " before the snapshot" : " ago";
 
     const muted = cfgList.muted || [];
-    const mute  = (bssid, on) => snapshotView ? "" :
+    // One BSSID or all of an entry's, comma separated
+    const mute  = (bssids, on) => snapshotView ? "" :
         "<a class='mute' onclick='event.stopPropagation(); " +
-        "window.setCfgNotify(\"" + bssid + "\", " + on + ")'>" +
+        "window.setCfgNotifyAll(\"" + bssids + "\", " + on + ")'>" +
         (on ? "unmute" : "mute") + "</a>";
 
     panel.innerHTML =
         "<b>Configuration changes</b>" +
         (bellChanges().length
-            ? groupChanges(bellChanges()).map(g =>
-                "<div class='chg" + (g.some(c => c[0] > newFrom) ? " new" : "") +
-                "' onclick='window.filterChange(\"" + g[0][2] + "\")'>" +
-                mute(g[0][2], false) +
-                "<b>" + escapeHTML(g[0][3] || "<hidden>") + "</b> " +
-                "<span class='dim'>" + g[0][2] + " \u00b7 " +
-                agoSpan(secondsText(g[0][1] + since) + ago, g[0][1],
-                        cfgFetchAt) +
+            ? bellGroups().map(g =>
+                "<div class='chg" + (g.numbers.some(n => n > newFrom) ? " new" : "") +
+                "' onclick='window.filterChange(\"" + bellFilterKey(g.bssids) + "\")'>" +
+                mute(g.bssids.join(","), false) +
+                "<b>" + [...new Set(g.ssids.map(s => s || "<hidden>"))]
+                    .map(escapeHTML).join(", ") + "</b> " +
+                "<span class='dim'>" + g.bssids[0] +
+                (g.bssids.length > 1 ? " +" + (g.bssids.length - 1) : "") +
+                " \u00b7 " +
+                agoSpan(secondsText(g.changes[0][1] + since) + ago,
+                        g.changes[0][1], cfgFetchAt) +
                 "</span><br>" +
-                g.map(changeText).join("<br>") + "</div>").join("")
+                g.changes.map(changeText).join("<br>") + "</div>").join("")
             : "<div class='chg dim'>None since the sensor started</div>") +
         (muted.length
             ? "<div class='chg dim'>Not notified: " + muted.map(b =>
@@ -6185,6 +6412,10 @@ function setCfgNotify(bssid, on)
 
 window.setCfgNotify = setCfgNotify;
 
+// mute or unmute every BSSID of a bell entry, "A,B,C"
+window.setCfgNotifyAll = (bssids, on) =>
+    bssids.split(",").forEach(b => setCfgNotify(b, on));
+
 // Under the bell, but kept inside the window: on a phone the bell
 // sits near the right edge
 function positionChanges(panel)
@@ -6205,8 +6436,13 @@ function toggleChanges()
     {
         fillChanges(Infinity);
         positionChanges(panel);
+        fillBell();
         return;
     }
+
+    // Closed: the bell's title back
+    if (!panel.classList.contains("open"))
+        fillBell();
 
     if (panel.classList.contains("open"))
     {
@@ -6252,7 +6488,10 @@ document.addEventListener("click", ev =>
 
     if (panel.classList.contains("open") &&
         !document.getElementById("bellWrap").contains(ev.target))
+    {
         panel.classList.remove("open");
+        fillBell();
+    }
 });
 
 
@@ -7005,6 +7244,14 @@ function beaconsTooFast(n)
     return !!n.bgap && n.bgap[0] >= 10 && n.bgap[1] / n.bgap[0] > 0.2;
 }
 
+// ptsf: [probe responses with timestamp 0, with one]; three with 0,
+// none with a time and a timer in the beacons is the AP's way
+function probeTsfZero(n)
+{
+    return !!n.ptsf && n.ptsf[0] >= 3 && n.ptsf[1] === 0 &&
+        n.tsfup != null;
+}
+
 // TIM: [DTIM period, group traffic buffered, stations waiting]
 function dtimText(n)
 {
@@ -7054,6 +7301,188 @@ function secRank(sec)
  * least two of them agree, two thirds of them. Weaker security is
  * what an evil twin with its own BSSID looks like.
  */
+/*
+ * Fine Timing Measurement. ftmpar: the FTM Parameters element's nine
+ * octets in hex (802.11-2020 9.4.2.166): status, number of bursts as
+ * an exponent and their duration, FTMs per burst with ASAP, format
+ * and bandwidth, burst period in 100 ms.
+ */
+const FTM_FORMATS = { 8: "non-HT 20 MHz", 9: "HT 20 MHz", 10: "VHT 20 MHz",
+    11: "HT 40 MHz", 12: "VHT 40 MHz", 13: "VHT 80 MHz", 14: "VHT 80+80 MHz",
+    15: "VHT 160 MHz", 16: "VHT 160 MHz" };
+
+function hexBytes(hex)
+{
+    const out = [];
+
+    for (let i = 0; i + 1 < (hex || "").length; i += 2)
+        out.push(parseInt(hex.substr(i, 2), 16));
+
+    return out;
+}
+
+function ftmParamText(hex)
+{
+    const b = hexBytes(hex);
+
+    if (b.length < 9)
+        return "";
+
+    const exp     = b[1] & 0x0F;
+    const perBurst = b[5] >> 3;
+    const format  = b[6] >> 2;
+    const period  = b[7] | (b[8] << 8);
+
+    return [
+        perBurst ? perBurst + " FTM frames per burst" : "",
+        exp === 15 ? "" : (1 << exp) + (exp ? " bursts" : " burst"),
+        period && exp ? "every " + (period / 10) + " s" : "",
+        b[5] & 0x04 ? "ASAP" : "",
+        format ? FTM_FORMATS[format] || "format " + format : ""
+    ].filter(x => x).join(", ");
+}
+
+/*
+ * ftmlci: the LCI field of a Measurement Report, 16 octets, bits
+ * from the least significant of the first octet (802.11-2020
+ * 9.4.2.21.10): latitude and longitude of 34 bits with 25 fractional,
+ * altitude of 30 bits with 8, its type 1 metres, 2 floors.
+ */
+function lciText(hex)
+{
+    const b = hexBytes(hex);
+
+    if (b.length < 16)
+        return "";
+
+    let v = 0n;
+
+    b.forEach((x, i) => v |= BigInt(x) << BigInt(8 * i));
+
+    const bits = (off, len) =>
+        Number((v >> BigInt(off)) & ((1n << BigInt(len)) - 1n));
+    const signed = (x, len) => x >= 2 ** (len - 1) ? x - 2 ** len : x;
+
+    const lat = signed(bits(6, 34), 34) / 2 ** 25;
+    const lon = signed(bits(46, 34), 34) / 2 ** 25;
+    const altType = bits(80, 4);
+    const alt = signed(bits(90, 30), 30) / 2 ** 8;
+
+    const deg = (x, pos, neg) => Math.abs(x).toFixed(5) + "\u00b0 " +
+                                 (x < 0 ? neg : pos);
+
+    // On OpenStreetMap, as the drone's position
+    const y = lat.toFixed(6), x = lon.toFixed(6);
+
+    return "<a class='dl' target='_blank' rel='noopener' " +
+        "href='https://www.openstreetmap.org/?mlat=" + y + "&mlon=" + x +
+        "#map=18/" + y + "/" + x + "'>" +
+        deg(lat, "N", "S") + ", " + deg(lon, "E", "W") + "</a>" +
+        (altType === 1 ? ", " + Math.round(alt) + " m"
+         : altType === 2 ? ", floor " + Math.round(alt) : "");
+}
+
+/*
+ * ftmciv: a Location Civic field in the format of RFC 4776 from the
+ * country code on: two letters, then CAtype, length, value.
+ */
+const CIVIC_TYPES = { 1: "state", 2: "county", 3: "city", 4: "district",
+    5: "neighbourhood", 6: "street", 19: "number", 23: "name", 24: "postcode",
+    25: "building", 26: "unit", 27: "floor", 28: "room", 34: "road" };
+
+function civicText(hex)
+{
+    const b = hexBytes(hex);
+
+    if (b.length < 2)
+        return "";
+
+    const text = bytes => bytes.map(x => String.fromCharCode(x)).join("");
+    const parts = {};
+
+    for (let i = 2; i + 2 <= b.length; )
+    {
+        const type = b[i];
+        const len  = b[i + 1];
+
+        if (i + 2 + len > b.length)
+            break;
+
+        if (CIVIC_TYPES[type])
+            parts[CIVIC_TYPES[type]] = text(b.slice(i + 2, i + 2 + len));
+
+        i += 2 + len;
+    }
+
+    const street = parts.road || parts.street;
+
+    return [
+        [street, parts.number].filter(x => x).join(" "),
+        [parts.postcode, parts.city].filter(x => x).join(" "),
+        text(b.slice(0, 2)),
+        parts.building ? "building " + parts.building : "",
+        parts.floor ? "floor " + parts.floor : "",
+        parts.room ? "room " + parts.room : ""
+    ].filter(x => x).map(escapeHTML).join(", ");
+}
+
+// ftm of a BSS: [requests to it, FTM frames from it, [stations]]
+function ftmRangingText(n)
+{
+    if (!n.ftm)
+        return "";
+
+    const st = n.ftm[2].length;
+
+    return n.ftm[0] + (n.ftm[0] === 1 ? " request" : " requests") +
+        (st ? " from " + st + (st === 1 ? " station" : " stations") +
+              (st >= 4 ? " or more" : "") : "") +
+        ", " + n.ftm[1] + " FTM frames sent";
+}
+
+// ftm of a station: [requests, FTM frames to it, [responders]], ftmask
+function stationFtmText(c)
+{
+    if (!c.ftm)
+        return "";
+
+    const named = c.ftm[2].map(b =>
+    {
+        const n = networks.find(x => x.bssid === b);
+
+        return n && n.ssid ? escapeHTML(n.ssid) + " " + b : b;
+    });
+
+    const ask = [c.ftmask & 1 ? "position" : "", c.ftmask & 2 ? "address" : ""]
+        .filter(x => x).join(" and ");
+
+    return "ranging with " + named.join(", ") +
+        (c.ftm[2].length >= 3 ? " and more" : "") + ": " +
+        c.ftm[0] + (c.ftm[0] === 1 ? " request, " : " requests, ") +
+        c.ftm[1] + " FTM frames back" +
+        (ask ? ", asks for the " + ask : "") +
+        (c.ftmpar ? " \u00b7 " + ftmParamText(c.ftmpar) : "");
+}
+
+// A Mobility Domain ID as Wireshark shows it, 0x4A2B
+function mdidText(v)
+{
+    return "0x" + v.toString(16).toUpperCase().padStart(4, "0");
+}
+
+// mdid: [Mobility Domain ID, FT Capability and Policy]
+function ftText(n)
+{
+    if (!n.r)
+        return "";
+
+    if (!n.mdid)
+        return "fast transition (mobility domain)";
+
+    return "fast transition, mobility domain " + mdidText(n.mdid[0]) +
+           (n.mdid[1] & 1 ? ", over the air and the DS" : ", over the air");
+}
+
 function ssidOutlierNotes(n)
 {
     const amber = "#c8a050";
@@ -7100,6 +7529,18 @@ function ssidOutlierNotes(n)
             "PMF not required here, unlike the other " + peers.length +
             " BSSs of " + name + " on other devices"]);
 
+    // 802.11r only works within one mobility domain
+    const ftPeers = peers.filter(o => o.mdid);
+    const md = n.mdid && usual(ftPeers.map(o => String(o.mdid[0])));
+
+    if (md && ftPeers.length >= 2 && Number(md) !== n.mdid[0])
+        notes.push([amber,
+            "Mobility domain " + mdidText(n.mdid[0]) + " here, " +
+            mdidText(Number(md)) + " on the other " + ftPeers.length +
+            " BSSs with 802.11r of " + name + " on other devices: no " +
+            "fast transition between them, a station roaming over logs " +
+            "in anew"]);
+
     const cc = usual(peers.map(o => o.cc || "-"));
 
     if (cc !== null && cc !== "-" && (n.cc || "-") !== cc)
@@ -7126,6 +7567,13 @@ function networkNotes(n)
         notes.push([pink, unknownElementText(n, i)]));
 
     // ---- state of the air -------------------------------
+
+    if (n.ftmlci || n.ftmciv)
+        notes.push([blue,
+            "Gives its " + (n.ftmlci && n.ftmciv ? "position and address"
+                            : n.ftmlci ? "position" : "address") +
+            " in FTM frames to any station that asks, as configured " +
+            "on the AP: see FTM above"]);
 
     if (n.csacnt > 0 || n.csach > 0)
     {
@@ -7160,6 +7608,13 @@ function networkNotes(n)
             "multicast wait up to " +
             Math.round(n.dtim[0] * (n.bi || 100) * 1.024) + " ms for " +
             "stations in power save, so ARP, mDNS and the like answer late"]);
+
+    if (probeTsfZero(n))
+        notes.push([red,
+            "Timestamp 0 in every probe response (" + n.ptsf[0] +
+            " seen), while the beacons carry the AP's timer: not as " +
+            "802.11 has it, the field holds the TSF timer in probe " +
+            "responses as well. Stations that sync on them get no time"]);
 
     if (beaconsTooFast(n))
         notes.push([amber,
@@ -7253,17 +7708,10 @@ function networkNotes(n)
          * button needs physical access and a short window.
          */
         const PIN = 0x0004 | 0x0008 | 0x0100 | 0x2000 | 0x4000;
-        const PBC = 0x0080 | 0x0200 | 0x0400;
 
         const m = n.wpsm || 0;
 
-        const names = [];
-
-        if (m & 0x0004) names.push("Label");
-        if (m & 0x0008) names.push("Display");
-        if (m & 0x0100) names.push("Keypad");
-        if (m & PBC)    names.push("Push Button");
-        if (m & 0x0040) names.push("NFC");
+        const names = wpsMethodNames(m);
 
         const how =
             names.length ? names.join(", ") : "methods not announced";
@@ -7745,17 +8193,18 @@ function countryMajority()
 }
 
 /*
- * One device, its BSSIDs: the same address with the locally
- * administered bit set (08:… and 0A:…), or the same first five
- * octets with the last one in the same block of sixteen.
+ * One device, its BSSIDs: the same last five octets with another
+ * first one, the locally administered bit set (08:… and 0A:…) or an
+ * index in it as well (1A:…, 1C:…, 1E:… for three SSIDs of a radio),
+ * or the same first five octets with the last one in the same block
+ * of sixteen.
  */
 function sameDevice(a, b)
 {
     const x = a.split(":").map(h => parseInt(h, 16));
     const y = b.split(":").map(h => parseInt(h, 16));
 
-    if ((x[0] & ~2) === (y[0] & ~2) &&
-        x.slice(1).join() === y.slice(1).join())
+    if (x.slice(1).join() === y.slice(1).join())
         return true;
 
     return x.slice(0, 5).join() === y.slice(0, 5).join() &&
@@ -8721,11 +9170,20 @@ function networkTooltip(n)
         ["11k", n.k ? (rrmText(n.rrm || 0) || "announced") : ""],
         ["11v", n.v || n.wnm
             ? (wnmText(n.wnm || 0) || "announced") : ""],
-        ["11r", n.r ? "fast transition (mobility domain)" : ""],
+        ["11r", ftText(n)],
         ["MBO", escapeHTML(mboText(n))],
         ["Pilot", n.mpt === undefined ? ""
             : n.mpt ? "measurement pilot every " + n.mpt + " TU"
                     : "measurement pilot: none (interval 0)"]
+    ]);
+
+    // ---- fine timing measurement ------------------------
+
+    html += tipSection("FTM", [
+        ["Ranging", ftmRangingText(n)],
+        ["Granted", n.ftmpar ? ftmParamText(n.ftmpar) : ""],
+        ["Position", n.ftmlci ? lciText(n.ftmlci) + " (LCI, as configured)" : ""],
+        ["Address", n.ftmciv ? civicText(n.ftmciv) + " (Location Civic)" : ""]
     ]);
 
     // ---- multi-link -------------------------------------
@@ -9569,7 +10027,9 @@ function clientTooltip(c, snapshot = false)
         ["11k", c.k ? (rrmText(c.rrm || 0) || "announced") : ""],
         ["11v", c.v || c.wnm
             ? (wnmText(c.wnm || 0) || "announced") : ""],
-        ["11r", c.r ? "fast transition" : ""]
+        ["11r", c.r ? "fast transition" + (c.mdid !== undefined
+            ? ", mobility domain " + mdidText(c.mdid) : "") : ""],
+        ["FTM", stationFtmText(c)]
     ]);
 
     // ---- multi-link -------------------------------------
@@ -12422,7 +12882,7 @@ function stationMatches(c)
         c.apssid,
         c.joined,
         (c.ssids || []).join(" "),
-        "ch:" + c.ch,
+        c.std ? "wifi" + c.std + " " + stdText(c.std) : "",
         capsText(c),
         bandsText(c),
         channelsText(c),
@@ -12435,6 +12895,7 @@ function stationMatches(c)
         c.k ? "11k " + rrmText(c.rrm || 0) : "",
         c.v || c.wnm ? "11v " + wnmText(c.wnm || 0) : "",
         c.r ? "11r" : "",
+        c.ftm ? "ranging" : "",
         c.roamsft ? "fast transition ft roam" : "",
         c.maxidle ? "max idle" : "",
         c.mld ? "mlo mld " + c.mld : "",
@@ -12446,7 +12907,7 @@ function stationMatches(c)
         awdlOf(c) ? "awdl apple " + awdlClassText(awdlOf(c).cls) : ""
     ].join(" ").toLowerCase();
 
-    return terms.every(t => haystack.indexOf(t) >= 0);
+    return terms.every(t => termMatches(t, c, haystack, STATION_FILTER_KEYS));
 }
 
 
@@ -12910,6 +13371,7 @@ window.clearCatalog = clearCatalog;
 const VENDOR_IE_NAMES = {
     0x0050F201: "WPA", 0x0050F202: "WMM", 0x0050F204: "WPS",
     0x00A04000: "Apple Device IE, accessory such as CarPlay",
+    0x04DF690A: "Car Connectivity Consortium, car head unit",
     0x000B8601: "Aruba AP element (subtype 4 is ARM)",
     0x000C4200: "MikroTik radio name",
     0x08000900: "HP printer info",
@@ -12950,7 +13412,7 @@ const VENDOR_IE_MAKERS = {
     "001C62": "LG", "003192": "TP-Link", "0050F2": "Microsoft",
     "00A057": "LANCOM", "743170": "Arcadyan", "94BBAE": "Husqvarna",
     "C83A6B": "Roku", "F832E4": "ASUS", "AC853D": "HUAWEI",
-    "000B82": "Grandstream",
+    "000B82": "Grandstream", "04DF69": "Car Connectivity Consortium",
     "506F9A": "Wi-Fi Alliance"
 };
 

@@ -81,9 +81,48 @@ the tooltip's capabilities, 11k and 11v detail, multi-link, spatial
 streams, Tx power envelope, unknown elements and the notes as well. So
 `eirp` lists the APs that send a power envelope, `mlo 5ghz` the 5 GHz
 links of AP MLDs, `dfs` those on DFS channels, `ch:36 80mhz` what it
-says. Matching is by substring and ignores case; `ch:`, `80mhz` and
+says. Matching is by substring and ignores case, word by word:
+`pmf required` finds *pmf* in one place and *required* in another, a
+note saying "PMF not required" included. Terms of the form key:value
+are compared exactly instead: `ch:1` is channel 1, not 11 or 100,
+`pmf:required` what it says; `80mhz` and
 `wifi6` are spellings the filter adds so that a channel number or a
 width does not also hit every MAC address that contains the digits.
+
+The **?** beside the filter lists the terms it adds itself:
+
+| Term | Finds |
+|------|-------|
+| `ch:36` | channel, exactly |
+| `80mhz` | width (`20mhz` … `320mhz`) |
+| `2.4ghz` | band, or `5ghz` |
+| `wifi6` | standard (`wifi4` … `wifi7`), also `ax` |
+| `wpa3` | security as in the table (`open`, `owe`, `wpa2-eap` …) |
+| `sae` | AKM (`psk`, `eap`, `owe` …), also in the RSNE Override |
+| `ccmp` | cipher (`tkip`, `gcmp-256` …) |
+| `pmf:required` | PMF required, or `pmf:capable`, `pmf:off` (`pmf` alone also finds the notes about PMF) |
+| `wps` | WPS on |
+| `de` | country, two letters |
+| `2ss` | spatial streams |
+| `mesh` | 802.11s mesh point |
+| `ibss` | ad hoc, also `adhoc` |
+| `mlo` | multi-link (Wi-Fi 7) |
+| `drone` | Remote ID, also `remote id` |
+| `changed` | configuration changed (the bell) |
+| `fastbeacons` | beacons faster than their interval |
+| `probetsf0` | timestamp 0 in every probe response |
+| `dtim:3` | DTIM period, exactly |
+| `mdid:4a2b` | 802.11r mobility domain |
+| `ranging` | FTM frames seen with this BSSID |
+| `ftm responder` | FTM announced (also `ftm initiator`) |
+| `colour change` | BSS colour change announced |
+| `broken suite` | cipher suite under a misplaced OUI |
+| `basic rates 1` | a basic rate (`basic rates none`: none marked) |
+| `headunit` | a car's: Car Connectivity Consortium element or CarPlay accessory |
+| `broadcom chip` | Wi-Fi chip from the vendor elements |
+
+Beyond these, any word of a tooltip line or a note works too: `tkip`,
+`evil twin`, `dfs`, a manufacturer or an AP name.
 
 **Flush**, at the right end of the filter row above the graph's top
 right corner, empties the network table on the sensor, after asking:
@@ -193,7 +232,8 @@ to the pilot's position, as far as the elements give them away
 | RADIO | channel, width, occupied range, the centre if it is not the channel itself, standard with the announced generations and spatial streams, basic rates, ad-hoc (IBSS) with its ATIM window, NAN (master preference, anchor master and hops), QoS Management (DSCP policy, SCS traffic description, from the Wi-Fi Alliance Capabilities element), the BSS colour and announced switches, Multiple BSSID, the vendor elements (OUI, types, owner; one line per OUI unless a type has a name of its own), the Apple accessory (manufacturer, model, name), the operating mode (width and streams in use), Wi-Fi Direct (group owner, persistent group, cross connection, device name) and Miracast, an HP printer's model |
 | SECURITY | security, AKM, ciphers, PMF and, on the same line, WPS with the device name, manufacturer and model it announces; the config methods and AP Setup Locked are kept from the probe responses, a beacon without them does not clear them; pre-authentication, Hotspot 2.0, beacon protection; the RSNE/RSNXE Override, i.e. the security offered to Wi-Fi 7 clients beside the RSN element for all others; Interworking (access network type, Internet, venue, HESSID) and the Advertisement Protocol (ANQP …); the OWE transition partner |
 | MESH | peerings and path selection of an 802.11s mesh BSS |
-| ROAMING | the 11k, 11v and 11r detail, MBO-OCE (cellular data aware, OCE, channels to avoid), the measurement pilot interval |
+| ROAMING | the 11k, 11v and 11r detail (with the mobility domain), MBO-OCE (cellular data aware, OCE, channels to avoid), the measurement pilot interval |
+| FTM | Fine Timing Measurement seen with this BSSID as the responder, see below |
 | MULTI-LINK | the AP MLD, its links, EML and MLD capabilities |
 | POWER | country, Tx power envelope, power constraint, TPC report, Quiet intervals |
 | LOAD | stations observed, BSS load, beacon interval, the DTIM period with buffered group traffic and the stations with frames waiting (TIM), the beacon gaps, extended BSS load, available admission capacity, BSS Max Idle Period, ERP |
@@ -271,6 +311,24 @@ ROAMING section spells out what is behind them:
 
 The same two lines appear in the station tooltip, read from the
 client's requests.
+
+**Fine Timing Measurement (802.11mc).** A station measures its distance
+to an AP from the time FTM frames take, for positioning indoors (Wi-Fi
+RTT on Android). FTM responder and initiator in the 11v line only say
+that a device can; the FTM section appears once the sensor has seen
+the frames themselves, Public Action frames sent to and from the BSSID:
+the requests and the stations ranging, the FTM frames the AP sent, the
+parameters it granted (frames per burst, bursts, period, ASAP, format
+and bandwidth), and the position (LCI: latitude, longitude, altitude
+or floor, linked to OpenStreetMap) and address (Location Civic) it
+gives a station that asks
+for them. That is what was configured on the AP, and any station can
+ask for it, which a blue note points out. The station tooltip has the
+same from the other side: which responders it ranges with, how often,
+whether it asked for position or address. `ranging` in the filter
+finds BSSs and stations with FTM frames seen, `ftm responder` those
+that only announce it. (Decoded from the standard, not yet from frames
+of a real responder.)
 
 **Multi-link (Wi-Fi 7).** An 802.11be AP can run several links — 2.4, 5
 and 6 GHz — as one logical device, the AP MLD. Each link has its own
@@ -491,11 +549,20 @@ order: red first, then amber, blue, and pink last.
 
 ![Tooltip with hints](images/08-network-tooltip.png)
 
-**Configuration changes.** What a beacon says about channel, width,
-standard, spatial streams, the lowest basic rate, beacon interval,
-country, security (label, AKM, ciphers, PMF), 802.11k/v/r, WPS, the
-BSS colour and the DTIM period is the AP's configuration; it should stay as it is while
-the BSS runs. When it changes, the column gets a `Δ` after the other
+**Configuration changes.** What a beacon says about its SSID (also
+hidden or not), channel, width, standard, spatial streams, the basic
+rates, beacon interval, country, security (label, AKM, ciphers, PMF,
+pre-authentication), the RSNE Override with its AKM, cipher, PMF and
+SAE H2E, 802.11k/v/r with the mobility domain and FT over the DS, WPS
+(on or off, state, AP Setup Locked, methods),
+the BSS colour, the DTIM period, power (Power Constraint, Transmit
+Power Envelope), MBO's *association disallowed*, OWE transition and its
+partner, Hotspot 2.0, Interworking with its network type, the MLD
+address and links of a multi-link AP, WMM admission control, 40 MHz
+Intolerant and a mesh point's gate, peering and authentication settings
+is the AP's configuration; it should stay as it is while the BSS runs.
+Load, stations, signal, buffered traffic and the clock are not: they
+change all the time and are left out. When it changes, the column gets a `Δ` after the other
 markers, without a colour: a change is neither good nor bad, a channel
 can move after radar on a DFS channel, a colour after a collision. The
 tooltip's CHANGES section lists them with the old value
@@ -516,7 +583,10 @@ this browser and follows on its own while the page is open, newest
 change first (a flapping entry moves up when it counts on), the time
 itself on hovering over "… ago", e.g. *9:43:27 18.10.2026*; what one
 BSS changed at once, a new security setting with its AKM, PMF and
-ciphers for instance, is one entry and counts once; opening
+ciphers for instance, is one entry and counts once, and so is the
+same change of several BSSIDs of one device at once, a radio sending
+three SSIDs that switches its BSS colour for instance: their SSIDs in
+the title, the first BSSID and how many more, *mute* for all of them; opening
 the list, which scrolls, marks them read, a click on one filters
 the network table to its BSSID.
 
@@ -538,6 +608,7 @@ and marking nothing read; a snapshot from before the bell has none.
 
 **Blue — state of the air**
 
+- position or address given in FTM frames, see Fine Timing Measurement
 - Channel Switch Announcement, with target channel and beacons remaining
   (not yet captured from a real AP: an AP sends it only in the last
   few beacons before it moves, mostly after radar on a DFS channel, so
@@ -612,9 +683,14 @@ probe and association requests.
 - PMF not required on one BSS while the other BSSs of its SSID on other
   devices require it, or its Country element missing or other than
   theirs (same rule: two of them at least, two thirds agreeing)
+- another mobility domain than the other BSSs with 802.11r of its SSID
+  on other devices (same rule): fast transition works within one domain
+  only, so a station roaming between them logs in anew. The ROAMING
+  row shows the Mobility Domain ID and whether FT also goes over the DS;
+  the filter finds a domain with `mdid:4a2b` …
 - DTIM period above 3: broadcast and multicast wait that many beacon
   intervals for stations in power save, so ARP, mDNS and the like answer
-  late; the filter finds a period with `dtim3`, `dtim10` …
+  late; the filter finds a period with `dtim:3`, `dtim:10` …
 - beacons faster than their interval: of at least ten gaps between two
   beacons heard back to back on the BSS's own channel, more than a fifth
   under half an interval. A late beacon makes the next one early, but
@@ -651,6 +727,11 @@ probe and association requests.
 
 **Red — worth fixing**
 
+- timestamp 0 in every probe response, at least three and none with a
+  time, while the beacons carry the AP's timer: 802.11 has the TSF
+  timer in that field in probe responses as well, and some OpenWrt APs
+  leave it empty. Such a 0 is no restart and no uptime; the filter
+  finds them with `probetsf0`
 - two devices sending as one BSSID: every device has its own beacon
   timer, and copying a MAC address does not copy it. The sensor keeps
   the offset between the timer in a frame and the time it heard it;

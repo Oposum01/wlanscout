@@ -1,4 +1,4 @@
-wlanscout firmware 2.6.3 (ESP32-C5, 16 MB flash, PSRAM enabled)
+wlanscout firmware 2.6.11 (ESP32-C5, 16 MB flash, PSRAM enabled)
 
 Partition table: two 6.25 MB firmware slots (app0/app1) for updates over
 the network, 3.4 MB LittleFS for the IE catalog and the snapshots

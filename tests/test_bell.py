@@ -97,8 +97,8 @@ def test_flapping_entry_and_refetch_on_update(app):
 
 
 def test_list_scrolls(app):
-    # Forty BSSs, so none of them is grouped with another
-    many = [[i, i, "02:00:00:00:00:%02X" % i, "Hall", "WPS", "off", "on"]
+    # Forty BSSs of forty devices, so none of them is grouped
+    many = [[i, i, "02:00:00:00:%02X:00" % i, "Hall", "WPS", "off", "on"]
             for i in range(40, 0, -1)]
     app.api["status"] = dict(app.api["status"], cfgseq=40, boot=7)
     app.api["changes"] = {"boot": 7, "seq": 40, "changes": many}
@@ -277,3 +277,67 @@ def test_time_of_a_change_on_hover(app):
             two(d.getMonth() + 1) + '.' + d.getFullYear(); })()""")
 
     assert title == expect
+
+
+RADIO = {"boot": 7, "seq": 5, "changes": [
+    # One radio with three SSIDs: index in the first octet
+    [5, 40, "1A:61:B4:B7:3D:F8", "Lab80", "BSS colour", "13", "35"],
+    [4, 40, "1E:61:B4:B7:3D:F8", "Lab72", "BSS colour", "13", "35"],
+    [3, 41, "1C:61:B4:B7:3D:F8", "LabEAP", "BSS colour", "13", "35"],
+    # Another device, the same change at the same time
+    [2, 40, "02:00:00:00:00:01", "Hall", "BSS colour", "13", "35"],
+    # The same radio, another change
+    [1, 41, "1A:61:B4:B7:3D:F8", "Lab80", "channel", "36", "52"]]}
+
+
+def test_one_entry_per_radio(app):
+    app.api["status"] = dict(app.api["status"], cfgseq=5, boot=7)
+    app.api["changes"] = RADIO
+    app.open()
+    app.js("updateStatus()")
+    app.page.wait_for_function(
+        "() => document.getElementById('bellCount').innerText === '3'")
+    app.page.locator("#bellBtn").click()
+
+    entries = app.page.locator("#changesPanel .chg")
+    texts = [entries.nth(i).inner_text() for i in range(entries.count())]
+
+    radio = [t for t in texts if "Lab72" in t and "BSS colour" in t]
+    assert len(radio) == 1
+    assert "Lab80, Lab72, LabEAP 1A:61:B4:B7:3D:F8 +2 \u00b7" in radio[0]
+    assert any("Hall" in t for t in texts)
+    assert any("channel" in t and "Lab80" in t and "+" not in t for t in texts)
+
+
+def test_radio_entry_filters_and_mutes_all(app):
+    app.api["status"] = dict(app.api["status"], cfgseq=5, boot=7)
+    app.api["changes"] = RADIO
+    app.open()
+    app.js("updateStatus()")
+    app.page.wait_for_function(
+        "() => document.getElementById('bellCount').innerText === '3'")
+
+    assert app.js("bellFilterKey(['1A:61:B4:B7:3D:F8', '1E:61:B4:B7:3D:F8'])") \
+        == ":61:B4:B7:3D:F8"
+    assert app.js("bellFilterKey(['02:00:00:00:00:01'])") == "02:00:00:00:00:01"
+
+    muted = []
+    app.page.route("**/api/cfgmute*", lambda r: (muted.append(r.request.url),
+                                                 r.fulfill(body="{\"ok\":1}")))
+    app.js("setCfgNotifyAll('1A:61:B4:B7:3D:F8,1E:61:B4:B7:3D:F8', false)")
+    app.page.wait_for_function("() => (cfgList.muted || []).length === 2")
+
+    assert app.js("cfgList.muted") == ["1A:61:B4:B7:3D:F8", "1E:61:B4:B7:3D:F8"]
+
+
+def test_no_bell_title_over_the_open_list(app):
+    with_bell(app)
+    bell = app.page.locator("#bellBtn")
+
+    assert bell.get_attribute("title")
+
+    bell.click()
+    assert bell.get_attribute("title") == ""
+
+    bell.click()
+    assert bell.get_attribute("title")

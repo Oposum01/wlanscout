@@ -104,6 +104,65 @@ struct CfgSnap
     char     akm[64];
     char     pairwise[36];
     char     group[18];
+
+    /*
+     * The rest is read from the beacon's elements by cfgExtrasOf(),
+     * not from the network entry: there much is kept from the last
+     * frame that had it, or comes from probe responses, so a value
+     * switched off would never show and one only in probe responses
+     * would come and go.
+     */
+    char     ssid[33];           // "" hidden
+    bool     ovr;                // RSNE Override (2) sent
+    char     ovrAkm[64];
+    char     ovrPairwise[36];
+    uint8_t  ovrPmf;             // 0 off, 1 capable, 2 required
+    bool     ovrH2E;             // RSNXE Override: SAE hash-to-element
+    uint8_t  mboDisallowed;      // MBO Association Disallowed reason, 0 none
+    uint8_t  powerConstraint;    // dB, 255 none
+    uint8_t  tpe[12];            // the first Transmit Power Envelope
+    uint8_t  tpeLen;
+    uint8_t  wpsState;           // 0 none, 1 not configured, 2 configured
+    bool     wpsLocked;          // AP Setup Locked
+    uint16_t wpsMethods;         // Config Methods, 0 not in the beacon
+    bool     oweTrans;
+    uint8_t  oweBssid[6];
+    char     oweSsid[33];
+    bool     hs20;
+    uint8_t  iwType;             // Interworking access network type, 255 none
+    uint8_t  mldMac[6];          // all 0 without a Multi-Link element
+    uint16_t mloLinks;           // link IDs of this MLD, own and in the RNR
+    uint16_t basicRates;         // bit per entry of cfgRates[]
+    bool     preAuth;
+    uint8_t  acm;                // WMM admission control per AC, 255 no WMM
+    bool     intolerant;         // HT 40 MHz Intolerant
+    bool     meshGate;
+    bool     meshAccepting;
+    uint8_t  meshAuth;           // authentication protocol, 255 no mesh
+    bool     mde;                // Mobility Domain element sent
+    uint16_t mdid;               // its ID
+    bool     ftOverDs;           // FT over the DS
+};
+
+/*
+ * Fine Timing Measurement (802.11mc): a station measures its distance
+ * to a responder from the time FTM frames take. Public Action frames,
+ * category 4: action 32 the FTM Request of the station, 33 the FTM
+ * frames of the responder. The request may carry FTM Parameters (206)
+ * and Measurement Requests (38) for the responder's position (LCI,
+ * type 8) and address (Location Civic, type 11); the responder's first
+ * FTM frame its FTM Parameters and the Measurement Reports (39).
+ */
+struct FtmInfo
+{
+    bool    paramSeen;
+    uint8_t param[9];
+    bool    askLci;
+    bool    askCivic;
+    bool    lciSeen;
+    uint8_t lci[16];             // the LCI field, decoded in the browser
+    uint8_t civicLen;
+    uint8_t civic[64];           // Location Civic field, RFC 4776 style
 };
 
 #define CFG_CHANGES 8
@@ -113,7 +172,7 @@ struct CfgChange
     uint32_t at;                 // millis()
     uint8_t  field;              // CFG_*
     char     from[40];
-    char     to[24];
+    char     to[40];
 };
 
 enum
@@ -121,7 +180,13 @@ enum
     CFG_RESTART, CFG_CHANNEL, CFG_WIDTH, CFG_STANDARD, CFG_STREAMS,
     CFG_BASIC_RATE, CFG_BEACON_INTERVAL, CFG_COUNTRY, CFG_PMF,
     CFG_11K, CFG_11V, CFG_11R, CFG_WPS, CFG_COLOR, CFG_SECURITY,
-    CFG_AKM, CFG_PAIRWISE, CFG_GROUP, CFG_FLAP, CFG_DTIM, CFG_CLONE
+    CFG_AKM, CFG_PAIRWISE, CFG_GROUP, CFG_FLAP, CFG_DTIM, CFG_CLONE,
+    CFG_SSID, CFG_OVR, CFG_OVR_AKM, CFG_OVR_CIPHER, CFG_OVR_PMF,
+    CFG_OVR_H2E, CFG_MBO, CFG_PWR_CONSTRAINT, CFG_TPE, CFG_WPS_STATE,
+    CFG_WPS_LOCK, CFG_WPS_METHODS, CFG_OWE, CFG_OWE_BSSID, CFG_OWE_SSID,
+    CFG_HS20, CFG_INTERWORKING, CFG_MLD, CFG_MLO_LINKS, CFG_BASIC_RATES,
+    CFG_PREAUTH, CFG_ACM, CFG_INTOLERANT, CFG_MESH_GATE, CFG_MESH_ACCEPT,
+    CFG_MESH_AUTH, CFG_MDID, CFG_FT_DS
 };
 
 /*
@@ -146,7 +211,7 @@ struct CfgEvent
     char     ssid[33];
     uint8_t  field;
     char     from[40];
-    char     to[24];
+    char     to[40];
 };
 
 CfgEvent *cfgEvents  = nullptr;  // PSRAM, see allocateTables()
@@ -478,7 +543,7 @@ void handleNotFound();
 #define ZB_HEADER_BYTES 24
 
 // Firmware version, shown in the header and in /api/live
-#define FW_VERSION "2.6.3"
+#define FW_VERSION "2.6.11"
 
 // ============================================================
 // HEAP PROBE  (diagnostic, remove once the culprit is known)
@@ -1023,6 +1088,28 @@ struct WiFiNetwork
     bool     bss11v;
     bool     ft11r;
 
+    // Mobility Domain (54): its ID, and FT Capability and Policy
+    // (bit 0 FT over the DS, bit 1 resource request protocol)
+    uint16_t mdid;
+    uint8_t  ftPolicy;
+
+    /*
+     * Fine Timing Measurement with this BSSID as the responder, see
+     * parseFtm(): requests to it, FTM frames from it, the stations
+     * ranging, and what its FTM frames say: the parameters it
+     * granted, its position (LCI) and its address (Location Civic).
+     */
+    uint16_t ftmRequests;
+    uint16_t ftmFrames;
+    uint8_t  ftmPeers[4][6];
+    uint8_t  ftmPeerCount;
+    bool     ftmParamSeen;
+    uint8_t  ftmParam[9];
+    bool     ftmLciSeen;
+    uint8_t  ftmLci[16];
+    uint8_t  ftmCivicLen;
+    uint8_t  ftmCivic[64];
+
     // The detail behind 11k and 11v, see rrmCapsOf() / wnmCapsOf()
     uint64_t rrmCaps;
     uint16_t wnmCaps;
@@ -1253,6 +1340,8 @@ struct WiFiNetwork
     uint32_t tsfAt;              // millis it was read, 0 never
     uint8_t  tsfResets;
     uint32_t tsfResetAt;
+    uint8_t  probeTsfZero;       // probe responses with timestamp 0
+    uint8_t  probeTsfSet;        // and with one
 
     // BSS Max Idle Period (90), units of 1000 TU, 0 none
     uint8_t  dtimPeriod;         // TIM (5): beacons between DTIMs, 0 none
@@ -1396,6 +1485,17 @@ struct ClientEntry
     bool     rm11k;
     bool     bss11v;
     bool     ft11r;
+    uint16_t mdid;               // the Mobility Domain it asked for
+
+    // Fine Timing Measurement as the initiator, see parseFtm()
+    uint16_t ftmRequests;
+    uint16_t ftmAnswers;         // FTM frames sent to it
+    uint8_t  ftmTargets[3][6];   // the responders it asked
+    uint8_t  ftmTargetCount;
+    bool     ftmAskLci;          // asked for the responder's position
+    bool     ftmAskCivic;        //   and for its address
+    bool     ftmParamSeen;
+    uint8_t  ftmParam[9];        // FTM Parameters of its request
     bool     band6;
 
     // The detail behind 11k and 11v, see rrmCapsOf() / wnmCapsOf()
@@ -3627,7 +3727,8 @@ void noteApClock(const uint8_t *bssid, int64_t offsetUs)
  *             Coexistence, 74 OBSS Scan Parameters, 244 RSN
  *             Extension, 10 Request (what
  *             a station asks for), 128 Lucent/Agere proprietary,
- *             200 and 231 as Tenda/Realtek fill them, 240 FILS
+ *             150 (Cisco's number, empty in probe requests of
+ *             some phones), 200 and 231 as Tenda/Realtek fill them, 240 FILS
  *             Indication (FILS itself shows in the AKM list);
  *             ext 2 FILS Request Parameters, 37 UORA, 38 MU EDCA, 39 Spatial Reuse, 41 NDP
  *             Feedback Report, 56 Non-Inheritance,
@@ -3650,7 +3751,7 @@ static const uint8_t decodedIes[] = {
 static const uint8_t decodedExt[] = { 35, 36, 42, 59, 107, 108 };
 
 static const uint8_t passedIes[] = {
-    10, 33, 46, 47, 51, 62, 72, 74, 128, 200, 231, 240, 244
+    10, 33, 46, 47, 51, 62, 72, 74, 128, 150, 200, 231, 240, 244
 };
 
 static const uint8_t passedExt[] = {
@@ -5162,9 +5263,16 @@ void parseStationCapabilities(const uint8_t *ies, int ieLength,
     if (ext != nullptr && len >= 3 && (ext[2] & 0x08))
         c.bss11v = true;
 
-    // Mobility domain -> 802.11r
-    if (findIE(ies, ieLength, 54, len) != nullptr)
+    // Mobility domain -> 802.11r, with the domain asked for
+    const uint8_t *md = findIE(ies, ieLength, 54, len);
+
+    if (md != nullptr)
+    {
         c.ft11r = true;
+
+        if (len >= 2)
+            c.mdid = md[0] | (md[1] << 8);
+    }
 
     // Like the flags above, collected over every request seen
     c.rrmCaps |= rrmCapsOf(ies, ieLength);
@@ -6176,7 +6284,15 @@ const char *const cfgFieldNames[] = {
     "lowest basic rate", "beacon interval", "country", "PMF",
     "802.11k", "802.11v", "802.11r", "WPS", "BSS colour", "security",
     "AKM", "cipher", "group cipher", "flapping", "DTIM period",
-    "two clocks"
+    "two clocks", "SSID", "RSNE override", "override AKM",
+    "override cipher", "override PMF", "override H2E",
+    "association", "power constraint", "Tx power envelope",
+    "WPS state", "WPS locked", "WPS methods", "OWE transition",
+    "OWE partner", "OWE partner SSID", "Hotspot 2.0", "interworking",
+    "MLD address", "MLO links", "basic rates", "pre-authentication",
+    "admission control", "40 MHz intolerant", "mesh gate",
+    "accepting peerings", "mesh authentication", "mobility domain",
+    "FT over the DS"
 };
 
 bool cfgIsMuted(const uint8_t *bssid)
@@ -6314,7 +6430,237 @@ void sendChangesJSON()
     outEnd();
 }
 
-CfgSnap cfgSnapOf(const WiFiNetwork &n)
+/*
+ * The basic rates a beacon may mark, in 500 kbit/s units: one bit
+ * each in CfgSnap.basicRates.
+ */
+const uint8_t cfgRates[] = { 2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108 };
+
+// What a beacon says beyond the network entry's fields, see CfgSnap
+void cfgExtrasOf(const uint8_t *ies, int ieLength, CfgSnap &c)
+{
+    int len = 0;
+    const uint8_t *p;
+
+    // SSID, or the Mesh ID of a mesh point; nothing but zeros is hidden
+    p = findIE(ies, ieLength, 0, len);
+
+    if (p == nullptr || len == 0)
+        p = findIE(ies, ieLength, 114, len);
+
+    if (p != nullptr && len > 0 && len <= 32)
+        for (int i = 0; i < len; i++)
+            if (p[i] != 0)
+            {
+                memcpy(c.ssid, p, len);
+                break;
+            }
+
+    // RSN Capabilities: pre-authentication
+    {
+        RsnInfo rsn;
+
+        memset(&rsn, 0, sizeof(rsn));
+
+        p = findIE(ies, ieLength, 48, len);
+        parseSuites(p, len, false, rsn);
+
+        c.preAuth = rsn.preAuth;
+    }
+
+    // RSNE Override, or Override 2, and the RSNXE Override's H2E bit
+    p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x29, len);
+
+    if (p == nullptr)
+        p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x2A, len);
+
+    if (p != nullptr)
+    {
+        RsnInfo o;
+
+        memset(&o, 0, sizeof(o));
+        parseSuites(p, len, false, o);
+
+        c.ovr    = true;
+        c.ovrPmf = o.mfpRequired ? 2 : (o.mfpCapable ? 1 : 0);
+
+        strlcpy(c.ovrAkm, o.akm, sizeof(c.ovrAkm));
+        strlcpy(c.ovrPairwise, o.pairwise, sizeof(c.ovrPairwise));
+    }
+
+    p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x2B, len);
+
+    c.ovrH2E = p != nullptr && len >= 1 && (p[0] & 0x20) != 0;
+
+    // MBO-OCE attributes: 4 is Association Disallowed with its reason
+    p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x16, len);
+
+    for (int i = 0; p != nullptr && i + 2 <= len; )
+    {
+        uint8_t id = p[i];
+        uint8_t l  = p[i + 1];
+
+        if (i + 2 + l > len)
+            break;
+
+        if (id == 4)
+            c.mboDisallowed = l >= 1 && p[i + 2] ? p[i + 2] : 1;
+
+        i += 2 + l;
+    }
+
+    // Power Constraint (32) and the first Transmit Power Envelope (195)
+    p = findIE(ies, ieLength, 32, len);
+
+    c.powerConstraint = p != nullptr && len >= 1 ? p[0] : 255;
+
+    p = findIE(ies, ieLength, 195, len);
+
+    if (p != nullptr && len >= 2)
+    {
+        c.tpeLen = len > (int)sizeof(c.tpe) ? sizeof(c.tpe) : len;
+        memcpy(c.tpe, p, c.tpeLen);
+    }
+
+    // WPS: state, AP Setup Locked, Config Methods, as the beacon has them
+    p = findVendorIE(ies, ieLength, 0x00, 0x50, 0xF2, 0x04, len);
+
+    for (int i = 0; p != nullptr && i + 4 <= len; )
+    {
+        uint16_t attr = (p[i] << 8) | p[i + 1];
+        uint16_t l    = (p[i + 2] << 8) | p[i + 3];
+
+        if (i + 4 + l > len)
+            break;
+
+        const uint8_t *v = p + i + 4;
+
+        if (attr == 0x1044 && l >= 1)
+            c.wpsState = v[0];
+        else if (attr == 0x1057 && l >= 1)
+            c.wpsLocked = v[0] != 0;
+        else if (attr == 0x1008 && l >= 2)
+            c.wpsMethods = (v[0] << 8) | v[1];
+
+        i += 4 + l;
+    }
+
+    // OWE Transition Mode: the partner's BSSID and SSID
+    p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x1C, len);
+
+    if (p != nullptr && len >= 7 && p[6] <= 32 && 7 + p[6] <= len)
+    {
+        c.oweTrans = true;
+
+        memcpy(c.oweBssid, p, 6);
+        memcpy(c.oweSsid, p + 7, p[6]);
+    }
+
+    // Hotspot 2.0 Indication, Interworking (107) with its network type
+    c.hs20 = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x10,
+                          len) != nullptr;
+
+    p = findIE(ies, ieLength, 107, len);
+
+    c.iwType = p != nullptr && len >= 1 ? (p[0] & 0x0F) : 255;
+
+    /*
+     * Multi-Link: the MLD address and the links of this MLD, its
+     * own from the Multi-Link element and the others from the
+     * Reduced Neighbor Report, whose entries with MLD parameters
+     * (TBTT information of 16 octets or more) and MLD ID 0 belong
+     * to the reporting AP's MLD.
+     */
+    {
+        MloInfo mlo;
+
+        memset(&mlo, 0, sizeof(mlo));
+
+        if (parseMultiLink(ies, ieLength, mlo))
+        {
+            memcpy(c.mldMac, mlo.mldMac, 6);
+
+            if (mlo.linkId >= 0 && mlo.linkId < 16)
+                c.mloLinks |= 1 << mlo.linkId;
+        }
+
+        p = findIE(ies, ieLength, 201, len);
+
+        for (int pos = 0; p != nullptr && pos + 4 <= len; )
+        {
+            uint8_t count   = ((p[pos] >> 4) & 0x0F) + 1;
+            uint8_t infoLen = p[pos + 1];
+
+            pos += 4;
+
+            if (infoLen == 0)
+                break;
+
+            for (uint8_t i = 0; i < count && pos + infoLen <= len; i++)
+            {
+                if (infoLen >= 16 && p[pos + 13] == 0)
+                    c.mloLinks |= 1 << (p[pos + 14] & 0x0F);
+
+                pos += infoLen;
+            }
+        }
+    }
+
+    // The basic rates, marked by the top bit in either rate element
+    for (int pass = 0; pass < 2; pass++)
+    {
+        p = findIE(ies, ieLength, pass == 0 ? 1 : 50, len);
+
+        for (int i = 0; p != nullptr && i < len; i++)
+            if (p[i] & 0x80)
+                for (size_t k = 0; k < sizeof(cfgRates); k++)
+                    if ((p[i] & 0x7F) == cfgRates[k])
+                        c.basicRates |= 1 << k;
+    }
+
+    // WMM Parameter element: the ACM bit of each AC record
+    p = findVendorIE(ies, ieLength, 0x00, 0x50, 0xF2, 0x02, len);
+
+    c.acm = 255;
+
+    if (p != nullptr && len >= 20 && p[0] == 1)
+    {
+        c.acm = 0;
+
+        for (int i = 0; i < 4; i++)
+            if (p[4 + i * 4] & 0x10)
+                c.acm |= 1 << ((p[4 + i * 4] >> 5) & 3);
+    }
+
+    // HT Capabilities: 40 MHz Intolerant, bit 14
+    p = findIE(ies, ieLength, 45, len);
+
+    c.intolerant = p != nullptr && len >= 2 && (p[1] & 0x40) != 0;
+
+    // Mobility Domain (54): its ID and FT over the DS
+    p = findIE(ies, ieLength, 54, len);
+
+    if (p != nullptr && len >= 3)
+    {
+        c.mde      = true;
+        c.mdid     = p[0] | (p[1] << 8);
+        c.ftOverDs = (p[2] & 0x01) != 0;
+    }
+
+    // Mesh Configuration (113), exactly 7 octets as in parseBeacon()
+    p = findIE(ies, ieLength, 113, len);
+
+    c.meshAuth = 255;
+
+    if (p != nullptr && len == 7)
+    {
+        c.meshAuth      = p[4];
+        c.meshGate      = (p[5] & 0x01) != 0;
+        c.meshAccepting = (p[6] & 0x01) != 0;
+    }
+}
+
+CfgSnap cfgSnapOf(const WiFiNetwork &n, const uint8_t *ies, int ieLength)
 {
     CfgSnap c;
 
@@ -6341,6 +6687,8 @@ CfgSnap cfgSnapOf(const WiFiNetwork &n)
     strlcpy(c.pairwise, n.pairwise, sizeof(c.pairwise));
     strlcpy(c.group, n.groupCipher, sizeof(c.group));
 
+    cfgExtrasOf(ies, ieLength, c);
+
     return c;
 }
 
@@ -6359,7 +6707,7 @@ uint32_t cfgHash(const CfgSnap &c)
 void cfgDiff(WiFiNetwork &n, const CfgSnap &a, const CfgSnap &b,
              char *names, size_t size)
 {
-    char x[24], y[24];
+    char x[40], y[40];
 
     // With names: only list what differs, "width, standard, ..."
     auto cfgRecord = [&](WiFiNetwork &n, uint8_t field, const char *from,
@@ -6438,6 +6786,265 @@ void cfgDiff(WiFiNetwork &n, const CfgSnap &a, const CfgSnap &b,
     text(CFG_AKM, a.akm, b.akm);
     text(CFG_PAIRWISE, a.pairwise, b.pairwise);
     text(CFG_GROUP, a.group, b.group);
+
+    // From the beacon's elements, see cfgExtrasOf()
+    static const char *const pmf[] = { "off", "capable", "required" };
+
+    auto mac = [](char *out, size_t size, const uint8_t *m)
+    {
+        static const uint8_t none[6] = { 0 };
+
+        if (memcmp(m, none, 6) == 0)
+            strlcpy(out, "-", size);
+        else
+            snprintf(out, size, "%02X:%02X:%02X:%02X:%02X:%02X",
+                     m[0], m[1], m[2], m[3], m[4], m[5]);
+    };
+
+    if (strcmp(a.ssid, b.ssid) != 0)
+        cfgRecord(n, CFG_SSID, a.ssid[0] ? a.ssid : "hidden",
+                  b.ssid[0] ? b.ssid : "hidden");
+
+    // Switched on or off: one entry with the AKM, the rest only between two
+    if (a.ovr != b.ovr)
+        cfgRecord(n, CFG_OVR, a.ovr ? (a.ovrAkm[0] ? a.ovrAkm : "on") : "off",
+                  b.ovr ? (b.ovrAkm[0] ? b.ovrAkm : "on") : "off");
+    else if (a.ovr)
+    {
+        text(CFG_OVR_AKM, a.ovrAkm, b.ovrAkm);
+        text(CFG_OVR_CIPHER, a.ovrPairwise, b.ovrPairwise);
+
+        if (a.ovrPmf != b.ovrPmf)
+            cfgRecord(n, CFG_OVR_PMF, pmf[a.ovrPmf], pmf[b.ovrPmf]);
+    }
+
+    flag(CFG_OVR_H2E, a.ovrH2E, b.ovrH2E);
+
+    if (a.mboDisallowed != b.mboDisallowed)
+    {
+        static const char *const why[] = {
+            "allowed", "disallowed", "disallowed, stations at maximum",
+            "disallowed, air interface overloaded",
+            "disallowed, authentication server overloaded",
+            "disallowed, RSSI too low"
+        };
+
+        auto reason = [&](char *out, size_t size, uint8_t r)
+        {
+            if (r < sizeof(why) / sizeof(why[0]))
+                strlcpy(out, why[r], size);
+            else
+                snprintf(out, size, "disallowed, reason %u", r);
+        };
+
+        reason(x, sizeof(x), a.mboDisallowed);
+        reason(y, sizeof(y), b.mboDisallowed);
+        cfgRecord(n, CFG_MBO, x, y);
+    }
+
+    if (a.powerConstraint != b.powerConstraint)
+    {
+        auto db = [](char *out, size_t size, uint8_t v)
+        {
+            if (v == 255)
+                strlcpy(out, "-", size);
+            else
+                snprintf(out, size, "%u dB", v);
+        };
+
+        db(x, sizeof(x), a.powerConstraint);
+        db(y, sizeof(y), b.powerConstraint);
+        cfgRecord(n, CFG_PWR_CONSTRAINT, x, y);
+    }
+
+    /*
+     * Transmit Power Envelope: the first value, 0.5 dB steps. Even
+     * interpretations are an EIRP per width, odd ones a PSD per MHz.
+     */
+    if (a.tpeLen != b.tpeLen || memcmp(a.tpe, b.tpe, a.tpeLen) != 0)
+    {
+        auto tpe = [](char *out, size_t size, const uint8_t *t, uint8_t l)
+        {
+            if (l < 2)
+            {
+                strlcpy(out, "-", size);
+                return;
+            }
+
+            int8_t v = (int8_t)t[1];
+
+            snprintf(out, size, "%d%s dBm%s", v / 2, v % 2 ? ".5" : "",
+                     ((t[0] >> 3) & 7) % 2 ? "/MHz" : "");
+        };
+
+        tpe(x, sizeof(x), a.tpe, a.tpeLen);
+        tpe(y, sizeof(y), b.tpe, b.tpeLen);
+
+        // The same first value: something further on changed
+        if (strcmp(x, y) == 0)
+            strlcat(y, ", other values", sizeof(y));
+
+        cfgRecord(n, CFG_TPE, x, y);
+    }
+
+    // The detail only while WPS stays on, its switch is above
+    if (a.wps == b.wps && a.wpsState != b.wpsState)
+    {
+        static const char *const state[] = { "-", "not configured",
+                                             "configured" };
+
+        cfgRecord(n, CFG_WPS_STATE, a.wpsState < 3 ? state[a.wpsState] : "?",
+                  b.wpsState < 3 ? state[b.wpsState] : "?");
+    }
+
+    if (a.wps == b.wps)
+        flag(CFG_WPS_LOCK, a.wpsLocked, b.wpsLocked);
+
+    // The page names the methods
+    if (a.wps == b.wps && a.wpsMethods != b.wpsMethods)
+    {
+        snprintf(x, sizeof(x), "0x%04X", a.wpsMethods);
+        snprintf(y, sizeof(y), "0x%04X", b.wpsMethods);
+        cfgRecord(n, CFG_WPS_METHODS, a.wpsMethods ? x : "-",
+                  b.wpsMethods ? y : "-");
+    }
+
+    if (a.oweTrans != b.oweTrans)
+        flag(CFG_OWE, a.oweTrans, b.oweTrans);
+    else if (a.oweTrans)
+    {
+        mac(x, sizeof(x), a.oweBssid);
+        mac(y, sizeof(y), b.oweBssid);
+        text(CFG_OWE_BSSID, x, y);
+        text(CFG_OWE_SSID, a.oweSsid, b.oweSsid);
+    }
+
+    flag(CFG_HS20, a.hs20, b.hs20);
+
+    if (a.iwType != b.iwType)
+    {
+        static const char *const type[16] = {
+            "private", "private with guest", "chargeable public",
+            "free public", "personal device", "emergency services only",
+            "type 6", "type 7", "type 8", "type 9", "type 10", "type 11",
+            "type 12", "type 13", "test", "wildcard"
+        };
+
+        cfgRecord(n, CFG_INTERWORKING, a.iwType < 16 ? type[a.iwType] : "-",
+                  b.iwType < 16 ? type[b.iwType] : "-");
+    }
+
+    mac(x, sizeof(x), a.mldMac);
+    mac(y, sizeof(y), b.mldMac);
+    text(CFG_MLD, x, y);
+
+    if (a.mloLinks != b.mloLinks)
+    {
+        auto links = [](char *out, size_t size, uint16_t m)
+        {
+            out[0] = 0;
+
+            for (int i = 0; i < 16; i++)
+                if (m & (1 << i))
+                {
+                    char id[6];
+
+                    snprintf(id, sizeof(id), "%s%d", out[0] ? ", " : "", i);
+                    strlcat(out, id, size);
+                }
+
+            if (!out[0])
+                strlcpy(out, "-", size);
+        };
+
+        links(x, sizeof(x), a.mloLinks);
+        links(y, sizeof(y), b.mloLinks);
+        cfgRecord(n, CFG_MLO_LINKS, x, y);
+    }
+
+    // The whole set, unless the lowest rate above says it already
+    if (a.basicRates != b.basicRates && a.basicRate == b.basicRate)
+    {
+        auto rates = [](char *out, size_t size, uint16_t m)
+        {
+            out[0] = 0;
+
+            for (size_t k = 0; k < sizeof(cfgRates); k++)
+                if (m & (1 << k))
+                {
+                    char r[10];
+
+                    snprintf(r, sizeof(r), "%s%u%s", out[0] ? ", " : "",
+                             cfgRates[k] / 2, cfgRates[k] & 1 ? ".5" : "");
+                    strlcat(out, r, size);
+                }
+
+            if (!out[0])
+                strlcpy(out, "none", size);
+        };
+
+        rates(x, sizeof(x), a.basicRates);
+        rates(y, sizeof(y), b.basicRates);
+        cfgRecord(n, CFG_BASIC_RATES, x, y);
+    }
+
+    flag(CFG_PREAUTH, a.preAuth, b.preAuth);
+
+    if (a.acm != b.acm)
+    {
+        // AC index order: best effort, background, video, voice
+        auto acm = [](char *out, size_t size, uint8_t m)
+        {
+            static const char *const ac[] = { "BE", "BK", "VI", "VO" };
+
+            out[0] = 0;
+
+            if (m == 255)
+            {
+                strlcpy(out, "no WMM", size);
+                return;
+            }
+
+            for (int i = 3; i >= 0; i--)
+                if (m & (1 << i))
+                {
+                    if (out[0])
+                        strlcat(out, ", ", size);
+
+                    strlcat(out, ac[i], size);
+                }
+
+            if (!out[0])
+                strlcpy(out, "none", size);
+        };
+
+        acm(x, sizeof(x), a.acm);
+        acm(y, sizeof(y), b.acm);
+        cfgRecord(n, CFG_ACM, x, y);
+    }
+
+    flag(CFG_INTOLERANT, a.intolerant, b.intolerant);
+
+    // 802.11r detail only while it stays on, its switch is above
+    if (a.mde && b.mde)
+    {
+        if (a.mdid != b.mdid)
+        {
+            snprintf(x, sizeof(x), "0x%04X", a.mdid);
+            snprintf(y, sizeof(y), "0x%04X", b.mdid);
+            cfgRecord(n, CFG_MDID, x, y);
+        }
+
+        flag(CFG_FT_DS, a.ftOverDs, b.ftOverDs);
+    }
+
+    // Mesh settings only while it stays a mesh point
+    if (a.meshAuth != 255 && b.meshAuth != 255)
+    {
+        flag(CFG_MESH_GATE, a.meshGate, b.meshGate);
+        flag(CFG_MESH_ACCEPT, a.meshAccepting, b.meshAccepting);
+        num(CFG_MESH_AUTH, a.meshAuth, b.meshAuth, "");
+    }
 }
 
 /*
@@ -6592,10 +7199,10 @@ void beaconGap(WiFiNetwork &n, uint8_t heardOn)
     n.beaconUs = mgmtFrameUs;
 }
 
-// After a beacon has been read into n
-void configWatch(WiFiNetwork &n)
+// After a beacon has been read into n, with the beacon's elements
+void configWatch(WiFiNetwork &n, const uint8_t *ies, int ieLength)
 {
-    CfgSnap now = cfgSnapOf(n);
+    CfgSnap now = cfgSnapOf(n, ies, ieLength);
 
     if (!n.cfgKnown)
     {
@@ -6653,6 +7260,108 @@ void configWatch(WiFiNetwork &n)
     n.cfg             = now;
     n.cfgChangedAt    = millis();
     n.cfgPendingCount = 0;
+}
+
+// The timestamp of a beacon or probe response: restarts, uptime
+void tsfWatch(WiFiNetwork &n, uint64_t tsf)
+{
+    /*
+     * 0 is no time: some APs leave it empty in every probe response
+     * (an OpenWrt AP) and keep it running in the beacons.
+     * Taken for one, each answer to a probe was a restart.
+     */
+    if (tsf == 0)
+        return;
+
+    /*
+     * When the frame was received, not when it is read here: a
+     * frame can wait in the queue for a second or two while a
+     * long answer goes out, and measured from now the AP's timer
+     * looked as if it had gone back, a restart of every AP at
+     * once.
+     */
+    uint32_t now = (uint32_t)(mgmtFrameUs / 1000);
+
+    bool otherClock = clockTrack(n, tsf);
+
+    // Where the timer should be now, give or take a second; a
+    // frame of the second clock is no restart
+    if (n.tsfAt != 0 && !otherClock)
+    {
+        uint64_t expected = n.tsf + (uint64_t)(now - n.tsfAt) * 1000;
+
+        if (tsf + 1000000ULL < expected)
+        {
+            if (n.tsfResets < 255)
+                n.tsfResets++;
+
+            n.tsfResetAt = now;
+
+            // How long it had been up: the page writes it out
+            char up[24];
+            snprintf(up, sizeof(up), "%lu",
+                     (unsigned long)(expected / 1000000ULL));
+            cfgRecord(n, CFG_RESTART, up, "");
+        }
+    }
+
+    n.tsf   = tsf;
+    n.tsfAt = now ? now : 1;
+}
+
+/*
+ * VHT Operation (192): channel width, then the two centre frequency
+ * segments CCFS0 and CCFS1. Today's APs give 160 MHz as width 1 with
+ * CCFS0 the centre of the primary 80 MHz and CCFS1 that of the whole
+ * 160, eight channels apart (802.11-2020 Table 9-274): 36/160 is 42
+ * and 50, centre 50. CCFS1 further off is 80+80. The deprecated
+ * widths 2 (160) and 3 (80+80) have the centre in CCFS0. False for
+ * width 0, 20 or 40 MHz, which the HT Operation element tells.
+ */
+bool vhtWidthOf(const uint8_t *vht, uint16_t &bandwidth, uint8_t &centre)
+{
+    uint8_t width = vht[0];
+    uint8_t ccfs0 = vht[1];
+    uint8_t ccfs1 = vht[2];
+
+    if (width == 1)
+    {
+        int diff = (int)ccfs1 - (int)ccfs0;
+
+        if (ccfs1 == 0)
+        {
+            bandwidth = 80;
+            centre    = ccfs0;
+        }
+        else if (diff == 8 || diff == -8)
+        {
+            bandwidth = 160;
+            centre    = ccfs1;
+        }
+        else
+        {
+            bandwidth = 8080;
+            centre    = ccfs0;
+        }
+
+        return true;
+    }
+
+    if (width == 2)
+    {
+        bandwidth = 160;
+        centre    = ccfs0;
+        return true;
+    }
+
+    if (width == 3)
+    {
+        bandwidth = 8080;
+        centre    = ccfs0 ? ccfs0 : ccfs1;
+        return true;
+    }
+
+    return false;
 }
 
 void parseBeacon(const uint8_t *frame, uint16_t length,
@@ -6899,49 +7608,7 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     bool vhtHandled = false;
 
     if (vht != nullptr && vhtLen >= 3)
-    {
-        uint8_t width   = vht[0];
-        uint8_t center1 = vht[1];
-        uint8_t center2 = vht[2];
-
-        if (width == 1)
-        {
-            if (center2 != 0)
-            {
-                int diff = (int)center2 - (int)center1;
-
-                if (diff == 8 || diff == -8)
-                {
-                    bandwidth     = 160;
-                    centerChannel = (center1 + center2) / 2;
-                }
-                else
-                {
-                    bandwidth     = 8080;
-                    centerChannel = center1;
-                }
-            }
-            else
-            {
-                bandwidth     = 80;
-                centerChannel = center1;
-            }
-
-            vhtHandled = true;
-        }
-        else if (width == 2)
-        {
-            bandwidth     = 160;
-            centerChannel = center1;
-            vhtHandled    = true;
-        }
-        else if (width == 3)
-        {
-            bandwidth     = 8080;
-            centerChannel = center1 ? center1 : center2;
-            vhtHandled    = true;
-        }
-    }
+        vhtHandled = vhtWidthOf(vht, bandwidth, centerChannel);
 
     if (!vhtHandled)
     {
@@ -7116,8 +7783,12 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     bool bss11v = (extCap != nullptr && capLen >= 3 &&
                    (extCap[2] & 0x08) != 0);
 
-    // Mobility domain -> 802.11r
-    bool ft11r = findIE(ies, ieLength, 54, capLen) != nullptr;
+    // Mobility domain -> 802.11r: the ID little endian, then the policy
+    const uint8_t *md = findIE(ies, ieLength, 54, capLen);
+
+    bool     ft11r    = md != nullptr;
+    uint16_t mdid     = md != nullptr && capLen >= 2 ? md[0] | (md[1] << 8) : 0;
+    uint8_t  ftPolicy = md != nullptr && capLen >= 3 ? md[2] : 0;
 
     bool multiBssid = findIE(ies, ieLength, 71, capLen) != nullptr;
 
@@ -7517,40 +8188,16 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
         for (int i = 7; i >= 0; i--)
             tsf = (tsf << 8) | frame[24 + i];
 
-        /*
-         * When the frame was received, not when it is read here: a
-         * frame can wait in the queue for a second or two while a
-         * long answer goes out, and measured from now the AP's timer
-         * looked as if it had gone back, a restart of every AP at
-         * once.
-         */
-        uint32_t now = (uint32_t)(mgmtFrameUs / 1000);
-
-        bool otherClock = clockTrack(n, tsf);
-
-        // Where the timer should be now, give or take a second; a
-        // frame of the second clock is no restart
-        if (n.tsfAt != 0 && !otherClock)
+        // An AP that leaves it empty in every answer gets a note
+        if (((frame[0] >> 4) & 0x0F) == 5)
         {
-            uint64_t expected = n.tsf + (uint64_t)(now - n.tsfAt) * 1000;
+            uint8_t &count = tsf == 0 ? n.probeTsfZero : n.probeTsfSet;
 
-            if (tsf + 1000000ULL < expected)
-            {
-                if (n.tsfResets < 255)
-                    n.tsfResets++;
-
-                n.tsfResetAt = now;
-
-                // How long it had been up: the page writes it out
-                char up[24];
-                snprintf(up, sizeof(up), "%lu",
-                         (unsigned long)(expected / 1000000ULL));
-                cfgRecord(n, CFG_RESTART, up, "");
-            }
+            if (count < 255)
+                count++;
         }
 
-        n.tsf   = tsf;
-        n.tsfAt = now ? now : 1;
+        tsfWatch(n, tsf);
     }
 
     collectUnknownElements(ies, ieLength, n.unknownIes,
@@ -7559,6 +8206,8 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
                                ? SEEN_BEACON : SEEN_PROBE_RESP);
     n.wnmCaps        = wnmCapsOf(ies, ieLength);
     n.ft11r          = ft11r;
+    n.mdid           = mdid;
+    n.ftPolicy       = ftPolicy;
     n.multiBssid     = multiBssid;
     n.csaChannel     = csaChannel;
     n.csaCount       = csaCount;
@@ -7618,7 +8267,7 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
 
     if (((frame[0] >> 4) & 0x0F) == 8)
     {
-        configWatch(n);
+        configWatch(n, ies, ieLength);
         beaconGap(n, channelHint);
     }
 
@@ -7822,6 +8471,179 @@ void parseAwdlPath(const uint8_t *v, int l, const uint8_t *sender,
     }
 }
 
+// Fine Timing Measurement elements into an FtmInfo, see there
+void ftmElementsOf(const uint8_t *ies, int len, FtmInfo &f)
+{
+    for (int pos = 0; pos + 2 <= len; )
+    {
+        uint8_t id = ies[pos];
+        uint8_t l  = ies[pos + 1];
+
+        if (pos + 2 + l > len)
+            break;
+
+        const uint8_t *v = ies + pos + 2;
+
+        // Measurement token, mode, type, then the request or report
+        if (id == 206 && l >= 9)
+        {
+            f.paramSeen = true;
+            memcpy(f.param, v, 9);
+        }
+        else if (id == 38 && l >= 3)
+        {
+            if (v[2] == 8)
+                f.askLci = true;
+            else if (v[2] == 11)
+                f.askCivic = true;
+        }
+        else if (id == 39 && l >= 3 && (v[1] & 0x07) == 0)
+        {
+            // Subelements: ID, length, value; 0 carries the field
+            int from = v[2] == 11 ? 4 : 3;
+
+            // Location Civic: type 0 is the IETF RFC 4776 format
+            if (v[2] == 11 && (l < 4 || v[3] != 0))
+                from = l;
+
+            for (int i = from; i + 2 <= l; )
+            {
+                uint8_t sid = v[i];
+                uint8_t sl  = v[i + 1];
+
+                if (i + 2 + sl > l)
+                    break;
+
+                if (sid == 0 && v[2] == 8 && sl >= 16)
+                {
+                    f.lciSeen = true;
+                    memcpy(f.lci, v + i + 2, 16);
+                }
+                else if (sid == 0 && v[2] == 11)
+                {
+                    f.civicLen = sl > sizeof(f.civic) ? sizeof(f.civic) : sl;
+                    memcpy(f.civic, v + i + 2, f.civicLen);
+                }
+
+                i += 2 + sl;
+            }
+        }
+
+        pos += 2 + l;
+    }
+}
+
+// Adds mac to a short list unless it is there; full lists stay as they are
+void ftmAddPeer(uint8_t list[][6], uint8_t &count, uint8_t size,
+                const uint8_t *mac)
+{
+    for (uint8_t i = 0; i < count; i++)
+        if (memcmp(list[i], mac, 6) == 0)
+            return;
+
+    if (count < size)
+        memcpy(list[count++], mac, 6);
+}
+
+void parseFtm(const uint8_t *frame, uint16_t length, int8_t rssi,
+              uint8_t channel)
+{
+    if (length < 24 + 3 || frame[24] != 4 ||
+        (frame[25] != 32 && frame[25] != 33))
+        return;
+
+    const uint8_t *da = frame + 4;
+    const uint8_t *sa = frame + 10;
+
+    if ((sa[0] & 0x01) || (da[0] & 0x01))
+        return;
+
+    bool request = frame[25] == 32;
+
+    // Request: category, action, trigger. FTM: category, action, dialog
+    // token, follow up token, TOD, TOA, TOD error, TOA error
+    int fixed = request ? 3 : 2 + 1 + 1 + 6 + 6 + 2 + 2;
+
+    if (length < 24 + fixed)
+        return;
+
+    FtmInfo f;
+
+    memset(&f, 0, sizeof(f));
+    ftmElementsOf(frame + 24 + fixed, length - 24 - fixed, f);
+
+    const uint8_t *initiator = request ? sa : da;
+    const uint8_t *responder = request ? da : sa;
+
+    WiFiNetwork *n = nullptr;
+
+    for (int i = 0; i < MAX_NETWORKS; i++)
+        if (networks[i].valid &&
+            memcmp(networks[i].bssid, responder, 6) == 0)
+            n = &networks[i];
+
+    if (request)
+    {
+        ClientEntry &c = clients[findOrCreateClient(initiator)];
+
+        c.rssi     = rssi;
+        c.channel  = channel;
+        c.lastSeen = millis();
+
+        if (c.ftmRequests < 65535)
+            c.ftmRequests++;
+
+        ftmAddPeer(c.ftmTargets, c.ftmTargetCount, 3, responder);
+
+        c.ftmAskLci   |= f.askLci;
+        c.ftmAskCivic |= f.askCivic;
+
+        if (f.paramSeen)
+        {
+            c.ftmParamSeen = true;
+            memcpy(c.ftmParam, f.param, 9);
+        }
+
+        if (n != nullptr && n->ftmRequests < 65535)
+            n->ftmRequests++;
+    }
+    else
+    {
+        // Only a station seen asking: the answers alone make none
+        for (int i = 0; i < MAX_CLIENTS; i++)
+            if (clients[i].valid && memcmp(clients[i].mac, initiator, 6) == 0 &&
+                clients[i].ftmAnswers < 65535)
+                clients[i].ftmAnswers++;
+
+        if (n == nullptr)
+            return;
+
+        if (n->ftmFrames < 65535)
+            n->ftmFrames++;
+
+        if (f.paramSeen)
+        {
+            n->ftmParamSeen = true;
+            memcpy(n->ftmParam, f.param, 9);
+        }
+
+        if (f.lciSeen)
+        {
+            n->ftmLciSeen = true;
+            memcpy(n->ftmLci, f.lci, 16);
+        }
+
+        if (f.civicLen)
+        {
+            n->ftmCivicLen = f.civicLen;
+            memcpy(n->ftmCivic, f.civic, f.civicLen);
+        }
+    }
+
+    if (n != nullptr)
+        ftmAddPeer(n->ftmPeers, n->ftmPeerCount, 4, initiator);
+}
+
 void parseAwdl(const uint8_t *frame, uint16_t length, int8_t rssi,
                uint8_t channel)
 {
@@ -7920,9 +8742,12 @@ void parseManagementFrame(const uint8_t *frame, uint16_t length,
     if (subtype == 8 || subtype == 5)
         parseBeacon(frame, length, rssi, channelHint);
 
-    // 13 = Action, of which only AWDL
+    // 13 = Action, of which AWDL and Fine Timing Measurement
     if (subtype == 13)
+    {
         parseAwdl(frame, length, rssi, channelHint);
+        parseFtm(frame, length, rssi, channelHint);
+    }
 }
 
 // ============================================================
@@ -8146,14 +8971,19 @@ void IRAM_ATTR wifiPromiscuousCallback(void *buf,
          subtype == 0 || subtype == 2 || subtype == 1 || subtype == 3);
 
     /*
-     * 13 action: only AWDL is parsed (category 127, Apple's OUI,
-     * type 8), the rest goes to the capture if wanted. Checked
-     * here so that 802.11k/v and block ack traffic does not fill
-     * the queue.
+     * 13 action: only AWDL (category 127, Apple's OUI, type 8) and
+     * Fine Timing Measurement (category 4, actions 32 and 33) are
+     * parsed, the rest goes to the capture if wanted. Checked here
+     * so that 802.11k/v and block ack traffic does not fill the
+     * queue.
      */
     if (subtype == 13 && pkt->rx_ctrl.sig_len >= 24 + 16 + 4 &&
         frame[24] == 0x7F && frame[25] == 0x00 && frame[26] == 0x17 &&
         frame[27] == 0xF2 && frame[28] == 0x08)
+        parsed = true;
+
+    if (subtype == 13 && pkt->rx_ctrl.sig_len >= 24 + 3 + 4 &&
+        frame[24] == 4 && (frame[25] == 32 || frame[25] == 33))
         parsed = true;
 
     bool wanted =
@@ -8977,7 +9807,13 @@ static const uint32_t reviewedVendor[] = {
     // design, from a FRITZ!Box; NETGEAR's type 8 (one byte) and
     // Quantenna's type 2 (34 bytes of small values, flags most
     // likely), neither described anywhere
-    0x506F9A1E, 0x00146C08, 0x00268602
+    0x506F9A1E, 0x00146C08, 0x00268602,
+
+    // .233's catalog (October 2026): the Car Connectivity
+    // Consortium's type 10 in a car's Wi-Fi Direct group (MBUX),
+    // ten octets that look like type-length-value, not described
+    // anywhere public
+    0x04DF690A
 };
 
 bool vendorDecoded(uint32_t key)
@@ -12061,6 +12897,24 @@ void outJSON(const char *text)
         outFlush();
 }
 
+// ,"name":"0A1B2C": bytes in hex, for the browser to decode
+void outHexField(const char *name, const uint8_t *data, uint8_t length)
+{
+    char hex[3];
+
+    outStr(",\"");
+    outStr(name);
+    outStr("\":\"");
+
+    for (uint8_t i = 0; i < length; i++)
+    {
+        snprintf(hex, sizeof(hex), "%02X", data[i]);
+        outStr(hex);
+    }
+
+    outStr("\"");
+}
+
 void outMac(const uint8_t *mac)
 {
     char buffer[18];
@@ -12729,6 +13583,16 @@ void sendNetworksJSON()
             outStr("]");
         }
 
+        // Probe responses: [with timestamp 0, with one]
+        if (n.probeTsfZero)
+        {
+            outStr(",\"ptsf\":[");
+            outNum(n.probeTsfZero);
+            outStr(",");
+            outNum(n.probeTsfSet);
+            outStr("]");
+        }
+
         // [gaps measured, of them under half an interval, shortest µs]
         if (n.gapCount)
         {
@@ -13026,6 +13890,46 @@ void sendNetworksJSON()
 
         outStr(",\"r\":");
         outNum(n.ft11r ? 1 : 0);
+
+        // Fine Timing Measurement: [requests to it, FTM frames from
+        // it, [stations ranging]], what it granted, position, address
+        if (n.ftmRequests || n.ftmFrames)
+        {
+            outStr(",\"ftm\":[");
+            outNum(n.ftmRequests);
+            outStr(",");
+            outNum(n.ftmFrames);
+            outStr(",[");
+
+            for (uint8_t i = 0; i < n.ftmPeerCount; i++)
+            {
+                if (i)
+                    outStr(",");
+
+                outMac(n.ftmPeers[i]);
+            }
+
+            outStr("]]");
+
+            if (n.ftmParamSeen)
+                outHexField("ftmpar", n.ftmParam, 9);
+
+            if (n.ftmLciSeen)
+                outHexField("ftmlci", n.ftmLci, 16);
+
+            if (n.ftmCivicLen)
+                outHexField("ftmciv", n.ftmCivic, n.ftmCivicLen);
+        }
+
+        // [Mobility Domain ID, FT Capability and Policy]
+        if (n.ft11r)
+        {
+            outStr(",\"mdid\":[");
+            outNum(n.mdid);
+            outStr(",");
+            outNum(n.ftPolicy);
+            outStr("]");
+        }
 
         outStr(",\"mbssid\":");
         outNum(n.multiBssid ? 1 : 0);
@@ -13403,6 +14307,37 @@ void outClientObject(ClientEntry &c, uint32_t now)
 
         outStr(",\"r\":");
         outNum(c.ft11r ? 1 : 0);
+
+        if (c.ft11r)
+        {
+            outStr(",\"mdid\":");
+            outNum(c.mdid);
+        }
+
+        // Fine Timing Measurement: [requests, FTM frames to it,
+        // [responders]], asked for 1 position, 2 address, parameters
+        if (c.ftmRequests)
+        {
+            outStr(",\"ftm\":[");
+            outNum(c.ftmRequests);
+            outStr(",");
+            outNum(c.ftmAnswers);
+            outStr(",[");
+
+            for (uint8_t i = 0; i < c.ftmTargetCount; i++)
+            {
+                if (i)
+                    outStr(",");
+
+                outMac(c.ftmTargets[i]);
+            }
+
+            outStr("]],\"ftmask\":");
+            outNum((c.ftmAskLci ? 1 : 0) | (c.ftmAskCivic ? 2 : 0));
+
+            if (c.ftmParamSeen)
+                outHexField("ftmpar", c.ftmParam, 9);
+        }
 
         outStr(",\"band6\":");
         outNum(c.band6 ? 1 : 0);

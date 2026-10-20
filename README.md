@@ -13,7 +13,7 @@ time.
 Everything runs on the device. No cloud, no app store, no external
 dependencies beyond the Arduino core.
 
-![firmware](https://img.shields.io/badge/firmware-2.6.3-blue)
+![firmware](https://img.shields.io/badge/firmware-2.6.11-blue)
 ![licence](https://img.shields.io/badge/licence-GPL--2.0--only_+_linking_exception-blue)
 
 ![Wi-Fi overview](docs/images/01-wifi-overview.png)

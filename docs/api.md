@@ -25,7 +25,7 @@ and control characters are left out.
 | `GET /api/history?range=ms` | waterfall history |
 | `GET /api/changes` | the configuration changes of all BSSs, the last 64 since the start, newest first: `boot`, `seq` (the newest, also in `/api/status` as `cfgseq` with `boot`), `ver` (moves with every entry added or updated, in `/api/status` as `cfgver`), `changes` as `[number, seconds ago, BSSID, SSID, what, from, to]` |
 | `GET /api/cfgmute?bssid=…&on=1` | keep a BSS's configuration changes out of the bell, `on=0` lets them in again; stored, up to 16 BSSs, listed in `/api/changes` as `muted` and marked `cfgmute` in `/api/networks` |
-| `GET /api/networks` | BSSIDs with full details, plus the 6 GHz list; `clocks` `[frames of one beacon timer, of a second, switches between them, µs apart]` once a second timer is seen; `dtim` `[DTIM period, group traffic buffered, stations with frames waiting]` from the TIM; `bgap` `[gaps between back-to-back beacons on the BSS's channel, of them under half an interval, the shortest in µs]`; a BSS whose configuration changed has `cfgn`, the changes seen, and `cfgch`, the last eight newest first as `[seconds ago, what, from, to]` (for `restart`, `from` is the uptime in seconds it ended; for `flapping`, the fields and the switches) |
+| `GET /api/networks` | BSSIDs with full details, plus the 6 GHz list; `clocks` `[frames of one beacon timer, of a second, switches between them, µs apart]` once a second timer is seen; `dtim` `[DTIM period, group traffic buffered, stations with frames waiting]` from the TIM; `ptsf` `[probe responses with timestamp 0, with one]` once one has 0; `mdid` `[Mobility Domain ID, FT Capability and Policy]` with 802.11r (a station: the ID it asked for); `ftm` `[FTM requests to the BSSID, FTM frames from it, [stations ranging, four at most]]` once seen, with `ftmpar` (FTM Parameters, 9 octets), `ftmlci` (LCI field, 16 octets) and `ftmciv` (Location Civic field) in hex; a station: `ftm` `[requests, FTM frames to it, [responders, three at most]]`, `ftmask` (1 position, 2 address asked for), `ftmpar`; `bgap` `[gaps between back-to-back beacons on the BSS's channel, of them under half an interval, the shortest in µs]`; a BSS whose configuration changed has `cfgn`, the changes seen, and `cfgch`, the last eight newest first as `[seconds ago, what, from, to]` (for `restart`, `from` is the uptime in seconds it ended; for `flapping`, the fields and the switches) |
 | `GET /api/clients` | stations with capabilities and roaming history |
 | `GET /api/assochistory` | stations that were seen associating, kept permanently |
 | `GET /api/assocclear` | empty that association history |
@@ -120,7 +120,7 @@ Structure:
 ```json
 {
   "schema": 1,
-  "sensor": { "id": "…", "name": "hall-north", "ip": "…", "fw": "2.6.3",
+  "sensor": { "id": "…", "name": "hall-north", "ip": "…", "fw": "2.6.11",
               "uptime": 8421, "time": 1790000000, "clock": 2, "mode": 0 },
   "scan":    { "selected": 33, "plan": 11, "fast": 1, "dwell": 120,
                "sweeps": 4213, "channels": [1, 5, 9, …] },

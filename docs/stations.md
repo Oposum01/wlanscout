@@ -18,7 +18,8 @@ address, vendor and AP come channel, RSSI and age, then the sections
 RADIO (PHY, bands, channels, WMM, QoS Management, the vendor
 elements), SECURITY (with the RSN selection: whether the station took
 the AP's RSNE or one of its RSNE Overrides),
-ROAMING (11k, 11v, 11r), MULTI-LINK, TRAFFIC (frames each way, probe
+ROAMING (11k, 11v, 11r with the mobility domain asked for, Fine Timing
+Measurement), MULTI-LINK, TRAFFIC (frames each way, probe
 and association requests, probed SSIDs, roaming history, last peer),
 ASSOCIATION (the last result, the SSID joined, the BSS Max Idle Period
 the station asked for and the AP granted: how long it may stay silent
@@ -43,7 +44,22 @@ every word has to match somewhere in what table and tooltip say about a
 station — address, vendor, AP, probed SSIDs, capabilities, security,
 the guessed maker and chip (`apple`, `broadcom chip`), its vendor and
 unknown elements. Graph, both live tables and the association history
-follow it.
+follow it. The **?** beside it lists the terms it adds itself:
+
+| Term | Finds |
+|------|-------|
+| `ch:36` | channel, exactly |
+| `associated` | with an AP, or `probing` |
+| `wifi6` | standard (`wifi4` … `wifi7`), also `ax` |
+| `sae` | AKM of its association (`psk` …) |
+| `pmf` | PMF |
+| `wmm` | WMM |
+| `11k` | radio measurement, also `11v`, `11r` |
+| `ft roam` | a fast transition (802.11r) seen |
+| `ranging` | FTM requests seen |
+| `mlo` | multi-link (Wi-Fi 7) |
+| `awdl` | Apple Wireless Direct Link, also `apple` |
+| `broadcom chip` | Wi-Fi chip from the vendor elements |
 
 **Flush**, at the right of the same row, empties the station table
 on the sensor, after asking, together with the network names learned

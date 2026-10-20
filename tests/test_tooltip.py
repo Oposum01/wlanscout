@@ -376,3 +376,11 @@ def test_sae_without_pmf_on_a_mesh_point_is_blue(opened):
     notes = note_texts(opened, {"sec": "WPA3", "akm": "SAE", "mfpc": 1,
                                 "mfpr": 0, "mesh": 1})
     assert not any(t.startswith("Mesh with SAE") for t in notes)
+
+
+def test_car_connectivity_consortium_named(opened):
+    text = opened.js("""vendorOuiText({voui: [
+        ['04DF69', 10, 'Car Connectivity Con']]})""")
+
+    assert text == ("04:DF:69 type 10 Car Connectivity Con "
+                    "(Car Connectivity Consortium, car head unit)")

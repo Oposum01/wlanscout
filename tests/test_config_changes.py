@@ -88,3 +88,21 @@ def test_tooltip_takes_the_longer_list_from_the_bell(opened):
 
     assert "channel 36 \u2192 40" in text
     assert "earlier" not in text
+
+
+def test_wps_methods_named(opened):
+    text = opened.js("""() => { const d = document.createElement('div');
+        d.innerHTML = configChangeText('WPS methods', '0x0088', '0x0080');
+        return d.innerText; }""")
+
+    assert text == "WPS methods Display, Push Button → Push Button"
+    assert "→ -" in opened.js(
+        "configChangeText('WPS methods', '0x0080', '-')")
+
+
+def test_new_fields_shown_as_sent(opened):
+    text = opened.js("""() => { const d = document.createElement('div');
+        d.innerHTML = configChangeText('RSNE override', 'off', 'SAE');
+        return d.innerText; }""")
+
+    assert text == "RSNE override off → SAE"

@@ -31,4 +31,4 @@ def test_filter(opened):
     opened.js("networks[0].dtim = [10, 0, 0]")
 
     assert opened.js("""networks.filter(n => {
-        filterText = 'dtim10'; return matchesFilter(n); }).length""") == 1
+        filterText = 'dtim:10'; return matchesFilter(n); }).length""") == 1
