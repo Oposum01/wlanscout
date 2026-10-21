@@ -182,3 +182,145 @@ def test_link_one_has_a_link_zero_somewhere(opened):
            mld="EA:00:00:00:09:C0", link=1)])
 
     assert notes == ["", ""]
+
+
+def ap_notes(app, extra):
+    return app.js("""o => networkNotes(Object.assign({}, networks[0], o))
+        .map(n => n[0] + ' ' + n[1])""", extra)
+
+
+def test_wifi7_security_gaps(opened):
+    base = {"std": 7, "akm": "PSK, SAE", "pair": "CCMP-128", "bprot": 0,
+            "ovr": None}
+
+    notes = ap_notes(opened, base)
+    assert any(n.startswith("#c8a050 Wi-Fi 7 without SAE-EXT-KEY, GCMP-256, "
+                            "beacon protection") for n in notes)
+
+    # All of it in the RSNE Override, with beacon protection: none
+    full = dict(base, bprot=1, ovr={"akm": "SAE-EXT-KEY", "pair":
+                                    "GCMP-256, CCMP-128", "pmf": 2, "h2e": 1})
+    assert not any("Wi-Fi 7 without" in n for n in ap_notes(opened, full))
+
+    # Not for Wi-Fi 6, nor for an open network
+    assert not any("Wi-Fi 7 without" in n
+                   for n in ap_notes(opened, dict(base, std=6)))
+    assert not any("Wi-Fi 7 without" in n
+                   for n in ap_notes(opened, dict(base, akm="")))
+
+
+def test_link_removal_note(opened):
+    notes = ap_notes(opened, {"mlrm": [0b100, 30], "bi": 100})
+
+    assert any(n.startswith("#7aaed0 Multi-link AP removing link 2 in 30 "
+                            "beacons (≈ 3 s") for n in notes)
+
+
+def test_eht_capabilities_named(opened):
+    assert opened.js("ehtCapText({ehtcap: [0x31, 0x02, 1]})") == \
+        "4096-QAM, 320 MHz (6 GHz), restricted TWT, EPCS priority " \
+        "access, SCS traffic description"
+    assert opened.js("ehtCapText({ehtcap: [0, 0, 0]})") == ""
+
+
+def test_twt_text(opened):
+    assert opened.js("twtText({twt: 6, btwt: [[3, 4, 102400, 8192]]})") == \
+        "responder, broadcast, schedule 3: every 102.4 ms for 8.2 ms " \
+        "(restricted TWT, for low latency)"
+    assert opened.js("twtText({twt: 1})") == "requester"
+    assert opened.js("twtText({})") == ""
+
+
+def test_he_details_and_colour_collision(opened):
+    assert opened.js("heCapText({hecap: 1 | 2 | 4 | 16})") == \
+        "1024-QAM, UL MU-MIMO, MU beamformer, DCM"
+    assert opened.js("twtText({twt: 2, heop: 1})") == \
+        "responder, required by the AP"
+
+    opened.js("""networks.push(
+        Object.assign({}, networks[0], {bssid: '0A:11:00:00:00:01',
+            ssid: 'One', channel: 6, color: [12, 0]}),
+        Object.assign({}, networks[0], {bssid: '0A:22:00:00:00:01',
+            ssid: 'Two', channel: 6, color: [12, 0]}),
+        Object.assign({}, networks[0], {bssid: '0A:11:00:00:00:02',
+            ssid: 'OneToo', channel: 6, color: [12, 0]}),
+        Object.assign({}, networks[0], {bssid: '0A:33:00:00:00:01',
+            ssid: 'Far', channel: 11, color: [12, 0]}))""")
+
+    def notes(bssid):
+        return opened.js("""b => networkNotes(networks.find(n => n.bssid === b))
+            .map(n => n[0] + ' ' + n[1])""", bssid)
+
+    one = notes("0A:11:00:00:00:01")
+    assert any(n.startswith("#c8a050 BSS colour 12 also on Two 0A:22:00:00:00:01 "
+                            "on this channel") for n in one)
+    # Its own device's second BSS is no collision, another channel neither
+    assert not any("colour collision" in n for n in notes("0A:33:00:00:00:01"))
+
+
+def test_vht_details(opened):
+    # An AP: Wave 2 with MU-MIMO, Wave 1 with the SU beamformer
+    assert opened.js("vhtCapText({vhtcap: 32 | 16 | 1 | 4}, false)") == \
+        "256-QAM, MU-MIMO (Wave 2)"
+    assert opened.js("vhtCapText({vhtcap: 32 | 4}, false)") == \
+        "no 256-QAM (MCS 0\u20137), no MU-MIMO (Wave 1), SU beamformer"
+    # A station: what it takes
+    assert opened.js("vhtCapText({vhtcap: 32 | 16 | 2 | 8}, true)") == \
+        "256-QAM, MU-MIMO (MU beamformee)"
+    assert opened.js("vhtCapText({}, true)") == ""
+
+    def tip(fn, base, extra):
+        return opened.js("""o => { const d = document.createElement('div');
+            d.innerHTML = %s(Object.assign({}, %s[0], o));
+            return d.innerText; }""" % (fn, base), extra)
+
+    # In the Standard row of a Wi-Fi 5 AP, not of a Wi-Fi 6 one
+    assert "256-QAM, MU-MIMO (Wave 2)" in tip("networkTooltip", "networks",
+                                             {"std": 5, "vhtcap": 49})
+    assert "Wave 2" not in tip("networkTooltip", "networks",
+                               {"std": 6, "vhtcap": 49})
+    # A station's Wi-Fi 5 row
+    assert "MU-MIMO (MU beamformee)" in tip("clientTooltip", "stations",
+                                           {"std": 5, "vhtcap": 50})
+
+
+def test_station_80_plus_80(opened):
+    opened.page.evaluate("updateClients()")
+    opened.page.wait_for_function("() => stations.length > 0")
+
+    text = opened.js("""() => {
+        const ap = Object.assign({}, networks[0], {bssid: '02:00:00:00:80:80',
+            channel: 100, bandwidth: 8080, center: 106, center2: 42});
+        networks.push(ap);
+        const c = Object.assign({}, stations[0], {std: 6, width: 160,
+            w8080: 1, assoc: 1, bssid: ap.bssid});
+        const d = document.createElement('div');
+        d.innerHTML = clientTooltip(c);
+        return d.innerText; }""")
+
+    assert "up to 160 MHz, also 80+80" in text
+    assert "80+80 with its AP" in text
+
+    # Without the AP running 80+80 only what the station offers
+    text = opened.js("""() => { const d = document.createElement('div');
+        d.innerHTML = clientTooltip(Object.assign({}, stations[0],
+            {std: 6, width: 160, w8080: 1, assoc: 0}));
+        return d.innerText; }""")
+
+    assert "also 80+80" in text and "with its AP" not in text
+
+
+def test_bands_name_80_plus_80(opened):
+    def bands(classes):
+        return opened.js("c => bandsText(c)", {"opcl": classes})
+
+    # 128 80 MHz, 129 160, 130 80+80; 6 GHz 134 160, 135 80+80
+    assert "up to 160 MHz, also 80+80" in bands([115, 128, 129, 130])
+    assert "up to 80+80)" in bands([115, 128, 130])
+    assert "up to 160 MHz)" in bands([115, 128, 129])
+    assert "6 GHz (up to 160 MHz, also 80+80)" in bands([131, 134, 135])
+
+
+def test_width_column_80_plus_80(opened):
+    assert opened.js("clientCellText({width: 160, w8080: 1}, 'width')") == "160/80+80"
+    assert opened.js("clientCellText({width: 160}, 'width')") == "160 MHz"

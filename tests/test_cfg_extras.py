@@ -43,9 +43,20 @@ static int unhex(const char *hex, uint8_t *out)
 }
 
 // Two lines of hex elements: the state before and after
-int main()
+int main(int argc, char **argv)
 {
     static char line[2][4000];
+
+    // The flapping entry's list of names, cut to its 40 octets
+    if (argc > 1)
+    {
+        char out[40];
+
+        shortList(out, sizeof(out), argv[1]);
+        printf("%s\n", out);
+        return 0;
+    }
+
     static uint8_t ies[2][2000];
     CfgSnap snap[2];
 
@@ -87,13 +98,20 @@ def differ(tmp_path_factory):
          "#define NUM_CHANNELS_5  (sizeof(channels5) / sizeof(channels5[0]))"] +
         parsers[2:] + [
             tshark.cut(src, "const uint8_t *findVendorIE("),
+            tshark.cut(src, "void mergeNames("),
+            tshark.cut(src, "bool rsnOverridesOf("),
             piece(src, "struct CfgSnap\n{", "\n};"),
             piece(src, "enum\n{\n    CFG_RESTART", "\n};"),
             piece(src, "const char *const cfgFieldNames[] = {", "\n};"),
             piece(src, "const uint8_t cfgRates[]", ";"),
+            tshark.cut(src, "bool ehtOperationOf("),
+            tshark.cut(src, "bool mlRemovalOf("),
+            tshark.cut(src, "uint8_t broadcastTwtOf("),
+            tshark.cut(src, "void puncturedText("),
             tshark.cut(src, "void cfgExtrasOf("),
             RECORD,
             tshark.cut(src, "void cfgDiff("),
+            tshark.cut(src, "void shortList("),
         ]) + MAIN
 
     d = tmp_path_factory.mktemp("cfgextras")
@@ -242,3 +260,98 @@ def test_mobility_domain(differ):
         [("FT over the DS", "off", "on")]
     # Switched on or off is 802.11r's own entry, not this one
     assert diff(differ, SSID, SSID + ie(54, "2b4a00")) == []
+
+
+def eht(width_code, ccfs0, ccfs1, bitmap=None):
+    params = 0x01 | (0x02 if bitmap is not None else 0)
+    body = bytes([106, params]) + bytes(4) + bytes([width_code, ccfs0, ccfs1])
+    if bitmap is not None:
+        body += bitmap.to_bytes(2, "little")
+    return ie(255, body)
+
+
+def test_puncturing(differ):
+    # 36/160 (channels 36 ... 64, centre 50): 56 and 60 left out
+    assert diff(differ, SSID + eht(3, 42, 50, 0), SSID + eht(3, 42, 50, 0b1100000)) == \
+        [("punctured", "-", "56, 60")]
+    # 80 MHz on 100 (centre 106), 100 left out, then 104 instead
+    assert diff(differ, SSID + eht(2, 106, 0, 0b0001), SSID + eht(2, 106, 0, 0b0010)) == \
+        [("punctured", "100", "104")]
+    # Without the bitmap nothing is left out
+    assert diff(differ, SSID + eht(3, 42, 50), SSID + eht(3, 42, 50, 0)) == []
+
+
+def removal(link, tbtts):
+    import struct
+    common = bytes([7]) + bytes.fromhex("020000000001")
+    info = bytes([3]) + struct.pack("<H", tbtts)
+    prof = bytes([0, 2 + len(info)]) + struct.pack("<H", link | 1 << 6) + info
+    return ie(255, bytes([107]) + struct.pack("<H", 0x0012) + common + prof)
+
+
+def test_link_removal(differ):
+    # As Wireshark reads it: link 2, AP Removal Timer 30
+    assert diff(differ, SSID, SSID + removal(2, 30)) == \
+        [("link removal", "-", "2")]
+    # The countdown alone is no change
+    assert diff(differ, SSID + removal(2, 30), SSID + removal(2, 29)) == []
+
+
+def btwt(mantissa, exponent, duration, last=True):
+    import struct
+    req = (4 << 1) | ((1 << 5) if last else 0) | (exponent << 10)
+    return struct.pack("<H", req) + struct.pack("<H", 0) + bytes([duration]) + \
+        struct.pack("<H", mantissa) + struct.pack("<H", 3 << 3)
+
+
+def test_broadcast_twt(differ):
+    one = ie(216, bytes([2 << 2]) + btwt(100, 10, 32))
+    other = ie(216, bytes([2 << 2]) + btwt(200, 10, 32))
+    assert diff(differ, SSID, SSID + one) == \
+        [("broadcast TWT", "-", "every 102.4 ms for 8.2 ms")]
+    assert diff(differ, SSID + one, SSID + other) == \
+        [("broadcast TWT", "every 102.4 ms for 8.2 ms", "every 204.8 ms for 8.2 ms")]
+
+
+def he_op(twt_required):
+    # Parameters (bit 3 TWT required), BSS colour, basic HE-MCS
+    params = 0x000004 | (0x08 if twt_required else 0)
+    return ie(255, bytes([36]) + params.to_bytes(3, "little") + bytes([10]) +
+              bytes.fromhex("fcff"))
+
+
+def test_twt_required(differ):
+    assert diff(differ, SSID + he_op(False), SSID + he_op(True)) == \
+        [("TWT required", "off", "on")]
+    assert diff(differ, SSID + he_op(True), SSID + he_op(False)) == \
+        [("TWT required", "on", "off")]
+    assert diff(differ, SSID + he_op(True), SSID + he_op(True)) == []
+
+
+def test_flapping_list_cut_at_a_whole_name(differ):
+    def short(names):
+        return subprocess.run([str(differ), names], text=True,
+                              capture_output=True, check=True).stdout.rstrip("\n")
+
+    assert short("width, standard") == "width, standard"
+    # 70 characters into 40: whole names and an ellipsis, no "PMF, "
+    assert short("width, standard, spatial streams, PMF, TWT required, BSS colour") == \
+        "width, standard, spatial streams, \u2026"
+    assert len(short("x" * 60).encode()) < 40
+
+
+def wfa(oui_type, body):
+    return ie(221, bytes.fromhex("506f9a") + bytes([oui_type]) + bytes.fromhex(body))
+
+
+# Laid out as an RSNE, as an OpenWrt AP sends them: version, group
+# CCMP, GCMP-256 with SAE, and GCMP-256 with SAE-EXT-KEY (24)
+OVR_SAE = "0100" + "000fac04" + "0100000fac09" + "0100000fac08" + "cc00"
+OVR2_EXT = "0100" + "000fac04" + "0100000fac09" + "0100000fac18" + "cc00"
+
+
+def test_both_rsne_overrides(differ):
+    # SAE-EXT-KEY only in Override 2: as AKM of the override all the same
+    assert diff(differ, SSID + wfa(0x29, OVR_SAE),
+                SSID + wfa(0x29, OVR_SAE) + wfa(0x2A, OVR2_EXT)) == \
+        [("override AKM", "SAE", "SAE, SAE-EXT-KEY")]

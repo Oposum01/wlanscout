@@ -139,6 +139,14 @@ struct CfgSnap
     bool     meshGate;
     bool     meshAccepting;
     uint8_t  meshAuth;           // authentication protocol, 255 no mesh
+    uint8_t  btwtCount;          // broadcast TWT schedules
+    uint32_t btwtInterval;       //   the first one's interval, µs
+    uint32_t btwtDuration;       //   and its wake duration
+    bool     twtRequired;        // HE Operation: TWT required
+    uint16_t mlRemoving;         // links announced for removal
+    uint16_t ehtWidth;           // EHT Operation, see ehtOperationOf()
+    uint8_t  ehtCenter;
+    uint16_t punctured;          // 20 MHz subchannels left out
     bool     mde;                // Mobility Domain element sent
     uint16_t mdid;               // its ID
     bool     ftOverDs;           // FT over the DS
@@ -186,7 +194,8 @@ enum
     CFG_WPS_LOCK, CFG_WPS_METHODS, CFG_OWE, CFG_OWE_BSSID, CFG_OWE_SSID,
     CFG_HS20, CFG_INTERWORKING, CFG_MLD, CFG_MLO_LINKS, CFG_BASIC_RATES,
     CFG_PREAUTH, CFG_ACM, CFG_INTOLERANT, CFG_MESH_GATE, CFG_MESH_ACCEPT,
-    CFG_MESH_AUTH, CFG_MDID, CFG_FT_DS
+    CFG_MESH_AUTH, CFG_MDID, CFG_FT_DS, CFG_PUNCT, CFG_ML_REMOVE,
+    CFG_TWT, CFG_TWT_REQUIRED
 };
 
 /*
@@ -543,7 +552,7 @@ void handleNotFound();
 #define ZB_HEADER_BYTES 24
 
 // Firmware version, shown in the header and in /api/live
-#define FW_VERSION "2.6.11"
+#define FW_VERSION "2.7.0"
 
 // ============================================================
 // HEAP PROBE  (diagnostic, remove once the culprit is known)
@@ -1035,6 +1044,13 @@ struct WiFiNetwork
     uint8_t  channel;
     uint16_t bandwidth;
     uint8_t  centerChannel;
+    uint8_t  centerChannel2;     // 80+80: the second segment's, else 0
+
+    // EHT Operation (ext 106), see ehtOperationOf(): width and centre
+    // for Wi-Fi 7 stations, 20 MHz subchannels left out, 0 none
+    uint16_t ehtWidth;           // 0 without EHT Operation Information
+    uint8_t  ehtCenter;
+    uint16_t punctured;          // bit per 20 MHz, lowest first
     int8_t   rssi;
 
     char     security[16];
@@ -1116,6 +1132,33 @@ struct WiFiNetwork
 
     // Spatial streams from HT/VHT/HE capabilities, 0 = unknown
     uint8_t  streams;
+
+    // EHT Capabilities detail, see ehtCapsOf(); ehtMac 0 none
+    uint16_t ehtMac;
+    uint8_t  ehtPhy;
+    bool     ehtQam4k;
+
+    // HE Capabilities detail (heCapsOf()) and HE Operation's flags:
+    // 1 TWT required, 2 co-hosted BSS
+    uint8_t  heCaps;
+    uint8_t  heOpFlags;
+
+    // VHT Capabilities detail, see vhtCapsOf(); 0 none or 2.4 GHz
+    uint8_t  vhtCaps;
+
+    // TWT: what HE Capabilities say (heTwtOf()) and the broadcast
+    // schedules of the TWT element (broadcastTwtOf())
+    uint8_t  heTwt;
+    uint8_t  btwtCount;
+    uint8_t  btwtId[2];
+    uint8_t  btwtRec[2];         // Broadcast TWT Recommendation, 4 restricted
+    uint32_t btwtInterval[2];    // µs
+    uint32_t btwtDuration[2];    // µs
+
+    // Links the AP announces to remove, see mlRemovalOf(): bit per
+    // link ID, and the beacons left until the first goes
+    uint16_t mlRemoving;
+    uint16_t mlRemoveIn;
 
     // Multi-Link element (802.11be), see parseMultiLink()
     MloInfo  mlo;
@@ -1248,6 +1291,7 @@ struct WiFiNetwork
     uint8_t  advProtoCount;
     char     apName[33];         // Cisco 133, MikroTik or Mist name
     char     vendorFirmware[64]; // firmware version, 00:30:1A type 1
+    char     camKit[41];         // camera kit status text, 30:FF:83 type 104
     int8_t   acmMask;            // WMM ACM per AC, bit = ACI, -1 none
 
     /*
@@ -1480,7 +1524,16 @@ struct ClientEntry
 
     uint8_t  standard;
     uint16_t maxWidth;
+    bool     w8080;              // 80+80 offered, see caps8080Of()
     uint8_t  streams;
+
+    // EHT Capabilities detail, collected over its requests
+    uint16_t ehtMac;
+    uint8_t  ehtPhy;
+    bool     ehtQam4k;
+    uint8_t  heTwt;              // TWT support, see heTwtOf()
+    uint8_t  heCaps;             // HE Capabilities detail, see heCapsOf()
+    uint8_t  vhtCaps;            // VHT Capabilities detail, see vhtCapsOf()
 
     bool     rm11k;
     bool     bss11v;
@@ -1713,7 +1766,6 @@ extern bool     catalogFsOk;
 extern uint16_t bootCount;
 
 bool logLoaded      = false;   // the file is read, appends go there
-bool logClockFilled = false;   // this boot's entries have their epoch
 
 struct SixGhzBss
 {
@@ -3720,19 +3772,24 @@ void noteApClock(const uint8_t *bssid, int64_t offsetUs)
  *             ext 35 HE Capabilities, 36 HE Operation (BSS colour),
  *             42 BSS Color Change Announcement, 59 HE 6 GHz,
  *             107 Multi-Link, 108 EHT Capabilities
- *   passed:   33 Power Capability, 46 QoS Capability,
+ *   passed:   4 CF Parameter Set (point coordination, never used;
+ *             an old Linksys sends it), 33 Power Capability, 46 QoS Capability,
  *             47 ERP (the 802.11g draft's number, Broadcom sends
  *             it next to 42 with the same content),
- *             51 AP Channel Report, 62 Secondary Channel Offset, 72 20/40 BSS
+ *             51 AP Channel Report, 52 Neighbor Report (in probe
+ *             responses of FRITZ!Boxes, devolo and Extreme: 22 octets,
+ *             a few small values and zeros, no neighbour in them),
+ *             62 Secondary Channel Offset, 72 20/40 BSS
  *             Coexistence, 74 OBSS Scan Parameters, 244 RSN
  *             Extension, 10 Request (what
  *             a station asks for), 128 Lucent/Agere proprietary,
  *             150 (Cisco's number, empty in probe requests of
- *             some phones), 200 and 231 as Tenda/Realtek fill them, 240 FILS
+ *             some phones), 168 Relay Transfer Parameter (60 GHz,
+ *             one zero octet in a camera chip's probe requests), 200 and 231 as Tenda/Realtek fill them, 240 FILS
  *             Indication (FILS itself shows in the AKM list);
  *             ext 2 FILS Request Parameters, 37 UORA, 38 MU EDCA, 39 Spatial Reuse, 41 NDP
  *             Feedback Report, 56 Non-Inheritance,
- *             106 EHT Operation, 110 Multi-Link Traffic Indication,
+ *             110 Multi-Link Traffic Indication,
  *             137 Non-AP STA Regulatory Connectivity
  *
  * Unknown ones are kept as their ID, extension IDs as 256 + ID.
@@ -3745,17 +3802,17 @@ void noteApClock(const uint8_t *bssid, int64_t offsetUs)
 static const uint8_t decodedIes[] = {
     0, 1, 3, 5, 6, 7, 11, 32, 35, 36, 37, 40, 42, 45, 48, 50, 54, 55, 56,
     59, 60, 61, 66, 67, 69, 70, 71, 76, 90, 98, 107, 108, 113, 114, 127,
-    133, 191, 192, 193, 195, 199, 201
+    133, 191, 192, 193, 195, 199, 201, 216
 };
 
-static const uint8_t decodedExt[] = { 35, 36, 42, 59, 107, 108 };
+static const uint8_t decodedExt[] = { 35, 36, 42, 59, 106, 107, 108 };
 
 static const uint8_t passedIes[] = {
-    10, 33, 46, 47, 51, 62, 72, 74, 128, 150, 200, 231, 240, 244
+    4, 10, 33, 46, 47, 51, 52, 62, 72, 74, 128, 150, 168, 200, 231, 240, 244
 };
 
 static const uint8_t passedExt[] = {
-    2, 37, 38, 39, 41, 56, 106, 110, 137
+    2, 37, 38, 39, 41, 56, 110, 137
 };
 
 /*
@@ -4010,6 +4067,9 @@ void parseApExtras(const uint8_t *ies, int ieLength,
     {
         n.bssColor    = p[3] & 0x3F;
         n.bssColorOff = (p[3] & 0x80) != 0;
+
+        // HE Operation Parameters: bit 3 TWT required, 15 co-hosted BSS
+        n.heOpFlags   = ((p[0] & 0x08) ? 1 : 0) | ((p[1] & 0x80) ? 2 : 0);
     }
 
     /*
@@ -4138,6 +4198,17 @@ void parseApExtras(const uint8_t *ies, int ieLength,
     if (p != nullptr && len > 0)
         fixedName(p, len, n.apName, sizeof(n.apName));
 
+    /*
+     * 30:FF:83 type 104, an OUI not registered with the IEEE: wireless
+     * camera kits (AltoBeam chips, Xiongmai recorders) put plain text
+     * into it, padded with zeros. A camera's bridge its link to the
+     * recorder, "Signal:063", the recorder "XM722 pairing disable".
+     */
+    p = findVendorIE(ies, ieLength, 0x30, 0xFF, 0x83, 0x68, len);
+
+    if (p != nullptr && len > 0)
+        fixedName(p, len, n.camKit, sizeof(n.camKit));
+
     // 00:30:1A type 1: the firmware version
     p = findVendorIE(ies, ieLength, 0x00, 0x30, 0x1A, 0x01, len);
 
@@ -4247,6 +4318,89 @@ bool wfaCapaOf(const uint8_t *ies, int ieLength, uint8_t &capa)
     return true;
 }
 
+/*
+ * The RSNE Override (0x29) and Override 2 (0x2A) together: an AP can
+ * offer WPA3 with GCMP-256 in one and SAE-EXT-KEY in the other, as
+ * OpenWrt does for multi-link, and a client takes either. AKMs and
+ * ciphers of both, each once; PMF the stricter. False with neither.
+ */
+void mergeNames(char *dst, size_t size, const char *src)
+{
+    char item[24];
+
+    for (const char *q = src; *q; )
+    {
+        const char *e = strstr(q, ", ");
+        size_t l = e ? (size_t)(e - q) : strlen(q);
+
+        if (l > 0 && l < sizeof(item))
+        {
+            memcpy(item, q, l);
+            item[l] = 0;
+
+            // Already there as a whole name
+            bool have = false;
+
+            for (const char *d = dst; *d && !have; )
+            {
+                const char *de = strstr(d, ", ");
+                size_t dl = de ? (size_t)(de - d) : strlen(d);
+
+                have = dl == l && memcmp(d, item, l) == 0;
+                d += dl + (de ? 2 : 0);
+            }
+
+            if (!have)
+            {
+                if (dst[0])
+                    strlcat(dst, ", ", size);
+
+                strlcat(dst, item, size);
+            }
+        }
+
+        q += l + (e ? 2 : 0);
+    }
+}
+
+bool rsnOverridesOf(const uint8_t *ies, int ieLength, char *akm,
+                    size_t akmSize, char *pairwise, size_t pairSize,
+                    uint8_t &pmf)
+{
+    bool seen = false;
+
+    akm[0] = pairwise[0] = 0;
+    pmf    = 0;
+
+    for (uint8_t type = 0x29; type <= 0x2A; type++)
+    {
+        int len = 0;
+
+        const uint8_t *p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A,
+                                        type, len);
+
+        if (p == nullptr)
+            continue;
+
+        RsnInfo o;
+
+        memset(&o, 0, sizeof(o));
+        parseSuites(p, len, false, o);
+
+        mergeNames(akm, akmSize, o.akm);
+        mergeNames(pairwise, pairSize, o.pairwise);
+
+        uint8_t m = o.mfpRequired ? 2 : (o.mfpCapable ? 1 : 0);
+
+        if (m > pmf)
+            pmf = m;
+
+        seen = true;
+    }
+
+    return seen;
+}
+
 void parseWfaElements(const uint8_t *ies, int ieLength,
                       struct WiFiNetwork &n)
 {
@@ -4255,25 +4409,21 @@ void parseWfaElements(const uint8_t *ies, int ieLength,
     if (wfaCapaOf(ies, ieLength, n.wfaCapa))
         n.wfaCapaSeen = true;
 
-    const uint8_t *p = findVendorIE(ies, ieLength,
-                                    0x50, 0x6F, 0x9A, 0x29, len);
+    const uint8_t *p;
 
-    if (p == nullptr)
-        p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x2A, len);
-
-    if (p != nullptr)
     {
-        RsnInfo o;
+        char    akm[sizeof(n.ovrAkm)], pairwise[sizeof(n.ovrPairwise)];
+        uint8_t pmf = 0;
 
-        memset(&o, 0, sizeof(o));
+        if (rsnOverridesOf(ies, ieLength, akm, sizeof(akm), pairwise,
+                           sizeof(pairwise), pmf))
+        {
+            n.ovrSeen = true;
+            n.ovrPmf  = pmf;
 
-        parseSuites(p, len, false, o);
-
-        n.ovrSeen = true;
-        n.ovrPmf  = o.mfpRequired ? 2 : (o.mfpCapable ? 1 : 0);
-
-        strlcpy(n.ovrAkm, o.akm, sizeof(n.ovrAkm));
-        strlcpy(n.ovrPairwise, o.pairwise, sizeof(n.ovrPairwise));
+            strlcpy(n.ovrAkm, akm, sizeof(n.ovrAkm));
+            strlcpy(n.ovrPairwise, pairwise, sizeof(n.ovrPairwise));
+        }
     }
 
     p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x2B, len);
@@ -4579,6 +4729,7 @@ void collectUnknownElements(const uint8_t *ies, int ieLength,
 void addSuppChannels(const uint8_t *ies, int ieLength, bool sixGhz,
                      uint64_t &plan, uint64_t &six);
 uint16_t capsWidthOf(const uint8_t *ies, int ieLength, bool band24);
+bool caps8080Of(const uint8_t *ies, int ieLength, bool band24);
 uint8_t profileBandOf(const uint8_t *ies, int ieLength);
 
 bool parseMultiLink(const uint8_t *ies, int ieLength,
@@ -4856,6 +5007,28 @@ uint8_t profileBandOf(const uint8_t *ies, int ieLength)
 }
 
 /*
+ * 80+80 offered beside 160 MHz: VHT Supported Channel Width Set 2, or
+ * the HE channel width set's bit for 160/80+80 in 5 GHz (bit 3). Not
+ * in 2.4 GHz.
+ */
+bool caps8080Of(const uint8_t *ies, int ieLength, bool band24)
+{
+    int len = 0;
+
+    if (band24)
+        return false;
+
+    const uint8_t *vht = findIE(ies, ieLength, 191, len);
+
+    if (vht != nullptr && len >= 12 && ((vht[0] >> 2) & 0x03) == 2)
+        return true;
+
+    const uint8_t *he = findExtendedIE(ies, ieLength, 35, len);
+
+    return he != nullptr && len >= 19 && (((he[6] >> 1) & 0x3F) & 0x08);
+}
+
+/*
  * The widest channel the capability elements allow: HT 40 MHz,
  * VHT 80/160 (not in 2.4 GHz, where VHT is a vendor extension),
  * HE by its channel width set, EHT 320 MHz, which exists in 6 GHz
@@ -5087,6 +5260,250 @@ uint8_t maxStreamsOf(const uint8_t *ies, int ieLength,
     }
 
     return streams;
+}
+
+/*
+ * VHT Capabilities (191) beyond streams and width: four octets of
+ * capabilities, then the Rx and Tx VHT-MCS maps. As bits: 1 MU
+ * beamformer (bit 19, Wave 2: downlink MU-MIMO), 2 MU beamformee
+ * (20), 4 SU beamformer (11), 8 SU beamformee (12), 16 256-QAM (a
+ * stream with MCS 0-8 or 0-9 in the Rx map), 32 the map was read, so
+ * without 16 no 256-QAM. 0 for 2.4 GHz, where VHT is a vendor
+ * extension (vht24).
+ */
+uint8_t vhtCapsOf(const uint8_t *ies, int ieLength, bool band24)
+{
+    int len = 0;
+
+    const uint8_t *p = findIE(ies, ieLength, 191, len);
+
+    if (p == nullptr || len < 12 || band24)
+        return 0;
+
+    uint32_t info = p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24);
+    uint16_t map  = p[4] | (p[5] << 8);
+    uint8_t  caps = 32;
+
+    if (info & (1UL << 19)) caps |= 1;
+    if (info & (1UL << 20)) caps |= 2;
+    if (info & (1UL << 11)) caps |= 4;
+    if (info & (1UL << 12)) caps |= 8;
+
+    for (int i = 0; i < 8; i++)
+    {
+        uint8_t m = (map >> (i * 2)) & 0x03;
+
+        if (m == 1 || m == 2)
+            caps |= 16;
+    }
+
+    return caps;
+}
+
+/*
+ * HE Capabilities (ext 35) beyond streams and width: six octets of
+ * MAC, eleven of PHY capabilities, then the HE-MCS maps. As bits:
+ * 1 1024-QAM (a stream with MCS 0-11 in the Rx map up to 80 MHz),
+ * 2 UL MU-MIMO (PHY bit 22 full or 23 partial bandwidth), 4 MU
+ * beamformer (PHY bit 33), 8 SU beamformer (31), 16 DCM (PHY bits
+ * 24-25, the highest constellation for DCM, not 0).
+ */
+uint8_t heCapsOf(const uint8_t *ies, int ieLength)
+{
+    int len = 0;
+
+    const uint8_t *p = findExtendedIE(ies, ieLength, 35, len);
+
+    if (p == nullptr || len < 6 + 11)
+        return 0;
+
+    const uint8_t *phy = p + 6;
+    uint8_t caps = 0;
+
+    if (phy[2] & 0xC0) caps |= 2;
+    if (phy[4] & 0x02) caps |= 4;
+    if (phy[3] & 0x80) caps |= 8;
+    if (phy[3] & 0x03) caps |= 16;
+
+    if (len >= 6 + 11 + 2)
+    {
+        uint16_t map = p[17] | (p[18] << 8);
+
+        for (int i = 0; i < 8; i++)
+            if (((map >> (i * 2)) & 0x03) == 2)
+                caps |= 1;
+    }
+
+    return caps;
+}
+
+/*
+ * TWT support from the HE MAC Capabilities (ext 35): bit 1 TWT
+ * requester, 2 TWT responder, 20 broadcast TWT. As 1 requester,
+ * 2 responder, 4 broadcast.
+ */
+uint8_t heTwtOf(const uint8_t *ies, int ieLength)
+{
+    int len = 0;
+
+    const uint8_t *p = findExtendedIE(ies, ieLength, 35, len);
+
+    if (p == nullptr || len < 6)
+        return 0;
+
+    return ((p[0] & 0x02) ? 1 : 0) | ((p[0] & 0x04) ? 2 : 0) |
+           ((p[2] & 0x10) ? 4 : 0);
+}
+
+/*
+ * Broadcast TWT schedules of the TWT element (216): control (bits
+ * 2-3 the negotiation type, 2 or 3 broadcast; bit 5 the wake
+ * duration unit, 256 µs or 1 TU; bit 6 a link ID bitmap of two
+ * octets follows), then parameter sets: request type (bit 5 last
+ * set, bits 7-9 the recommendation, 4 restricted TWT, bits 10-14 the
+ * wake interval exponent), target wake time (2), nominal wake
+ * duration (1), wake interval mantissa (2), broadcast TWT info
+ * (bits 3-7 the ID, bit 0 restricted TWT traffic info of three
+ * octets follows). Up to max schedules; their count.
+ */
+uint8_t broadcastTwtOf(const uint8_t *ies, int ieLength, uint8_t *ids,
+                       uint8_t *recs, uint32_t *intervals,
+                       uint32_t *durations, uint8_t max)
+{
+    int len = 0;
+
+    const uint8_t *p = findIE(ies, ieLength, 216, len);
+
+    if (p == nullptr || len < 1)
+        return 0;
+
+    uint8_t ctrl = p[0];
+    uint8_t type = (ctrl >> 2) & 0x03;
+
+    if (type != 2 && type != 3)
+        return 0;
+
+    uint32_t unit = (ctrl & 0x20) ? 1024 : 256;
+    int      at   = 1 + ((ctrl & 0x40) ? 2 : 0);
+    uint8_t  n    = 0;
+
+    while (at + 9 <= len && n < max)
+    {
+        uint16_t req  = p[at] | (p[at + 1] << 8);
+        uint16_t mant = p[at + 5] | (p[at + 6] << 8);
+        uint16_t info = p[at + 7] | (p[at + 8] << 8);
+
+        ids[n]       = (info >> 3) & 0x1F;
+        recs[n]      = (req >> 7) & 0x07;
+        intervals[n] = (uint32_t)mant << ((req >> 10) & 0x1F);
+        durations[n] = p[at + 4] * unit;
+        n++;
+
+        at += 9 + ((info & 0x01) ? 3 : 0);
+
+        if (req & 0x20)
+            break;
+    }
+
+    return n;
+}
+
+/*
+ * The Reconfiguration variant of the Multi-Link element (type 2):
+ * an AP MLD announcing that it removes affiliated APs. Control, the
+ * common info (its length first), then Per-STA Profiles (subelement
+ * 0): STA Control with the link ID in bits 0-3, MAC address present
+ * bit 5, AP Removal Timer present bit 6, the operation type in bits
+ * 7-10 (0 AP removal), then STA Info, its length first, the MAC if
+ * present and the timer in TBTTs. False without such an element.
+ */
+bool mlRemovalOf(const uint8_t *ies, int ieLength, uint16_t &links,
+                 uint16_t &tbtts)
+{
+    links = 0;
+    tbtts = 0;
+
+    for (int pos = 0; pos + 2 <= ieLength; )
+    {
+        uint8_t id = ies[pos];
+        uint8_t l  = ies[pos + 1];
+
+        if (pos + 2 + l > ieLength)
+            break;
+
+        const uint8_t *e = ies + pos + 2;
+
+        pos += 2 + l;
+
+        if (id != 255 || l < 4 || e[0] != 107 || (e[1] & 0x07) != 2)
+            continue;
+
+        int at = 3 + e[3];          // past control and common info
+
+        while (at + 2 <= l)
+        {
+            uint8_t sid = e[at];
+            uint8_t sl  = e[at + 1];
+
+            if (at + 2 + sl > l)
+                break;
+
+            const uint8_t *s = e + at + 2;
+
+            at += 2 + sl;
+
+            if (sid != 0 || sl < 3)
+                continue;
+
+            uint16_t ctrl = s[0] | (s[1] << 8);
+            uint8_t  type = (ctrl >> 7) & 0x0F;
+
+            if (type != 0 || !(ctrl & 0x40))
+                continue;
+
+            int t = 3 + ((ctrl & 0x20) ? 6 : 0);    // info length, MAC
+
+            if (t + 2 > sl)
+                continue;
+
+            uint16_t left = s[t] | (s[t + 1] << 8);
+
+            links |= 1 << (ctrl & 0x0F);
+
+            if (tbtts == 0 || left < tbtts)
+                tbtts = left;
+        }
+    }
+
+    return links != 0;
+}
+
+/*
+ * EHT Capabilities (ext 108) beyond the streams: the MAC capabilities
+ * (bit 0 EPCS priority access, 4 restricted TWT, 5 SCS traffic
+ * description), the first PHY octet (bit 1 320 MHz in 6 GHz), and
+ * whether any stream does MCS 12/13, 4096-QAM: the third octet of the
+ * MCS set, or the fourth for a 20 MHz-only station, whose set starts
+ * at MCS 0-7. True when the element is there.
+ */
+bool ehtCapsOf(const uint8_t *ies, int ieLength, bool twentyOnly,
+               uint16_t &mac, uint8_t &phy, bool &qam4k)
+{
+    int len = 0;
+
+    const uint8_t *p = findExtendedIE(ies, ieLength, 108, len);
+
+    if (p == nullptr || len < 2 + 9)
+        return false;
+
+    mac = p[0] | (p[1] << 8);
+    phy = p[2];
+
+    int at = 2 + 9 + (twentyOnly ? 3 : 2);
+
+    qam4k = len > at && (p[at] & 0x0F) != 0;
+
+    return true;
 }
 
 /*
@@ -5358,8 +5775,28 @@ void parseStationCapabilities(const uint8_t *ies, int ieLength,
     if (width > c.maxWidth)
         c.maxWidth = width;
 
+    c.w8080 |= caps8080Of(ies, ieLength, c.channel <= 14);
+
     if (streams > c.streams)
         c.streams = streams;
+
+    // A 20 MHz-only station lays out its EHT-MCS set differently
+    {
+        uint16_t mac = 0;
+        uint8_t  phy = 0;
+        bool     qam4k = false;
+
+        if (ehtCapsOf(ies, ieLength, width == 20, mac, phy, qam4k))
+        {
+            c.ehtMac   |= mac;
+            c.ehtPhy   |= phy;
+            c.ehtQam4k |= qam4k;
+        }
+    }
+
+    c.heTwt  |= heTwtOf(ies, ieLength);
+    c.heCaps |= heCapsOf(ies, ieLength);
+    c.vhtCaps |= vhtCapsOf(ies, ieLength, c.channel <= 14);
 }
 
 // ============================================================
@@ -6292,7 +6729,8 @@ const char *const cfgFieldNames[] = {
     "MLD address", "MLO links", "basic rates", "pre-authentication",
     "admission control", "40 MHz intolerant", "mesh gate",
     "accepting peerings", "mesh authentication", "mobility domain",
-    "FT over the DS"
+    "FT over the DS", "punctured", "link removal", "broadcast TWT",
+    "TWT required"
 };
 
 bool cfgIsMuted(const uint8_t *bssid)
@@ -6468,25 +6906,9 @@ void cfgExtrasOf(const uint8_t *ies, int ieLength, CfgSnap &c)
         c.preAuth = rsn.preAuth;
     }
 
-    // RSNE Override, or Override 2, and the RSNXE Override's H2E bit
-    p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x29, len);
-
-    if (p == nullptr)
-        p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x2A, len);
-
-    if (p != nullptr)
-    {
-        RsnInfo o;
-
-        memset(&o, 0, sizeof(o));
-        parseSuites(p, len, false, o);
-
-        c.ovr    = true;
-        c.ovrPmf = o.mfpRequired ? 2 : (o.mfpCapable ? 1 : 0);
-
-        strlcpy(c.ovrAkm, o.akm, sizeof(c.ovrAkm));
-        strlcpy(c.ovrPairwise, o.pairwise, sizeof(c.ovrPairwise));
-    }
+    // RSNE Override and Override 2 together, the RSNXE Override's H2E bit
+    c.ovr = rsnOverridesOf(ies, ieLength, c.ovrAkm, sizeof(c.ovrAkm),
+                           c.ovrPairwise, sizeof(c.ovrPairwise), c.ovrPmf);
 
     p = findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x2B, len);
 
@@ -6636,6 +7058,34 @@ void cfgExtrasOf(const uint8_t *ies, int ieLength, CfgSnap &c)
     p = findIE(ies, ieLength, 45, len);
 
     c.intolerant = p != nullptr && len >= 2 && (p[1] & 0x40) != 0;
+
+    // EHT Operation: preamble puncturing
+    ehtOperationOf(ies, ieLength, c.ehtWidth, c.ehtCenter, c.punctured);
+
+    // Broadcast TWT, the first schedule
+    {
+        uint8_t  ids[2], recs[2];
+        uint32_t iv[2], du[2];
+
+        c.btwtCount = broadcastTwtOf(ies, ieLength, ids, recs, iv, du, 2);
+
+        if (c.btwtCount)
+        {
+            c.btwtInterval = iv[0];
+            c.btwtDuration = du[0];
+        }
+    }
+
+    // HE Operation Parameters, bit 3: stations have to use TWT
+    p = findExtendedIE(ies, ieLength, 36, len);
+    c.twtRequired = p != nullptr && len >= 3 && (p[0] & 0x08);
+
+    // Links announced for removal, without the countdown
+    {
+        uint16_t tbtts = 0;
+
+        mlRemovalOf(ies, ieLength, c.mlRemoving, tbtts);
+    }
 
     // Mobility Domain (54): its ID and FT over the DS
     p = findIE(ies, ieLength, 54, len);
@@ -7024,6 +7474,59 @@ void cfgDiff(WiFiNetwork &n, const CfgSnap &a, const CfgSnap &b,
     }
 
     flag(CFG_INTOLERANT, a.intolerant, b.intolerant);
+    flag(CFG_TWT_REQUIRED, a.twtRequired, b.twtRequired);
+
+    // Broadcast TWT: none, or the first schedule's interval and duration
+    if (a.btwtCount != b.btwtCount || a.btwtInterval != b.btwtInterval ||
+        a.btwtDuration != b.btwtDuration)
+    {
+        auto twt = [](char *out, size_t size, const CfgSnap &s)
+        {
+            if (!s.btwtCount)
+                strlcpy(out, "-", size);
+            else
+                snprintf(out, size, "every %.1f ms for %.1f ms%s",
+                         s.btwtInterval / 1000.0, s.btwtDuration / 1000.0,
+                         s.btwtCount > 1 ? " +more" : "");
+        };
+
+        twt(x, sizeof(x), a);
+        twt(y, sizeof(y), b);
+        cfgRecord(n, CFG_TWT, x, y);
+    }
+
+    // Links the AP MLD announces to remove, by link ID
+    if (a.mlRemoving != b.mlRemoving)
+    {
+        auto ids = [](char *out, size_t size, uint16_t m)
+        {
+            out[0] = 0;
+
+            for (int i = 0; i < 16; i++)
+                if (m & (1 << i))
+                {
+                    char id[6];
+
+                    snprintf(id, sizeof(id), "%s%d", out[0] ? ", " : "", i);
+                    strlcat(out, id, size);
+                }
+
+            if (!out[0])
+                strlcpy(out, "-", size);
+        };
+
+        ids(x, sizeof(x), a.mlRemoving);
+        ids(y, sizeof(y), b.mlRemoving);
+        cfgRecord(n, CFG_ML_REMOVE, x, y);
+    }
+
+    // Subchannels left out, by their channel numbers
+    if (a.punctured != b.punctured)
+    {
+        puncturedText(x, sizeof(x), a.ehtWidth, a.ehtCenter, a.punctured);
+        puncturedText(y, sizeof(y), b.ehtWidth, b.ehtCenter, b.punctured);
+        cfgRecord(n, CFG_PUNCT, x, y);
+    }
 
     // 802.11r detail only while it stays on, its switch is above
     if (a.mde && b.mde)
@@ -7048,16 +7551,41 @@ void cfgDiff(WiFiNetwork &n, const CfgSnap &a, const CfgSnap &b,
 }
 
 /*
+ * A list "a, b, c" into size: as many whole names as fit, then an
+ * ellipsis instead of a name cut in two
+ */
+void shortList(char *out, size_t size, const char *all)
+{
+    if (strlen(all) < size)
+    {
+        strlcpy(out, all, size);
+        return;
+    }
+
+    size_t cut = 0;
+
+    for (const char *q = strstr(all, ", "); q != nullptr;
+         q = strstr(q + 2, ", "))
+        if ((size_t)(q - all) + sizeof(", \xE2\x80\xA6") <= size)
+            cut = q - all;
+
+    memcpy(out, all, cut);
+    strlcpy(out + cut, cut ? ", \xE2\x80\xA6" : "\xE2\x80\xA6", size - cut);
+}
+
+/*
  * Back to the state before the last change: one entry for the
  * flapping, "width, standard, ..." and the switches so far,
  * updated in place while it goes on.
  */
 void cfgFlap(WiFiNetwork &n, const CfgSnap &now)
 {
-    char names[40] = "";
+    char all[200] = "";
+    char names[40];
     char count[24];
 
-    cfgDiff(n, n.cfg, now, names, sizeof(names));
+    cfgDiff(n, n.cfg, now, all, sizeof(all));
+    shortList(names, sizeof(names), all);
 
     // The first change and this one back
     n.cfgFlaps = n.cfgFlaps ? n.cfgFlaps + 1 : 2;
@@ -7310,15 +7838,76 @@ void tsfWatch(WiFiNetwork &n, uint64_t tsf)
 }
 
 /*
+ * EHT Operation (ext 106): parameters (bit 0 EHT Operation
+ * Information present, bit 1 Disabled Subchannel Bitmap present),
+ * four octets of basic EHT-MCS, then the information: the width
+ * (0 20, 1 40, 2 80, 3 160, 4 320 MHz), CCFS0 and CCFS1, and the
+ * bitmap of 20 MHz subchannels the BSS leaves out (preamble
+ * puncturing), bit 0 the lowest. CCFS1 is the centre of 160 and 320,
+ * CCFS0 of 80 and less. False without the information.
+ */
+bool ehtOperationOf(const uint8_t *ies, int ieLength, uint16_t &width,
+                    uint8_t &centre, uint16_t &punctured)
+{
+    int len = 0;
+
+    const uint8_t *p = findExtendedIE(ies, ieLength, 106, len);
+
+    if (p == nullptr || len < 8 || !(p[0] & 0x01))
+        return false;
+
+    static const uint16_t widths[] = { 20, 40, 80, 160, 320 };
+
+    uint8_t w = p[5] & 0x07;
+
+    if (w > 4)
+        return false;
+
+    width     = widths[w];
+    centre    = w >= 3 ? p[7] : p[6];
+    punctured = (p[0] & 0x02) && len >= 10 ? (p[8] | (p[9] << 8)) : 0;
+
+    return true;
+}
+
+/*
+ * The punctured 20 MHz channels as text, "56, 60", or "-": the
+ * lowest channel of the width is the centre less two per further
+ * 20 MHz.
+ */
+void puncturedText(char *out, size_t size, uint16_t width, uint8_t centre,
+                   uint16_t punctured)
+{
+    out[0] = 0;
+
+    int lowest = (int)centre - (width / 20 - 1) * 2;
+
+    for (int i = 0; i < 16 && i < width / 20; i++)
+        if (punctured & (1 << i))
+        {
+            char ch[8];
+
+            snprintf(ch, sizeof(ch), "%s%d", out[0] ? ", " : "",
+                     lowest + i * 4);
+            strlcat(out, ch, size);
+        }
+
+    if (!out[0])
+        strlcpy(out, "-", size);
+}
+
+/*
  * VHT Operation (192): channel width, then the two centre frequency
  * segments CCFS0 and CCFS1. Today's APs give 160 MHz as width 1 with
  * CCFS0 the centre of the primary 80 MHz and CCFS1 that of the whole
  * 160, eight channels apart (802.11-2020 Table 9-274): 36/160 is 42
  * and 50, centre 50. CCFS1 further off is 80+80. The deprecated
- * widths 2 (160) and 3 (80+80) have the centre in CCFS0. False for
- * width 0, 20 or 40 MHz, which the HT Operation element tells.
+ * widths 2 (160) and 3 (80+80) have the centre in CCFS0. With 80+80
+ * the second segment's centre is in CCFS1, else centre2 is 0. False
+ * for width 0, 20 or 40 MHz, which the HT Operation element tells.
  */
-bool vhtWidthOf(const uint8_t *vht, uint16_t &bandwidth, uint8_t &centre)
+bool vhtWidthOf(const uint8_t *vht, uint16_t &bandwidth, uint8_t &centre,
+                uint8_t &centre2)
 {
     uint8_t width = vht[0];
     uint8_t ccfs0 = vht[1];
@@ -7342,6 +7931,7 @@ bool vhtWidthOf(const uint8_t *vht, uint16_t &bandwidth, uint8_t &centre)
         {
             bandwidth = 8080;
             centre    = ccfs0;
+            centre2   = ccfs1;
         }
 
         return true;
@@ -7358,6 +7948,7 @@ bool vhtWidthOf(const uint8_t *vht, uint16_t &bandwidth, uint8_t &centre)
     {
         bandwidth = 8080;
         centre    = ccfs0 ? ccfs0 : ccfs1;
+        centre2   = ccfs0 ? ccfs1 : 0;
         return true;
     }
 
@@ -7598,8 +8189,9 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     // VHT Operation (ID 192)
     // --------------------------------------------------------
 
-    uint16_t bandwidth     = 20;
-    uint8_t  centerChannel = channel;
+    uint16_t bandwidth      = 20;
+    uint8_t  centerChannel  = channel;
+    uint8_t  centerChannel2 = 0;
 
     int vhtLen = 0;
 
@@ -7608,7 +8200,7 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     bool vhtHandled = false;
 
     if (vht != nullptr && vhtLen >= 3)
-        vhtHandled = vhtWidthOf(vht, bandwidth, centerChannel);
+        vhtHandled = vhtWidthOf(vht, bandwidth, centerChannel, centerChannel2);
 
     if (!vhtHandled)
     {
@@ -8085,6 +8677,11 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     n.channel        = channel;
     n.bandwidth      = bandwidth;
     n.centerChannel  = centerChannel;
+    n.centerChannel2 = centerChannel2;
+
+    n.ehtWidth  = 0;
+    n.punctured = 0;
+    ehtOperationOf(ies, ieLength, n.ehtWidth, n.ehtCenter, n.punctured);
     n.rssi           = rssi;
     n.standard       = standard;
     n.phyModes       = phyModes;
@@ -8094,6 +8691,17 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     n.bss11v         = bss11v;
     n.rrmCaps        = rrmCapsOf(ies, ieLength);
     n.streams        = maxStreamsOf(ies, ieLength, channel);
+
+    n.ehtMac = 0;
+    ehtCapsOf(ies, ieLength, false, n.ehtMac, n.ehtPhy, n.ehtQam4k);
+
+    mlRemovalOf(ies, ieLength, n.mlRemoving, n.mlRemoveIn);
+
+    n.heTwt     = heTwtOf(ies, ieLength);
+    n.heCaps    = heCapsOf(ies, ieLength);
+    n.vhtCaps   = vhtCapsOf(ies, ieLength, channel <= 14);
+    n.btwtCount = broadcastTwtOf(ies, ieLength, n.btwtId, n.btwtRec,
+                                 n.btwtInterval, n.btwtDuration, 2);
 
     parseMultiLink(ies, ieLength, n.mlo);
 
@@ -9408,17 +10016,12 @@ void logLoad()
 
 /*
  * Once the clock is known: this boot's entries from before get
- * their wall time, in the ring and in the file.
+ * their wall time, in the ring and in the file. See clockFillLoop().
  */
-void logClockLoop()
+void logClockFill(uint32_t nowEpoch, uint32_t nowUp)
 {
-    if (logClockFilled || pcapClockSource == 0 || eventLog == nullptr)
+    if (eventLog == nullptr)
         return;
-
-    logClockFilled = true;
-
-    uint32_t nowEpoch = deviceEpoch();
-    uint32_t nowUp    = (uint32_t)(esp_timer_get_time() / 1000000LL);
 
     for (uint8_t i = 0; i < logCount; i++)
     {
@@ -9749,6 +10352,7 @@ static const uint32_t decodedVendor[] = {
                     // is flags, an OUI and MAC addresses
     0x000C4200,     // MikroTik: the radio name
     0x5C5B3501,     // Mist: the AP name
+    0x30FF8368,     // camera kit: its status text
     0x00301A01      // 00:30:1A type 1: the firmware version
 };
 
@@ -13363,6 +13967,24 @@ void sendNetworksJSON()
         outStr(",\"center\":");
         outNum(n.centerChannel);
 
+        if (n.centerChannel2)
+        {
+            outStr(",\"center2\":");
+            outNum(n.centerChannel2);
+        }
+
+        // EHT Operation: [width MHz, centre channel, punctured bitmap]
+        if (n.ehtWidth)
+        {
+            outStr(",\"eht\":[");
+            outNum(n.ehtWidth);
+            outStr(",");
+            outNum(n.ehtCenter);
+            outStr(",");
+            outNum(n.punctured);
+            outStr("]");
+        }
+
         outStr(",\"rssi\":");
         outNum(n.rssi);
 
@@ -13404,6 +14026,76 @@ void sendNetworksJSON()
 
         outStr(",\"nss\":");
         outNum(n.streams);
+
+        // TWT: 1 requester, 2 responder, 4 broadcast; the broadcast
+        // schedules as [ID, recommendation, interval µs, duration µs]
+        if (n.heTwt)
+        {
+            outStr(",\"twt\":");
+            outNum(n.heTwt);
+        }
+
+        // HE: capability bits (heCapsOf()) and HE Operation flags
+        if (n.heCaps)
+        {
+            outStr(",\"hecap\":");
+            outNum(n.heCaps);
+        }
+
+        // VHT: capability bits (vhtCapsOf())
+        if (n.vhtCaps)
+        {
+            outStr(",\"vhtcap\":");
+            outNum(n.vhtCaps);
+        }
+
+        if (n.heOpFlags)
+        {
+            outStr(",\"heop\":");
+            outNum(n.heOpFlags);
+        }
+
+        if (n.btwtCount)
+        {
+            outStr(",\"btwt\":[");
+
+            for (uint8_t i = 0; i < n.btwtCount; i++)
+            {
+                outStr(i ? ",[" : "[");
+                outNum(n.btwtId[i]);
+                outStr(",");
+                outNum(n.btwtRec[i]);
+                outStr(",");
+                outNum(n.btwtInterval[i]);
+                outStr(",");
+                outNum(n.btwtDuration[i]);
+                outStr("]");
+            }
+
+            outStr("]");
+        }
+
+        // Links being removed: [bit per link ID, beacons left]
+        if (n.mlRemoving)
+        {
+            outStr(",\"mlrm\":[");
+            outNum(n.mlRemoving);
+            outStr(",");
+            outNum(n.mlRemoveIn);
+            outStr("]");
+        }
+
+        // EHT Capabilities: [MAC capabilities, first PHY octet, 4096-QAM]
+        if (n.ehtMac || n.ehtPhy)
+        {
+            outStr(",\"ehtcap\":[");
+            outNum(n.ehtMac);
+            outStr(",");
+            outNum(n.ehtPhy);
+            outStr(",");
+            outNum(n.ehtQam4k ? 1 : 0);
+            outStr("]");
+        }
 
         outMlo(n.mlo);
 
@@ -13487,6 +14179,12 @@ void sendNetworksJSON()
         {
             outStr(",\"vfw\":");
             outJSON(n.vendorFirmware);
+        }
+
+        if (n.camKit[0])
+        {
+            outStr(",\"camkit\":");
+            outJSON(n.camKit);
         }
 
         if (n.acmMask >= 0)
@@ -14275,8 +14973,40 @@ void outClientObject(ClientEntry &c, uint32_t now)
         outStr(",\"width\":");
         outNum(c.maxWidth);
 
+        if (c.w8080)
+            outStr(",\"w8080\":1");
+
         outStr(",\"nss\":");
         outNum(c.streams);
+
+        if (c.heTwt)
+        {
+            outStr(",\"twt\":");
+            outNum(c.heTwt);
+        }
+
+        if (c.heCaps)
+        {
+            outStr(",\"hecap\":");
+            outNum(c.heCaps);
+        }
+
+        if (c.vhtCaps)
+        {
+            outStr(",\"vhtcap\":");
+            outNum(c.vhtCaps);
+        }
+
+        if (c.ehtMac || c.ehtPhy)
+        {
+            outStr(",\"ehtcap\":[");
+            outNum(c.ehtMac);
+            outStr(",");
+            outNum(c.ehtPhy);
+            outStr(",");
+            outNum(c.ehtQam4k ? 1 : 0);
+            outStr("]");
+        }
 
         outStr(",\"k\":");
         outNum(c.rm11k ? 1 : 0);
@@ -17756,6 +18486,12 @@ void sendExportJSON()
             outStr(",\"center\":");
             outNum(n.centerChannel);
 
+            if (n.centerChannel2)
+            {
+                outStr(",\"center2\":");
+                outNum(n.centerChannel2);
+            }
+
             outStr(",\"bw\":");
             outNum(n.bandwidth);
 
@@ -17898,6 +18634,9 @@ void sendExportJSON()
 
             outStr(",\"width\":");
             outNum(c.maxWidth);
+
+            if (c.w8080)
+                outStr(",\"w8080\":1");
 
             outStr(",\"roams\":");
             outNum(c.roams);
@@ -18568,6 +19307,12 @@ void setupWiFiScanner()
  */
 #define SNAP_DIR        "/snap"
 #define SNAP_KEEP       10
+
+// Snapshots of this start taken without a clock, see snapClockFill()
+#define SNAP_UNDATED_MAX 16
+
+uint32_t snapUndated[SNAP_UNDATED_MAX];
+uint8_t  snapUndatedCount = 0;
 #define SNAP_IMPORT_TMP SNAP_DIR "/import.tmp"   // see "Snapshot import"
 #define SNAP_MIN_FREE   (512 * 1024)
 #define BOOT_BUTTON     28
@@ -18915,7 +19660,120 @@ bool takeSnapshot(struct SnapInfo &taken)
     Serial.printf("Snapshot %" PRIu32 ": %s, %" PRIu32 " bytes\n",
                   taken.seq, ok ? "written" : "FAILED", taken.bytes);
 
+    // Dated once the clock is known, see clockFillLoop()
+    if (ok && taken.epoch == 0 && snapUndatedCount < SNAP_UNDATED_MAX)
+        snapUndated[snapUndatedCount++] = taken.seq;
+
     return ok;
+}
+
+/*
+ * The time comes later, a sensor on a power bank finds out when a
+ * phone is plugged into its other port: the snapshots taken since
+ * the start get their epoch. It lives in the file name, which the
+ * list and the download read; the file itself is left as written.
+ */
+void snapClockFill(uint32_t nowEpoch, uint32_t nowUp)
+{
+    if (snapUndatedCount == 0)
+        return;
+
+    SnapInfo list[SNAP_KEEP + 4];
+
+    uint8_t count = listSnapshots(list, SNAP_KEEP + 4);
+
+    for (uint8_t i = 0; i < count; i++)
+        for (uint8_t k = 0; k < snapUndatedCount; k++)
+        {
+            if (list[i].seq != snapUndated[k] || list[i].epoch != 0 ||
+                list[i].uptime > nowUp)
+                continue;
+
+            SnapInfo dated = list[i];
+
+            dated.epoch = nowEpoch - (nowUp - list[i].uptime);
+
+            LittleFS.rename(snapshotPath(list[i]), snapshotPath(dated));
+        }
+
+    snapUndatedCount = 0;
+}
+
+/*
+ * This start's catalog sightings from before the clock: their
+ * epoch was the uptime, now it is the time.
+ */
+void catalogClockFill(uint32_t nowEpoch, uint32_t nowUp)
+{
+    if (catalog == nullptr)
+        return;
+
+    for (uint16_t i = 0; i < catalogCount; i++)
+    {
+        CatalogEntry &e = catalog[i];
+
+        if (e.firstBoot == bootCount && e.firstClock == 0 &&
+            e.firstAt <= nowUp)
+        {
+            e.firstAt    = nowEpoch - (nowUp - e.firstAt);
+            e.firstClock = pcapClockSource;
+            catalogDirty = true;
+        }
+
+        if (e.lastBoot == bootCount && e.lastClock == 0 &&
+            e.lastAt <= nowUp)
+        {
+            e.lastAt    = nowEpoch - (nowUp - e.lastAt);
+            e.lastClock = pcapClockSource;
+            catalogDirty = true;
+        }
+    }
+}
+
+// The association history keeps epochs, without a clock the uptime
+void assocClockFill(uint32_t nowEpoch, uint32_t nowUp)
+{
+    if (assocHistory == nullptr)
+        return;
+
+    for (int i = 0; i < MAX_ASSOC_HISTORY; i++)
+    {
+        AssocHistory &h = assocHistory[i];
+
+        if (!h.valid)
+            continue;
+
+        if (h.firstEpoch <= nowUp)
+            h.firstEpoch = nowEpoch - (nowUp - h.firstEpoch);
+
+        if (h.lastEpoch <= nowUp)
+            h.lastEpoch = nowEpoch - (nowUp - h.lastEpoch);
+    }
+}
+
+/*
+ * The moment the clock is first known in a start, by NTP, the
+ * browser or an AP: what was recorded before it with the uptime
+ * only gets its time, the event log, the snapshots, the IE
+ * catalog and the association history. The capture ring needs
+ * nothing, its timestamps are worked out when it is downloaded.
+ */
+bool clockFilled = false;
+
+void clockFillLoop()
+{
+    if (clockFilled || pcapClockSource == 0)
+        return;
+
+    clockFilled = true;
+
+    uint32_t nowEpoch = deviceEpoch();
+    uint32_t nowUp    = (uint32_t)(esp_timer_get_time() / 1000000LL);
+
+    logClockFill(nowEpoch, nowUp);
+    snapClockFill(nowEpoch, nowUp);
+    catalogClockFill(nowEpoch, nowUp);
+    assocClockFill(nowEpoch, nowUp);
 }
 
 // The BOOT button, debounced; one snapshot per press
@@ -19048,6 +19906,21 @@ void handleSnapshot()
 
         String given = snapshotName(seq);
 
+        /*
+         * The file's first bytes, with the epoch of the name for a 0
+         * written before the clock was known (see snapClockFill())
+         */
+        char   start[80];
+        size_t got = f.read((uint8_t *)start, sizeof(start) - 1);
+
+        start[got] = 0;
+
+        String first(start);
+
+        if (list[found].epoch)
+            first.replace("\"epoch\":0,",
+                          "\"epoch\":" + String(list[found].epoch) + ",");
+
         if (given.length())
         {
             outBuf = "";
@@ -19055,17 +19928,16 @@ void handleSnapshot()
             outJSON(given.c_str());
             outStr(",");
 
-            head = outBuf;
+            head = outBuf + first.substring(1);
             outBuf = "";
-
-            f.read();
         }
+        else
+            head = first;
 
         reqStart(200, "application/json",
-                 f.size() - (head.length() ? 1 : 0) + head.length(), name);
+                 f.size() - got + head.length(), name);
 
-        if (head.length())
-            reqContent(head.c_str(), head.length());
+        reqContent(head.c_str(), head.length());
 
         uint8_t buffer[1024];
 
@@ -19906,7 +20778,7 @@ void loop()
 
     catalogLoop();
 
-    logClockLoop();
+    clockFillLoop();
 
     otaLoop();
 

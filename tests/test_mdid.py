@@ -13,11 +13,12 @@ def tooltip_text(app, js_obj):
 
 def test_roaming_row(opened):
     text = tooltip_text(opened, {"r": 1, "mdid": [0x4A2B, 1]})
-    assert "fast transition, mobility domain 0x4A2B, over the air and the DS" \
-        in text
+    # As Wireshark shows it, and as hostapd's mobility_domain has it
+    assert "fast transition, mobility domain 0x4A2B (2b4a in hostapd), " \
+        "over the air and the DS" in text
 
     text = tooltip_text(opened, {"r": 1, "mdid": [0x00AB, 0]})
-    assert "mobility domain 0x00AB, over the air" in text
+    assert "mobility domain 0x00AB (ab00 in hostapd), over the air" in text
     assert "and the DS" not in text
 
     # An older sensor sends no ID
@@ -27,10 +28,12 @@ def test_roaming_row(opened):
 
 def test_filter_by_domain(opened):
     opened.js("networks[0].r = 1; networks[0].mdid = [0x4A2B, 0]")
-    found = opened.js("""networks.filter(n => {
-        filterText = 'mdid:4a2b'; return matchesFilter(n); }).length""")
+    found = opened.js("""['mdid:4a2b', 'mdid:2b4a', 'mdid:0x4a2b', 'mdid:4a2c']
+        .map(f => networks.filter(n => {
+            filterText = f; return matchesFilter(n); }).length)""")
 
-    assert found == 1
+    # Either byte order, not another domain
+    assert found == [1, 1, 1, 0]
 
 
 def test_other_domain_than_the_rest_of_the_ssid(opened):
@@ -42,8 +45,9 @@ def test_other_domain_than_the_rest_of_the_ssid(opened):
 
     odd = notes(opened, "0A:40:00:00:00:03")
 
-    assert any("Mobility domain 0x2222 here, 0x1111 on the other 3 BSSs with "
-               "802.11r of “Roam”" in n and "no fast transition" in n
+    assert any("Mobility domain 0x2222 (2222 in hostapd) here, 0x1111 "
+               "(1111 in hostapd) on the other 3 BSSs with 802.11r of “Roam”"
+               in n and "no fast transition" in n
                for n in odd)
     assert not any("Mobility domain" in n
                    for n in notes(opened, "0A:10:00:00:00:03"))

@@ -15,7 +15,7 @@ head sorts all three by that column.
 
 **The tooltip** has the same layout as the one for APs: under the
 address, vendor and AP come channel, RSSI and age, then the sections
-RADIO (PHY, bands, channels, WMM, QoS Management, the vendor
+RADIO (PHY, Wi-Fi 5 detail: 256-QAM, MU-MIMO as MU beamformee …, Wi-Fi 6 detail: 1024-QAM, UL MU-MIMO …, Wi-Fi 7 detail: 4096-QAM, restricted TWT …, TWT, bands, channels, WMM, QoS Management, the vendor
 elements), SECURITY (with the RSN selection: whether the station took
 the AP's RSNE or one of its RSNE Overrides),
 ROAMING (11k, 11v, 11r with the mobility domain asked for, Fine Timing
@@ -57,6 +57,8 @@ follow it. The **?** beside it lists the terms it adds itself:
 | `11k` | radio measurement, also `11v`, `11r` |
 | `ft roam` | a fast transition (802.11r) seen |
 | `ranging` | FTM requests seen |
+| `twt` | Target Wake Time, the station asks for it |
+| `mumimo` | the station takes MU-MIMO (MU beamformee) |
 | `mlo` | multi-link (Wi-Fi 7) |
 | `awdl` | Apple Wireless Direct Link, also `apple` |
 | `broadcom chip` | Wi-Fi chip from the vendor elements |
@@ -79,7 +81,12 @@ iPhone for instance sends Apple's and Broadcom's.
 the capability elements of its requests — not the channel it is on.
 A Wi-Fi 7 client on channel 36 can show 320 MHz: it supports that
 width, but only in 6 GHz. For APs the Width column of the network table
-is different, it is the width the BSS actually operates on.
+is different, it is the width the BSS actually operates on. A station
+that offers 80+80 beside 160 MHz (VHT Supported Channel Width Set 2,
+or the HE bit for 160/80+80) shows *up to 160 MHz, also 80+80*; with an
+AP running 80+80 the PHY row adds *80+80 with its AP*, both sides can.
+The table has *160/80+80*, the Bands row names 80+80 from the
+operating classes (130 in 5 GHz, 135 in 6 GHz).
 
 **Bands and channels** in the tooltip say where a station can operate
 at all, which matters when planning: a client that lacks UNII-3 will

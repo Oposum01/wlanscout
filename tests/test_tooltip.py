@@ -162,11 +162,12 @@ def test_vht_elements_note_wins_over_the_vendor_one(opened):
 
 
 def country_notes(app, codes, which):
-    """Notes of network `which` among networks with these countries."""
+    """Notes of network `which` among networks with these countries,
+    each on a device of its own."""
     return app.js("""([codes, which]) => {
         const base = networks.find(x => x.ssid === 'Plain');
         networks = codes.map((cc, i) => Object.assign({}, base,
-            {bssid: '02:00:00:00:77:' + String(i).padStart(2, '0'), cc,
+            {bssid: '02:00:00:' + String(i * 16).padStart(2, '0') + ':77:00', cc,
              ssid: 'Net' + i}));
         return networkNotes(networks[which]).map(x => x[0] + ' ' + x[1]);
     }""", [codes, which])
@@ -333,19 +334,22 @@ def test_same_security_or_other_ssid_no_note(opened):
     assert not any("The same SSID" in t for n in notes for t in n)
 
 
-def test_several_countries_for_one_network(opened):
-    # Router DE, its repeater CH, same SSID
+def test_several_countries_for_one_device(opened):
+    # One AP: DE on 5 GHz, CH on its 2.4 GHz radio and guest network;
+    # another device with the same SSID and CH is the amber note's
     notes = across(opened, [
         bss("02:00:00:00:01:00", "Vodafone-123456", 36, cc="DE"),
-        bss("02:00:00:11:22:00", "Vodafone-123456", 3, cc="CH"),
-        bss("02:00:00:33:44:00", "Other", 1, cc="CH")])
+        bss("02:00:00:00:01:01", "Vodafone-123456", 3, cc="CH"),
+        bss("02:00:00:00:01:02", "Guest", 3, cc="CH"),
+        bss("02:00:00:33:44:00", "Vodafone-123456", 1, cc="CH")])
 
-    assert any(t == "#7aaed0 Country DE here, CH on other access points "
-               "with this SSID: several countries for one network are "
-               "implausible, one of them has its region set wrong"
+    assert any(t == "#7aaed0 Country DE here, CH on other BSSs of this "
+               "device: one access point announcing several countries is "
+               "implausible, one radio has its region set wrong"
                for t in notes[0])
     assert any(t.startswith("#7aaed0 Country CH here, DE") for t in notes[1])
-    assert not any("several countries" in t for t in notes[2])
+    assert any(t.startswith("#7aaed0 Country CH here, DE") for t in notes[2])
+    assert not any("several countries" in t for t in notes[3])
 
 
 # ---- SAE without PMF: an access point, or an 802.11s mesh point -------
@@ -384,3 +388,19 @@ def test_car_connectivity_consortium_named(opened):
 
     assert text == ("04:DF:69 type 10 Car Connectivity Con "
                     "(Car Connectivity Consortium, car head unit)")
+
+
+def test_camera_kit(opened):
+    assert opened.js("camKitText('Signal:063')") == \
+        "camera, link to its recorder: signal 63"
+    assert opened.js("camKitText('XM722 pairing disable')") == \
+        "recorder XM722, pairing of new cameras off"
+    assert opened.js("camKitText('something else')") == "something else"
+
+    text = tooltip(opened, {"camkit": "Signal:059"})
+
+    assert "Camera kit" in text
+    assert "camera, link to its recorder: signal 59" in text
+    assert opened.js("""networkNotes(Object.assign({}, networks[0],
+        {camkit: 'Signal:059'})).some(n => n[0] === '#7aaed0' &&
+        n[1].startsWith('Wireless camera kit: camera, link'))""")

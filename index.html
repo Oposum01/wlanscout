@@ -2955,6 +2955,11 @@ const FILTER_HELP = [
     ["broken suite", "cipher suite under a misplaced OUI"],
     ["basic rates 1", "a basic rate (basic rates none: none marked)"],
     ["headunit", "a car's (Car Connectivity Consortium element, CarPlay accessory)"],
+    ["camera", "wireless camera kit (Xiongmai/AltoBeam element)"],
+    ["punctured", "Wi-Fi 7 subchannels left out (preamble puncturing)"],
+    ["twt", "Target Wake Time offered or scheduled (twt schedule: a broadcast one)"],
+    ["wave2", "Wi-Fi 5 AP with MU-MIMO (Wave 2), wave1 without"],
+    ["collision", "BSS colour also used by another device on the channel"],
     ["broadcom chip", "Wi-Fi chip from the vendor elements"]
 ];
 
@@ -2968,6 +2973,8 @@ const STATION_FILTER_HELP = [
     ["11k", "radio measurement, also 11v, 11r"],
     ["ft roam", "a fast transition (802.11r) seen"],
     ["ranging", "FTM requests seen"],
+    ["twt", "Target Wake Time, the station asks for it"],
+    ["mumimo", "the station takes MU-MIMO (MU beamformee)"],
     ["mlo", "multi-link (Wi-Fi 7)"],
     ["awdl", "Apple Wireless Direct Link, also apple"],
     ["broadcom chip", "Wi-Fi chip from the vendor elements"]
@@ -5100,6 +5107,170 @@ function isBand24(ch)
 }
 
 
+/*
+ * vhtcap: VHT Capabilities beyond streams and width, 1 MU beamformer,
+ * 2 MU beamformee, 4 SU beamformer, 8 SU beamformee, 16 256-QAM,
+ * 32 read. An AP's side is what it sends (Wave 2 with MU-MIMO), a
+ * station's what it takes.
+ */
+function vhtCapText(x, station)
+{
+    const c = x.vhtcap || 0;
+
+    if (!c)
+        return "";
+
+    const mu = station
+        ? (c & 2 ? "MU-MIMO (MU beamformee)" : (c & 8 ? "SU beamformee" : ""))
+        : (c & 1 ? "MU-MIMO (Wave 2)"
+                 : "no MU-MIMO (Wave 1)" + (c & 4 ? ", SU beamformer" : ""));
+
+    return [c & 16 ? "256-QAM" : "no 256-QAM (MCS 0\u20137)", mu]
+        .filter(s => s).join(", ");
+}
+
+/*
+ * hecap: HE Capabilities beyond streams and width, 1 1024-QAM,
+ * 2 UL MU-MIMO, 4 MU beamformer, 8 SU beamformer, 16 DCM
+ */
+function heCapText(x)
+{
+    const c = x.hecap || 0;
+
+    return [c & 1 ? "1024-QAM" : "", c & 2 ? "UL MU-MIMO" : "",
+            c & 4 ? "MU beamformer" : (c & 8 ? "SU beamformer" : ""),
+            c & 16 ? "DCM" : ""].filter(s => s).join(", ");
+}
+
+/*
+ * Other devices' BSSs on the same channel with the same BSS colour:
+ * the colour is what lets a station tell its own BSS's frames from
+ * a neighbour's, for spatial reuse among others.
+ */
+function colourTwins(n)
+{
+    if (!n.color || n.color[1])
+        return [];
+
+    return networks.filter(o => o !== n && o.channel === n.channel &&
+        o.color && !o.color[1] && o.color[0] === n.color[0] &&
+        !nearAddress(o.bssid, n.bssid));
+}
+
+/*
+ * twt: TWT support from HE Capabilities, 1 requester, 2 responder,
+ * 4 broadcast; btwt: the broadcast schedules of the TWT element,
+ * [ID, recommendation (4 restricted TWT), interval µs, duration µs].
+ */
+function twtText(x)
+{
+    const t = x.twt || 0;
+
+    const parts = [t & 2 ? "responder" : "", t & 1 ? "requester" : "",
+                   t & 4 ? "broadcast" : "",
+                   (x.heop || 0) & 1 ? "required by the AP" : ""].filter(s => s);
+
+    const ms = us => String(Math.round(us / 100) / 10);
+
+    (x.btwt || []).forEach(([id, rec, interval, duration]) =>
+        parts.push("schedule " + id + ": every " + ms(interval) + " ms for " +
+                   ms(duration) + " ms" +
+                   (rec === 4 ? " (restricted TWT, for low latency)" : "")));
+
+    return parts.join(", ");
+}
+
+/*
+ * ehtcap: [EHT MAC capabilities, first EHT PHY octet, 4096-QAM] from
+ * the EHT Capabilities element: what Wi-Fi 7 adds beyond the streams.
+ */
+function ehtCapText(x)
+{
+    if (!x.ehtcap)
+        return "";
+
+    const [mac, phy, qam] = x.ehtcap;
+
+    return [qam ? "4096-QAM" : "",
+            phy & 0x02 ? "320 MHz (6 GHz)" : "",
+            mac & 0x10 ? "restricted TWT" : "",
+            mac & 0x01 ? "EPCS priority access" : "",
+            mac & 0x20 ? "SCS traffic description" : ""]
+        .filter(t => t).join(", ");
+}
+
+/*
+ * What a Wi-Fi 7 AP lacks of the security Wi-Fi 7 asks for: Wi-Fi
+ * CERTIFIED 7 has WPA3 with SAE-EXT-KEY (AKM 24), GCMP-256 and beacon
+ * protection, and clients fall back to Wi-Fi 6 on one link without
+ * them. The RSNE Override counts, Wi-Fi 7 clients take it. Only for
+ * PSK and SAE networks.
+ */
+function wifi7SecurityGaps(n)
+{
+    if (n.std !== 7 || !/PSK|SAE/.test((n.akm || "") + (n.ovr ? n.ovr.akm : "")))
+        return [];
+
+    const akm  = (n.akm || "") + " " + (n.ovr ? n.ovr.akm : "");
+    const pair = (n.pair || "") + " " + (n.ovr ? n.ovr.pair : "");
+
+    return [/SAE-EXT-KEY/.test(akm) ? "" : "SAE-EXT-KEY",
+            /GCMP-256/.test(pair) ? "" : "GCMP-256",
+            n.bprot ? "" : "beacon protection"].filter(t => t);
+}
+
+/*
+ * eht: [width MHz, centre channel, bitmap of 20 MHz subchannels left
+ * out, lowest first] from the EHT Operation element. The punctured
+ * ones as channel numbers.
+ */
+function puncturedChannels(n)
+{
+    if (!n.eht || !n.eht[2])
+        return [];
+
+    const [width, centre, bitmap] = n.eht;
+    const lowest = centre - (width / 20 - 1) * 2;
+    const out = [];
+
+    for (let i = 0; i < width / 20 && i < 16; i++)
+        if (bitmap & (1 << i))
+            out.push(lowest + i * 4);
+
+    return out;
+}
+
+function puncturedText(n)
+{
+    const ch = puncturedChannels(n);
+
+    if (!ch.length)
+        return "";
+
+    // Neighbouring subchannels as one range, as the hatch draws them
+    const runs = [];
+
+    for (const c of ch)
+    {
+        const lo = channelToFreq(c) - 10;
+        const last = runs[runs.length - 1];
+
+        if (last && last[1] === lo)
+            last[1] = lo + 20;
+        else
+            runs.push([lo, lo + 20]);
+    }
+
+    return ch.join(", ") + " left out (" +
+        runs.map(r => r[0] + "\u2013" + r[1]).join(", ") + " MHz)";
+}
+
+// 802.11b only: DSSS, the one shape in the graph that is not OFDM's
+function isDsssOnly(n)
+{
+    return n.std === 1;
+}
+
 function networkWidthMHz(n)
 {
     if (n.bandwidth === 8080)
@@ -5288,21 +5459,29 @@ function computeLayout(channelList, left, right, nets)
                 if (is24 !== (f < 2500))
                     return;
 
-                let best = null;
-                let bestDist = Infinity;
-
-                segments.forEach(s =>
+                // The segment nearest to a frequency
+                const nearest = fr =>
                 {
-                    const d =
-                        f < s.fMin ? s.fMin - f
-                                   : (f > s.fMax ? f - s.fMax : 0);
+                    let best = null;
+                    let bestDist = Infinity;
 
-                    if (d < bestDist)
+                    segments.forEach(s =>
                     {
-                        bestDist = d;
-                        best = s;
-                    }
-                });
+                        const d =
+                            fr < s.fMin ? s.fMin - fr
+                                        : (fr > s.fMax ? fr - s.fMax : 0);
+
+                        if (d < bestDist)
+                        {
+                            bestDist = d;
+                            best = s;
+                        }
+                    });
+
+                    return best;
+                };
+
+                const best = nearest(f);
 
                 if (!best)
                     return;
@@ -5311,6 +5490,17 @@ function computeLayout(channelList, left, right, nets)
                 best.fMax = Math.max(best.fMax, f + w / 2);
 
                 n._seg = best;
+
+                // 80+80: the panel holding the second 80 MHz takes it
+                // in whole as well, or it is not drawn
+                if (n.bandwidth === 8080 && n.center2 && !isBand24(n.center2))
+                {
+                    const f2 = channelToFreq(n.center2);
+                    const s2 = nearest(f2);
+
+                    s2.fMin = Math.min(s2.fMin, f2 - 40);
+                    s2.fMax = Math.max(s2.fMax, f2 + 40);
+                }
             });
         }
 
@@ -5953,8 +6143,10 @@ const FILTER_KEYS = {
     ch:   (n, v) => String(n.channel) === v,
     dtim: (n, v) => !!n.dtim && String(n.dtim[0]) === v,
     pmf:  (n, v) => v === (n.mfpr ? "required" : n.mfpc ? "capable" : "off"),
+    // As Wireshark shows it or as hostapd's mobility_domain has it
     mdid: (n, v) => !!n.mdid &&
-        n.mdid[0].toString(16).padStart(4, "0") === v.replace(/^0x/, "")
+        [n.mdid[0].toString(16).padStart(4, "0"), mdidHostapd(n.mdid[0])]
+            .includes(v.replace(/^0x/, ""))
 };
 
 const STATION_FILTER_KEYS = {
@@ -6041,6 +6233,13 @@ function matchesFilter(n)
         n.bprot ? "beacon protection" : "",
         n.apname ? "ap name " + n.apname : "",
         n.vfw ? "firmware " + n.vfw : "",
+        n.camkit ? "camera kit " + n.camkit : "",
+        puncturedChannels(n).length ? "punctured" : "",
+        n.twt || n.btwt ? "twt " + twtText(n) : "",
+        n.hecap ? heCapText(n) : "",
+        n.vhtcap && n.std === 5
+            ? vhtCapText(n, false) + (n.vhtcap & 1 ? " wave2" : " wave1") : "",
+        colourTwins(n).length ? "colour collision" : "",
         n.ovr ? "override " + overrideText(n) : "",
         n.p2p || n.wfd !== undefined ? "wi-fi direct p2p " + p2pText(n) : "",
         n.mbo ? mboText(n) : "",
@@ -6669,8 +6868,11 @@ function hatchRect(ctx, x0, x1, top, bottom, util)
  * comparing shades, and shades are hard to judge against a
  * dark background. The badge states the step outright.
  */
-function loadBadge(ctx, x0, x1, top, red)
+function loadBadge(ctx, x0, x1, top, red, colour)
 {
+    // In a colour of its own, a punctured BSS's own
+    const ink = colour || (red ? "#d08080" : "#c8a050");
+
     const size = 14;
 
     // Too narrow and the badge would cover the stretch itself
@@ -6683,7 +6885,7 @@ function loadBadge(ctx, x0, x1, top, red)
     ctx.save();
 
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = red ? "#d08080" : "#c8a050";
+    ctx.strokeStyle = ink;
     ctx.fillStyle = "rgba(20,20,20,0.85)";
 
     ctx.beginPath();
@@ -6704,7 +6906,7 @@ function loadBadge(ctx, x0, x1, top, red)
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = red ? "#d08080" : "#c8a050";
+    ctx.fillStyle = ink;
     ctx.font = "bold 10px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -6842,6 +7044,20 @@ function drawNetworkGraph()
     }
 
 
+    // The panel segment of an 80+80 BSS's second 80 MHz, if shown
+    function secondSegmentOf(n)
+    {
+        if (n.bandwidth !== 8080 || !n.center2)
+            return null;
+
+        const b = bandForChannel(bands, n.center2);
+        const f = channelToFreq(n.center2);
+        const s = b ? segForFreq(b, f) : null;
+
+        // Only where the panel shows it, not drawn into a neighbour
+        return s && f >= s.fMin && f <= s.fMax ? s : null;
+    }
+
     function segmentOf(n)
     {
         const b = bandForChannel(bands, n.channel);
@@ -6873,28 +7089,131 @@ function drawNetworkGraph()
             return;
 
         const f = networkCenterFreq(n);
-        const w = networkWidthMHz(n);
+        const dsss = isDsssOnly(n);
+
+        // DSSS takes 22 MHz from null to null
+        const w = dsss ? 22 : networkWidthMHz(n);
 
         const xl = xForFreq(s, f - w / 2);
         const xr = xForFreq(s, f + w / 2);
 
         const y = yForRSSI(n.rssi);
 
-        const shoulder = Math.min(12, (xr - xl) * 0.15);
-
         const highlight = (n.bssid === hoverBSSID);
 
         ctx.beginPath();
         ctx.moveTo(xl, bottom);
-        ctx.lineTo(xl + shoulder, y);
-        ctx.lineTo(xr - shoulder, y);
+
+        if (dsss)
+        {
+            /*
+             * The main lobe of DSSS, sin(x)/x squared over the 11 MHz
+             * chip rate: strongest at the centre, falling away to the
+             * nulls 11 MHz either side, no flat top as with OFDM.
+             * On the dBm axis, cut off at the bottom of the graph.
+             */
+            for (let i = 1; i < 40; i++)
+            {
+                const u = (i / 40) * 2 - 1;
+                const sinc = u === 0 ? 1 : Math.sin(Math.PI * u) / (Math.PI * u);
+                const level = n.rssi + 20 * Math.log10(Math.abs(sinc) || 1e-6);
+
+                ctx.lineTo(xl + (xr - xl) * i / 40,
+                           Math.min(bottom, yForRSSI(level)));
+            }
+        }
+        else
+        {
+            // OFDM: flat over the channel, steep at its edges
+            const shoulder = Math.min(12, (xr - xl) * 0.15);
+
+            ctx.lineTo(xl + shoulder, y);
+            ctx.lineTo(xr - shoulder, y);
+        }
+
         ctx.lineTo(xr, bottom);
         ctx.closePath();
+
+        // The 20 MHz subchannels left out (preamble puncturing)
+        const out = dsss ? [] : puncturedChannels(n).map(channelToFreq);
+        const sub = (xr - xl) / (w / 20);
+        const gone = i => out.includes(f - w / 2 + 10 + i * 20);
+
+        // Where the hatch is, for its own line on top of the tooltip
+        const punctX = [];
 
         ctx.fillStyle =
             colorForNetwork(n, highlight ? 0.45 : 0.20);
 
-        ctx.fill();
+        if (!out.length)
+            ctx.fill();
+        else
+        {
+            /*
+             * Punctured: the whole trapeze, filled where it sends and
+             * hatched in its colour over the subchannels left out
+             */
+            ctx.save();
+            ctx.clip();
+
+            // Runs of neighbouring subchannels, filled or hatched as one
+            for (let i = 0; i < w / 20; )
+            {
+                let k = i;
+
+                while (k < w / 20 && gone(k) === gone(i))
+                    k++;
+
+                const x0 = xl + i * sub;
+                const span = (k - i) * sub;
+
+                if (!gone(i))
+                    ctx.fillRect(x0, y, span, bottom - y);
+                else
+                {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(x0, y, span, bottom - y);
+                    ctx.clip();
+                    ctx.beginPath();
+
+                    // Cross-hatched, both diagonals
+                    for (let d = -(bottom - y); d < span; d += 6)
+                    {
+                        ctx.moveTo(x0 + d, bottom);
+                        ctx.lineTo(x0 + d + (bottom - y), y);
+                        ctx.moveTo(x0 + d, y);
+                        ctx.lineTo(x0 + d + (bottom - y), bottom);
+                    }
+
+                    ctx.strokeStyle = colorForNetwork(n, 0.6);
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // The marker of the BSS load hatch, top right, in
+                    // the colour of the trapeze
+                    loadBadge(ctx, x0, x0 + span, y, false,
+                              colorForNetwork(n, 0.95));
+
+                    punctX.push([x0, x0 + span]);
+                }
+
+                i = k;
+            }
+
+            ctx.restore();
+
+            // The outline again, the clip took the path
+            const shoulder = Math.min(12, (xr - xl) * 0.15);
+
+            ctx.beginPath();
+            ctx.moveTo(xl, bottom);
+            ctx.lineTo(xl + shoulder, y);
+            ctx.lineTo(xr - shoulder, y);
+            ctx.lineTo(xr, bottom);
+            ctx.closePath();
+        }
 
         ctx.strokeStyle = colorForNetwork(n, 0.95);
         ctx.lineWidth = highlight ? 2.5 : 1.5;
@@ -6903,6 +7222,38 @@ function drawNetworkGraph()
         graphHits.push({
             n: n,
             xl: xl, xr: xr,
+            y: y, bottom: bottom,
+            punct: punctX
+        });
+
+        // 80+80: the second segment, often far off, dashed
+        const s2 = secondSegmentOf(n);
+
+        if (!s2)
+            return;
+
+        const f2  = channelToFreq(n.center2);
+        const xl2 = xForFreq(s2, f2 - 40);
+        const xr2 = xForFreq(s2, f2 + 40);
+        const sh2 = Math.min(12, (xr2 - xl2) * 0.15);
+
+        ctx.beginPath();
+        ctx.moveTo(xl2, bottom);
+        ctx.lineTo(xl2 + sh2, y);
+        ctx.lineTo(xr2 - sh2, y);
+        ctx.lineTo(xr2, bottom);
+        ctx.closePath();
+
+        ctx.fillStyle = colorForNetwork(n, highlight ? 0.35 : 0.12);
+        ctx.fill();
+
+        ctx.setLineDash([5, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        graphHits.push({
+            n: n,
+            xl: xl2, xr: xr2,
             y: y, bottom: bottom
         });
     });
@@ -6946,6 +7297,27 @@ function drawNetworkGraph()
             n: n,
             x0: rect.x0, x1: rect.x1,
             y0: rect.y0, y1: rect.y1
+        });
+
+        // And the second 80 MHz of 80+80 under a label of its own
+        const s2 = secondSegmentOf(n);
+
+        if (!s2)
+            return;
+
+        const text2 = name + "  2nd 80 (" + n.center2 + ")";
+        const xc2   = xForFreq(s2, channelToFreq(n.center2));
+        const rect2 = placeLabel(text2, xc2, y - 6);
+
+        if (rect2 === null)
+            return;
+
+        ctx.fillText(text2, xc2, rect2.y1);
+
+        graphLabels.push({
+            n: n,
+            x0: rect2.x0, x1: rect2.x1,
+            y0: rect2.y0, y1: rect2.y1
         });
     });
 
@@ -7464,10 +7836,45 @@ function stationFtmText(c)
         (c.ftmpar ? " \u00b7 " + ftmParamText(c.ftmpar) : "");
 }
 
+/*
+ * camkit: the text of a wireless camera kit's element. A camera's
+ * bridge gives its link to the recorder, "Signal:063"; the recorder
+ * its model and whether it takes new cameras.
+ */
+function camKitText(text)
+{
+    const signal = /^Signal:0*(\d+)$/.exec(text);
+
+    if (signal)
+        return "camera, link to its recorder: signal " + signal[1];
+
+    const pairing = /^(\S+) pairing (enable|disable)d?$/i.exec(text);
+
+    if (pairing)
+        return "recorder " + pairing[1] + ", pairing of new cameras " +
+               (/^enable/i.test(pairing[2]) ? "on" : "off");
+
+    return text;
+}
+
 // A Mobility Domain ID as Wireshark shows it, 0x4A2B
 function mdidText(v)
 {
     return "0x" + v.toString(16).toUpperCase().padStart(4, "0");
+}
+
+/*
+ * The same as hostapd's mobility_domain takes it: the two octets in
+ * the order they are sent, 0x4A2B is 2b4a there
+ */
+function mdidHostapd(v)
+{
+    return [v & 0xFF, v >> 8].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function mdidFullText(v)
+{
+    return mdidText(v) + " (" + mdidHostapd(v) + " in hostapd)";
 }
 
 // mdid: [Mobility Domain ID, FT Capability and Policy]
@@ -7479,7 +7886,7 @@ function ftText(n)
     if (!n.mdid)
         return "fast transition (mobility domain)";
 
-    return "fast transition, mobility domain " + mdidText(n.mdid[0]) +
+    return "fast transition, mobility domain " + mdidFullText(n.mdid[0]) +
            (n.mdid[1] & 1 ? ", over the air and the DS" : ", over the air");
 }
 
@@ -7535,8 +7942,8 @@ function ssidOutlierNotes(n)
 
     if (md && ftPeers.length >= 2 && Number(md) !== n.mdid[0])
         notes.push([amber,
-            "Mobility domain " + mdidText(n.mdid[0]) + " here, " +
-            mdidText(Number(md)) + " on the other " + ftPeers.length +
+            "Mobility domain " + mdidFullText(n.mdid[0]) + " here, " +
+            mdidFullText(Number(md)) + " on the other " + ftPeers.length +
             " BSSs with 802.11r of " + name + " on other devices: no " +
             "fast transition between them, a station roaming over logs " +
             "in anew"]);
@@ -7567,6 +7974,55 @@ function networkNotes(n)
         notes.push([pink, unknownElementText(n, i)]));
 
     // ---- state of the air -------------------------------
+
+    if (colourTwins(n).length)
+    {
+        const o = colourTwins(n);
+
+        notes.push([amber,
+            "BSS colour " + n.color[0] + " also on " +
+            escapeHTML(o[0].ssid || "<hidden>") + " " + o[0].bssid +
+            (o.length > 1 ? " and " + (o.length - 1) + " more" : "") +
+            " on this channel, another device: a colour collision. " +
+            "Stations cannot tell the two BSSs' frames apart by colour, " +
+            "spatial reuse suffers; the APs should pick another colour"]);
+    }
+
+    if (wifi7SecurityGaps(n).length)
+        notes.push([amber,
+            "Wi-Fi 7 without " + wifi7SecurityGaps(n).join(", ") +
+            ": Wi-Fi 7 asks for WPA3 with SAE-EXT-KEY, GCMP-256 and " +
+            "beacon protection, and many Wi-Fi 7 clients connect as " +
+            "Wi-Fi 6 on one link without them, no multi-link"]);
+
+    if (n.mlrm)
+    {
+        const ids = [];
+
+        for (let i = 0; i < 16; i++)
+            if (n.mlrm[0] & (1 << i))
+                ids.push(i);
+
+        notes.push([blue,
+            "Multi-link AP removing link " + ids.join(", ") + " in " +
+            n.mlrm[1] + " beacons (\u2248 " +
+            Math.round(n.mlrm[1] * (n.bi || 100) * 1.024 / 1000) +
+            " s, Reconfiguration Multi-Link element): its stations move " +
+            "to the other links"]);
+    }
+
+    if (puncturedChannels(n).length)
+        notes.push([blue,
+            "Part of the channel left out (preamble puncturing): " +
+            puncturedChannels(n).join(", ") + ". Wi-Fi 7 keeps the rest " +
+            "of the width instead of giving it up, usually after radar " +
+            "on a DFS channel or interference there"]);
+
+    if (n.camkit)
+        notes.push([blue,
+            "Wireless camera kit: " + escapeHTML(camKitText(n.camkit)) +
+            ". The cameras' bridges and their recorder talk over Wi-Fi " +
+            "of their own; video goes over it as well"]);
 
     if (n.ftmlci || n.ftmciv)
         notes.push([blue,
@@ -8141,26 +8597,27 @@ function securityMismatchText(n)
 }
 
 /*
- * One network, several countries: all its access points stand in
- * one place and should announce the same Country element, which
- * sets channels and power. A router announcing DE and its repeater
- * CH has the region set wrong on one of them.
+ * One device, several countries: its radios stand in one place and
+ * should announce the same Country element, which sets channels and
+ * power. An AP with DE on 2.4 GHz and US on 5 GHz has the region set
+ * wrong on one radio. Other devices of the same SSID are the amber
+ * note's, see ssidOutlierNotes().
  */
 function countryMismatchText(n)
 {
-    if (!n.cc || !n.ssid || n.ssid === "<hidden>")
+    if (!n.cc)
         return "";
 
-    const other = [...new Set(networks.filter(o => o.ssid === n.ssid &&
-        o.cc && o.cc !== n.cc).map(o => o.cc))];
+    const other = [...new Set(networks.filter(o => o !== n && o.cc &&
+        o.cc !== n.cc && nearAddress(o.bssid, n.bssid)).map(o => o.cc))];
 
     if (!other.length)
         return "";
 
     return "Country " + escapeHTML(n.cc) + " here, " +
-        other.map(escapeHTML).join(", ") + " on other access points " +
-        "with this SSID: several countries for one network are " +
-        "implausible, one of them has its region set wrong";
+        other.map(escapeHTML).join(", ") + " on other BSSs of this " +
+        "device: one access point announcing several countries is " +
+        "implausible, one radio has its region set wrong";
 }
 
 
@@ -9094,6 +9551,10 @@ function networkTooltip(n)
         ["Channel", n.channel + " \u00b7 " + bandwidthText(n.bandwidth) +
             " \u00b7 " + Math.round(f - w / 2) + "\u2013" +
             Math.round(f + w / 2) + " MHz" +
+            // 80+80: the second segment as well
+            (n.bandwidth === 8080 && n.center2
+                ? " + " + (channelToFreq(n.center2) - 40) + "\u2013" +
+                  (channelToFreq(n.center2) + 40) + " MHz" : "") +
             // At 20 MHz the centre is the channel itself
             (n.center !== n.channel
                 ? " (centre channel " + n.center + ", " + f + " MHz)"
@@ -9101,7 +9562,12 @@ function networkTooltip(n)
         ["Standard", join([
             stdText(n.std),
             modeList(n.modes) ? "announces " + modeList(n.modes) : "",
-            n.nss ? n.nss + " spatial stream" + (n.nss > 1 ? "s" : "") : ""])],
+            n.nss ? n.nss + " spatial stream" + (n.nss > 1 ? "s" : "") : "",
+            n.std === 5 ? vhtCapText(n, false) : "",
+            heCapText(n), ehtCapText(n),
+            (n.heop || 0) & 2 ? "co-hosted BSS (Multiple BSSID)" : ""])],
+        ["Punctured", puncturedText(n)],
+        ["TWT", twtText(n)],
         ["Basic rates", basicRateText(n)],
         ["Ad-hoc", ibssText(n)],
         ["NAN", nanText(n)],
@@ -9109,6 +9575,7 @@ function networkTooltip(n)
         ["BSS colour", bssColorText(n)],
         ["Multiple BSSID", n.mbssid ? "element present" : ""],
         ["Vendor IEs", vendorOuiText(n)],
+        ["Camera kit", n.camkit ? escapeHTML(camKitText(n.camkit)) : ""],
         ["Apple accessory", escapeHTML(appleAccText(n))],
         ["Operating mode", omnText(n)],
         ["Wi-Fi Direct", escapeHTML(p2pText(n))],
@@ -9363,7 +9830,7 @@ function capsText(c)
     // What the station can do, not the width of its current
     // channel; 320 MHz for instance is only possible in 6 GHz
     if (c.width)
-        parts.push("up to " + c.width + " MHz");
+        parts.push("up to " + c.width + " MHz" + (c.w8080 ? ", also 80+80" : ""));
 
     return parts.length ? parts.join(" | ") : "-";
 }
@@ -9664,26 +10131,32 @@ function bandsText(c)
     if (any(range(121, 123))) unii.push("2C");
     if (any(range(124, 127))) unii.push("3");
 
+    // The widest width, then 80+80 beside it: classes 130 and 135 are
+    // 80+80, 129 and 134 160 MHz
+    const widest = (width, c8080, c160) =>
+        has(c8080) && !c160 ? "80+80" :
+        width + " MHz" + (has(c8080) ? ", also 80+80" : "");
+
     if (unii.length)
     {
         const width =
-            any([129, 130]) ? 160 :
-            has(128) ? 80 :
+            has(129) ? 160 :
+            any([128, 130]) ? 80 :
             any([116, 117, 119, 120, 122, 123, 126, 127]) ? 40 : 20;
 
         parts.push("5 GHz (UNII-" + unii.join(", ") +
-                   ", up to " + width + " MHz)");
+                   ", up to " + widest(width, 130, has(129)) + ")");
     }
 
     if (any(range(131, 137)))
     {
         const width =
             has(137) ? 320 :
-            any([134, 135]) ? 160 :
-            has(133) ? 80 :
+            has(134) ? 160 :
+            any([133, 135]) ? 80 :
             has(132) ? 40 : 20;
 
-        parts.push("6 GHz (up to " + width + " MHz)");
+        parts.push("6 GHz (up to " + widest(width, 135, any([134, 137])) + ")");
     }
     else if (c.band6)
     {
@@ -9998,7 +10471,14 @@ function clientTooltip(c, snapshot = false)
         ["PHY", (capsText(c) === "-" ? "nothing advertised"
                  : capsText(c).split(" | ").join(" \u00b7 ")) +
             (c.sawassoc ? " (from assoc request)"
-                        : " (from probe request)")],
+                        : " (from probe request)") +
+            // Both sides can: the AP it is with runs 80+80
+            (c.w8080 && c.assoc && networks.some(n => n.bssid === c.bssid &&
+                n.bandwidth === 8080) ? " \u00b7 80+80 with its AP" : "")],
+        ["Wi-Fi 5", c.std === 5 ? vhtCapText(c, true) : ""],
+        ["Wi-Fi 6", heCapText(c)],
+        ["Wi-Fi 7", ehtCapText(c)],
+        ["TWT", twtText(c)],
         ["Bands", bandsText(c)],
         ["Channels", chans ? chans + " (from assoc request)" : ""],
         ["Also", join([c.wmm ? "WMM" : "", c.band6 ? "6 GHz" : ""])],
@@ -10028,7 +10508,7 @@ function clientTooltip(c, snapshot = false)
         ["11v", c.v || c.wnm
             ? (wnmText(c.wnm || 0) || "announced") : ""],
         ["11r", c.r ? "fast transition" + (c.mdid !== undefined
-            ? ", mobility domain " + mdidText(c.mdid) : "") : ""],
+            ? ", mobility domain " + mdidFullText(c.mdid) : "") : ""],
         ["FTM", stationFtmText(c)]
     ]);
 
@@ -10242,6 +10722,26 @@ function networkAt(x, y)
 }
 
 
+// Over the cross-hatch of a punctured BSS: that BSS, else null
+function puncturedAt(x, y)
+{
+    const n = networkAt(x, y);
+
+    const h = n && graphHits.find(h => h.n === n && (h.punct || []).some(
+        ([x0, x1]) => x >= x0 && x <= x1 && y >= h.y - 6 && y <= h.bottom));
+
+    return h ? n : null;
+}
+
+// The tooltip over the hatch: the puncturing first, then the BSS
+function puncturedTooltip(n)
+{
+    return "<div class='tipSec'>PUNCTURED</div>" + puncturedText(n) +
+        "<br><span class='dim'>Wi-Fi 7 sends nothing on these 20 MHz and " +
+        "keeps the rest of its width (preamble puncturing).</span>" +
+        "<div style='height:8px'></div>" + networkTooltip(n);
+}
+
 function loadAt(x, y)
 {
     for (const r of graphLoad)
@@ -10379,7 +10879,11 @@ function setupNetworkGraphEvents()
             return;
         }
 
-        showTip(networkTooltip(n), ev.clientX, ev.clientY);
+        const x = ev.clientX - rect.left;
+        const y = ev.clientY - rect.top;
+
+        showTip(puncturedAt(x, y) ? puncturedTooltip(n) : networkTooltip(n),
+                ev.clientX, ev.clientY);
     });
 
     canvas.addEventListener("click", ev =>
@@ -12664,7 +13168,7 @@ function clientCellText(c, key)
         return c.nss ? c.nss + "SS" : "-";
 
     if (key === "width")
-        return c.width ? c.width + " MHz" : "-";
+        return c.width ? (c.w8080 ? c.width + "/80+80" : c.width + " MHz") : "-";
 
     return clientValue(c, key);
 }
@@ -12896,6 +13400,9 @@ function stationMatches(c)
         c.v || c.wnm ? "11v " + wnmText(c.wnm || 0) : "",
         c.r ? "11r" : "",
         c.ftm ? "ranging" : "",
+        c.twt ? "twt " + twtText(c) : "",
+        c.hecap ? heCapText(c) : "",
+        c.vhtcap ? vhtCapText(c, true) + (c.vhtcap & 2 ? " mumimo" : "") : "",
         c.roamsft ? "fast transition ft roam" : "",
         c.maxidle ? "max idle" : "",
         c.mld ? "mlo mld " + c.mld : "",
@@ -13372,6 +13879,7 @@ const VENDOR_IE_NAMES = {
     0x0050F201: "WPA", 0x0050F202: "WMM", 0x0050F204: "WPS",
     0x00A04000: "Apple Device IE, accessory such as CarPlay",
     0x04DF690A: "Car Connectivity Consortium, car head unit",
+    0x30FF8368: "camera kit status (Xiongmai/AltoBeam)",
     0x000B8601: "Aruba AP element (subtype 4 is ARM)",
     0x000C4200: "MikroTik radio name",
     0x08000900: "HP printer info",
@@ -13413,6 +13921,7 @@ const VENDOR_IE_MAKERS = {
     "00A057": "LANCOM", "743170": "Arcadyan", "94BBAE": "Husqvarna",
     "C83A6B": "Roku", "F832E4": "ASUS", "AC853D": "HUAWEI",
     "000B82": "Grandstream", "04DF69": "Car Connectivity Consortium",
+    "30FF83": "Xiongmai/AltoBeam (unregistered OUI)",
     "506F9A": "Wi-Fi Alliance"
 };
 

@@ -38,7 +38,15 @@ written anew from the last 80 entries once it holds 160. Each start adds
 cut, *crash*, *task watchdog*, *brownout, supply too weak*, *restart by
 the firmware* after an update or rollback. Entries logged before the
 clock was set get their wall time once it is known; those of a start
-that never got a clock show only the seconds after that start.
+that never got a clock show only the seconds after that start. The
+same goes for the snapshots of the start, the IE catalog's first and
+last sightings and the association history: whatever was recorded
+before the clock with the uptime only is dated the moment NTP, the
+browser or an AP's Time Advertisement sets it. A sensor on a power
+bank gets it by a phone on its other USB-C port, the power bank
+left in, so that it does not restart; the capture ring needs nothing,
+its timestamps are worked out on download. The catalog's pcap file
+keeps the time its frames were written with.
 After a *crash* ESP-IDF has written a core dump into its own flash
 partition; the next start logs what it says once — the task, the
 address and the cause, e.g. "crash in loopTask at 0x4201a2b4: load
@@ -114,7 +122,10 @@ There are two ways to take one:
   field. The RGB LED blinks green twice when the file is written, red
   when it failed. BOOT (GPIO 28) is only a strapping pin at reset:
   held while the board starts, it enters the download mode, so do not
-  hold it while plugging in;
+  hold it while plugging in. Without a clock, on a power bank, the
+  snapshot is dated later in the same run: plug the phone into the
+  board's other port while the power bank stays in, open the page
+  over USB, and the browser's time dates it (see below);
 - the **camera button** next to the status badge, on every view (on a
   phone the icon alone), or **Take snapshot** under Settings →
   Snapshots. The button turns green for a moment and the status line
@@ -159,6 +170,7 @@ after asking. The event log notes each snapshot taken (by the page or the
 BOOT button), imported, renamed or deleted, and Clear all.
 
 The format of one snapshot: `wlanscout_snapshot`, `seq`,
-`epoch` (0 without a clock), `uptime`, `fw`, `sensor`, `sensorid`,
+`epoch` (0 without a clock; a snapshot dated later keeps the 0 in the
+file and gets the time in its download), `uptime`, `fw`, `sensor`, `sensorid`,
 `name` when it has one, `parts` and `answers`, the endpoint answers keyed by the URL the page asks for
 (`/api/networks`, `/api/history?range=1800000`, …).

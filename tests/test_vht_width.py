@@ -26,8 +26,11 @@ int main()
         const uint8_t vht[3] = { (uint8_t)w, (uint8_t)a, (uint8_t)b };
         uint16_t bandwidth = 20;
         uint8_t  centre    = 0;
+        uint8_t  centre2   = 0;
 
-        if (vhtWidthOf(vht, bandwidth, centre))
+        if (vhtWidthOf(vht, bandwidth, centre, centre2) && centre2)
+            printf("%%u %%u %%u\n", bandwidth, centre, centre2);
+        else if (vhtWidthOf(vht, bandwidth, centre, centre2))
             printf("%%u %%u\n", bandwidth, centre);
         else
             printf("none\n");
@@ -69,12 +72,13 @@ def test_160_centre_is_ccfs1(vhtwidth):
 
 def test_80_and_80_plus_80(vhtwidth):
     assert width(vhtwidth, 1, 42, 0) == "80 42"
-    assert width(vhtwidth, 1, 42, 106) == "8080 42"
+    # 80+80: the second segment's centre as well
+    assert width(vhtwidth, 1, 42, 106) == "8080 42 106"
 
 
 def test_deprecated_widths(vhtwidth):
     assert width(vhtwidth, 2, 50, 0) == "160 50"
-    assert width(vhtwidth, 3, 42, 106) == "8080 42"
+    assert width(vhtwidth, 3, 42, 106) == "8080 42 106"
 
 
 def test_20_or_40_left_to_ht(vhtwidth):

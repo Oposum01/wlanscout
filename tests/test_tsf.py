@@ -75,7 +75,7 @@ def tsfwatch(tmp_path_factory):
     clock = cut(src, "// Two devices clocking as one",
                 "// After a beacon: the gap")
     watch = cut(src, "// The timestamp of a beacon or probe response",
-                "void parseBeacon(")
+                "\n}\n") + "\n}\n"
 
     d = tmp_path_factory.mktemp("tsfwatch")
     (d / "t.cpp").write_text(HARNESS % (clock, watch))

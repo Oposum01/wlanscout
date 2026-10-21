@@ -11,13 +11,43 @@ over WebUSB. Everything the page shows over Ethernet works the same way.
   is the connector marked USB; the one marked UART goes through a CH343
   USB-to-serial bridge, carries the log, and is not used for this.
 - A cable with data lines, not a charging-only one.
-- Chrome on Android, or Chrome/Edge on a desktop. Firefox and Safari
-  have no WebUSB. Chrome's own Web Serial does not list the board on
-  Android; WebUSB does.
+- Chrome on Android, or Chrome/Edge on a desktop (on Linux after the
+  steps below). Firefox and Safari have no WebUSB. Chrome's own Web
+  Serial does not list the board on Android; WebUSB does.
 - A copy of the page served over https: WebUSB is only available in a
   secure context, and the sensor itself serves plain http. The page is
   the same file the sensor serves; on https it shows a **USB** button
   next to Pause.
+
+**On a Linux PC** Chrome lists the board but cannot open it: the
+device file under `/dev/bus/usb` belongs to root, and the kernel's
+`cdc_acm` driver has taken the board as `/dev/ttyACM…`, which keeps
+WebUSB out. Android has neither problem. Once, as root, a udev rule
+that gives the board to the `plugdev` group (the user has to be in it):
+
+```
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="303a", ATTR{idProduct}=="1001", MODE="0660", GROUP="plugdev"' \
+    | sudo tee /etc/udev/rules.d/60-wlanscout.rules
+sudo udevadm control --reload
+```
+
+Then unplug the board and plug it in again, and after every plugging
+in release it from `cdc_acm` before pressing **USB**:
+
+```
+for i in /sys/bus/usb/drivers/cdc_acm/*:1.*; do
+    d=$(dirname "$(readlink -f "$i")")
+    [ "$(cat "$d/idVendor"):$(cat "$d/idProduct")" = 303a:1001 ] &&
+        basename "$i" | sudo tee /sys/bus/usb/drivers/cdc_acm/unbind
+done
+```
+
+That looks up the board's interfaces (`3-1:1.0` and `3-1:1.1` for
+instance, the kernel log names them on plugging in) and leaves other
+serial adapters, the CH343 behind the UART port among them, alone.
+While released, the board has no `/dev/ttyACM…`: no serial console and
+no upload from the Arduino IDE over that port until it is plugged in
+anew.
 
 A W5500 is not needed. Cases for the bare board, one of them for a
 MagSafe phone back, are listed under [Enclosure](hardware.md#enclosure).
@@ -108,7 +138,11 @@ and scrolls inside.
 In the field a short press on the board's BOOT button, or the camera
 button next to the status badge, keeps the moment as a snapshot, the LED
 blinks green; it can be viewed later in
-Settings → Snapshots, see [Snapshots](settings.md#snapshots).
+Settings → Snapshots, see [Snapshots](settings.md#snapshots). Without
+a phone attached the sensor has no clock; to date the snapshots of the
+run, leave the power bank in one USB-C port and plug the phone into the
+other: the sensor keeps running, and the time the page hands over
+dates them.
 
 The pcap links and *download all* save the file through the page
 instead of a plain link. *Settings → Firmware update* works over USB

@@ -10,7 +10,19 @@ their own, [Stations](stations.md).
 
 **BSSIDs** is the frequency-accurate view: every BSS
 drawn over the spectrum it actually occupies, at the height of its RSSI,
-grouped into panels per band. Clicking a shape restricts the sweep to
+grouped into panels per band. OFDM (802.11a/g and everything after)
+is flat over the channel with steep edges, a trapeze; an 802.11b-only
+BSS sends DSSS, whose spectrum is a bell 22 MHz wide, strongest at the
+centre and falling away to either side, and is drawn as one. An
+80+80 MHz BSS gets its second 80 MHz drawn as well, dashed and labelled
+*2nd 80* with its centre channel in the panel of its range, which is
+widened for it, filtered to the network alone as well;
+the tooltip's Channel row names both ranges. A Wi-Fi 7 BSS that
+leaves 20 MHz subchannels out of its width (preamble puncturing, from
+the EHT Operation element) keeps its whole trapeze, the subchannels
+left out cross-hatched in its colour, with the BSS load hatch's marker in that colour
+at their top right, and a *Punctured* row in RADIO; over the hatch the
+tooltip starts with what is left out. Clicking a shape restricts the sweep to
 that channel (so does clicking an AP node in the station graph; a
 click on a table row does not, on a phone the tap opens the tooltip). The axis keeps the channel numbers of the whole range
 shown, the scanned channel brighter than the rest. Whenever the sweep differs from the default channel
@@ -19,6 +31,12 @@ and above the station graph says so and undoes it in one click. The
 default plan is set in the scan panel with *Save as default*, see
 [Sweep and reception](sweep.md). This is the view
 the network table belongs to.
+
+![An 802.11b-only AP drawn as the DSSS bell](images/30-dsss-bell.png)
+
+![An 80+80 MHz AP: 36 with its second segment on 155, dashed](images/32-80plus80.png)
+
+![A Wi-Fi 7 AP on 36/160 leaving out 44 and 48](images/29-puncturing.png)
 
 **RSSI spectrum** plots the receive level per channel, with **max hold**
 and a dashed **average** over the selected time range, and below it a
@@ -98,7 +116,7 @@ The **?** beside the filter lists the terms it adds itself:
 | `2.4ghz` | band, or `5ghz` |
 | `wifi6` | standard (`wifi4` … `wifi7`), also `ax` |
 | `wpa3` | security as in the table (`open`, `owe`, `wpa2-eap` …) |
-| `sae` | AKM (`psk`, `eap`, `owe` …), also in the RSNE Override |
+| `sae` | AKM (`psk`, `eap`, `owe` …), also in the RSNE Override (2) |
 | `ccmp` | cipher (`tkip`, `gcmp-256` …) |
 | `pmf:required` | PMF required, or `pmf:capable`, `pmf:off` (`pmf` alone also finds the notes about PMF) |
 | `wps` | WPS on |
@@ -112,13 +130,18 @@ The **?** beside the filter lists the terms it adds itself:
 | `fastbeacons` | beacons faster than their interval |
 | `probetsf0` | timestamp 0 in every probe response |
 | `dtim:3` | DTIM period, exactly |
-| `mdid:4a2b` | 802.11r mobility domain |
+| `mdid:4a2b` | 802.11r mobility domain, as hostapd or Wireshark has it |
 | `ranging` | FTM frames seen with this BSSID |
 | `ftm responder` | FTM announced (also `ftm initiator`) |
 | `colour change` | BSS colour change announced |
 | `broken suite` | cipher suite under a misplaced OUI |
 | `basic rates 1` | a basic rate (`basic rates none`: none marked) |
 | `headunit` | a car's: Car Connectivity Consortium element or CarPlay accessory |
+| `camera` | wireless camera kit (Xiongmai/AltoBeam element) |
+| `punctured` | Wi-Fi 7 subchannels left out (preamble puncturing) |
+| `twt` | Target Wake Time offered or scheduled (`twt schedule`: a broadcast one) |
+| `wave2` | Wi-Fi 5 AP with MU-MIMO (Wave 2), `wave1` without |
+| `collision` | BSS colour also used by another device on the channel |
 | `broadcom chip` | Wi-Fi chip from the vendor elements |
 
 Beyond these, any word of a tooltip line or a note works too: `tkip`,
@@ -229,12 +252,12 @@ to the pilot's position, as far as the elements give them away
 | Section | Holds |
 |---------|-------|
 | REMOTE ID | only for a drone: status, height, altitudes, speed and heading, map links to drone and pilot, EU class, self-ID text, age of the report |
-| RADIO | channel, width, occupied range, the centre if it is not the channel itself, standard with the announced generations and spatial streams, basic rates, ad-hoc (IBSS) with its ATIM window, NAN (master preference, anchor master and hops), QoS Management (DSCP policy, SCS traffic description, from the Wi-Fi Alliance Capabilities element), the BSS colour and announced switches, Multiple BSSID, the vendor elements (OUI, types, owner; one line per OUI unless a type has a name of its own), the Apple accessory (manufacturer, model, name), the operating mode (width and streams in use), Wi-Fi Direct (group owner, persistent group, cross connection, device name) and Miracast, an HP printer's model |
+| RADIO | channel, width, occupied range, the centre if it is not the channel itself, standard with the announced generations and spatial streams, basic rates, ad-hoc (IBSS) with its ATIM window, NAN (master preference, anchor master and hops), QoS Management (DSCP policy, SCS traffic description, from the Wi-Fi Alliance Capabilities element), the BSS colour and announced switches, Multiple BSSID, the vendor elements (OUI, types, owner; one line per OUI unless a type has a name of its own), the Apple accessory (manufacturer, model, name), the operating mode (width and streams in use), Wi-Fi Direct (group owner, persistent group, cross connection, device name) and Miracast, an HP printer's model, a wireless camera kit's status |
 | SECURITY | security, AKM, ciphers, PMF and, on the same line, WPS with the device name, manufacturer and model it announces; the config methods and AP Setup Locked are kept from the probe responses, a beacon without them does not clear them; pre-authentication, Hotspot 2.0, beacon protection; the RSNE/RSNXE Override, i.e. the security offered to Wi-Fi 7 clients beside the RSN element for all others; Interworking (access network type, Internet, venue, HESSID) and the Advertisement Protocol (ANQP …); the OWE transition partner |
 | MESH | peerings and path selection of an 802.11s mesh BSS |
 | ROAMING | the 11k, 11v and 11r detail (with the mobility domain), MBO-OCE (cellular data aware, OCE, channels to avoid), the measurement pilot interval |
 | FTM | Fine Timing Measurement seen with this BSSID as the responder, see below |
-| MULTI-LINK | the AP MLD, its links, EML and MLD capabilities |
+| MULTI-LINK | the AP MLD, its links, EML and MLD capabilities; RADIO's TWT row has Target Wake Time from HE Capabilities (responder, requester, broadcast, required by the AP per HE Operation) and the broadcast schedules of the TWT element, every so many ms for so many, restricted TWT for low latency; the Standard row in RADIO adds for a Wi-Fi 5 AP what VHT Capabilities say beyond streams and width (256-QAM or not, MU-MIMO for Wave 2 or none for Wave 1, then SU beamformer), for Wi-Fi 6 what HE Capabilities say beyond streams and width (1024-QAM, UL MU-MIMO, MU or SU beamformer, DCM), a co-hosted BSS of a Multiple BSSID group, and what EHT Capabilities say beyond the streams: 4096-QAM, 320 MHz (6 GHz), restricted TWT, EPCS priority access, SCS traffic description |
 | POWER | country, Tx power envelope, power constraint, TPC report, Quiet intervals |
 | LOAD | stations observed, BSS load, beacon interval, the DTIM period with buffered group traffic and the stations with frames waiting (TIM), the beacon gaps, extended BSS load, available admission capacity, BSS Max Idle Period, ERP |
 | TIME | the AP's uptime from the beacon timestamp and when that last went back, the AP's clock from its Time Advertisement, its time zone |
@@ -552,10 +575,12 @@ order: red first, then amber, blue, and pink last.
 **Configuration changes.** What a beacon says about its SSID (also
 hidden or not), channel, width, standard, spatial streams, the basic
 rates, beacon interval, country, security (label, AKM, ciphers, PMF,
-pre-authentication), the RSNE Override with its AKM, cipher, PMF and
+pre-authentication), the RSNE Override (and Override 2) with its AKM, cipher, PMF and
 SAE H2E, 802.11k/v/r with the mobility domain and FT over the DS, WPS
 (on or off, state, AP Setup Locked, methods),
-the BSS colour, the DTIM period, power (Power Constraint, Transmit
+the BSS colour, the DTIM period, the subchannels a Wi-Fi 7 BSS punctures,
+the links a multi-link AP announces to remove, its broadcast TWT schedule,
+whether it requires TWT, power (Power Constraint, Transmit
 Power Envelope), MBO's *association disallowed*, OWE transition and its
 partner, Hotspot 2.0, Interworking with its network type, the MLD
 address and links of a multi-link AP, WMM admission control, 40 MHz
@@ -572,7 +597,9 @@ are compared, probe responses carry more, and a new state counts once
 two beacons agree on it. A BSS that goes back to its previous state
 within ten minutes is *flapping*: one entry names the fields and counts
 the switches, updated while it goes on, instead of every field twice
-per switch. Some APs do that on purpose, sending two kinds of beacon. `changed` in the filter finds them all.
+per switch; names that do not fit end in …. Switching an AP's
+configuration over (`wifi reload` on OpenWrt) often gives one: for a
+moment its beacons lack HT and VHT or show another security. Some APs do that on purpose, sending two kinds of beacon. `changed` in the filter finds them all.
 
 ![CHANGES in the tooltip](images/25-changes-tooltip.png)
 
@@ -609,6 +636,17 @@ and marking nothing read; a snapshot from before the bell has none.
 **Blue — state of the air**
 
 - position or address given in FTM frames, see Fine Timing Measurement
+- a multi-link AP removing a link (Reconfiguration Multi-Link element),
+  with the beacons left and about how long that is; the bell notes the
+  announcement, not the countdown
+- part of the channel left out (preamble puncturing): the 20 MHz
+  subchannels a Wi-Fi 7 BSS does not use, usually after radar on a DFS
+  channel or interference there; `punctured` in the filter
+- a wireless camera kit (an AltoBeam chip, a Xiongmai recorder; its
+  element under the unregistered OUI 30:FF:83): a camera's link to
+  its recorder, "signal 63", or the recorder's model and whether it
+  takes new cameras; the RADIO section has it as *Camera kit*, the
+  filter finds them with `camera`
 - Channel Switch Announcement, with target channel and beacons remaining
   (not yet captured from a real AP: an AP sends it only in the last
   few beacons before it moves, mostly after radar on a DFS channel, so
@@ -623,8 +661,9 @@ and marking nothing read; a snapshot from before the bell has none.
   device (FRITZ!Boxes: WPA2 in 2.4 GHz, WPA2/WPA3 in 5 GHz): a client
   changing band changes between PSK and SAE and logs in anew; not
   where the multi-link split note already says so
-- several Country elements for one SSID (a router with DE, its repeater
-  with CH): implausible, one of them has its region set wrong
+- several Country elements from one device (DE on its 2.4 GHz radio, US
+  on 5 GHz): implausible, one radio has its region set wrong. Another
+  country on other devices of the same SSID is the amber note below
 - a WPA element without an AKM (00-50-F2-00) beside an SAE RSN
   element: no station can log in over it, so it does not turn the
   network into WPA2/WPA3 either; the filter finds *wpa element without
@@ -640,8 +679,9 @@ and marking nothing read; a snapshot from before the bell has none.
   `Unknown element 68 BSS AC Access Delay (probe response)`
 
 The firmware keeps a list of the elements it decodes and of those it
-deliberately passes over (power capability, MU EDCA and the
-like); anything else is recorded, up to six per BSS. Vendor specific
+deliberately passes over (power capability, MU EDCA, the CF
+Parameter Set of old Linksys APs, the empty Neighbor Report some
+FRITZ!Boxes put into probe responses and the like); anything else is recorded, up to six per BSS. Vendor specific
 elements are proprietary by definition and not counted. A pink mark is
 not a fault of the AP — it means the sensor has met something it cannot
 show yet, and the frame is worth a look in Wireshark and worth reporting.
@@ -650,6 +690,20 @@ probe and association requests.
 
 **Amber — odd but harmless**
 
+- BSS colour collision: another device's BSS on the same channel uses
+  the same colour, so stations cannot tell the two BSSs' frames apart
+  by it and spatial reuse suffers; BSSs of one device do not count,
+  `collision` in the filter finds them. Many Wi-Fi 6 APs notice it
+  themselves and change their colour, the bell has that as *BSS colour*
+
+  ![A colour collision with another AP on channel 36](images/31-colour-collision.png)
+
+- Wi-Fi 7 without SAE-EXT-KEY, GCMP-256 or beacon protection, on a
+  PSK or SAE network: Wi-Fi 7 asks for WPA3 with all three, and many
+  Wi-Fi 7 clients connect as Wi-Fi 6 on one link without them, no
+  multi-link. The RSNE Override and Override 2 count, together, it is
+  where many APs offer them; OpenWrt puts SAE-EXT-KEY into Override 2
+  for multi-link
 - 40 MHz in 2.4 GHz
 - VHT elements in a 2.4 GHz beacon (a vendor extension for 256-QAM, not
   802.11ac), or the same wrapped in Broadcom's vendor element (00:90:4C
@@ -686,8 +740,11 @@ probe and association requests.
 - another mobility domain than the other BSSs with 802.11r of its SSID
   on other devices (same rule): fast transition works within one domain
   only, so a station roaming between them logs in anew. The ROAMING
-  row shows the Mobility Domain ID and whether FT also goes over the DS;
-  the filter finds a domain with `mdid:4a2b` …
+  row shows the Mobility Domain ID and whether FT also goes over the DS.
+  The ID is a field of two octets: Wireshark reads them as a number,
+  0x2B4A, hostapd's `mobility_domain` takes them in the order sent,
+  `4a2b`; the tooltip gives both, the filter finds a domain by either,
+  `mdid:4a2b` or `mdid:2b4a`
 - DTIM period above 3: broadcast and multicast wait that many beacon
   intervals for stations in power save, so ARP, mDNS and the like answer
   late; the filter finds a period with `dtim:3`, `dtim:10` …

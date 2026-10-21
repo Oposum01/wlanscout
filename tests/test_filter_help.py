@@ -31,6 +31,11 @@ NETWORK = {
     "broken suite": {"suitebad": [1, 0x000FAC04]},
     "basic rates 1": {"basicrates": [2, 4]},
     "headunit": {"voui": [["04DF69", 10, "Car Connectivity Con"]]},
+    "camera": {"camkit": "Signal:063"},
+    "punctured": {"eht": [160, 50, 0b1100000]},
+    "twt": {"twt": 2},
+    "wave2": {"std": 5, "vhtcap": 49},
+    "collision": {"color": [77, 0], "channel": 6, "bssid": "0A:77:00:00:00:01"},
     "broadcom chip": {"voui": [["001018", 2, "Broadcom"]]},
 }
 
@@ -44,6 +49,8 @@ STATION = {
     "11k": {"k": 1},
     "ft roam": {"roamsft": 1},
     "ranging": {"ftm": [1, 0, []]},
+    "twt": {"twt": 1},
+    "mumimo": {"vhtcap": 34},
     "mlo": {"mld": "02:00:00:00:00:01"},
     "awdl": {"awdlonly": {"cls": 1}},
     "broadcom chip": {"voui": [["001018", 2, "Broadcom"]]},
@@ -57,6 +64,11 @@ def test_lists_name_exactly_the_tested_terms(opened):
 
 @pytest.mark.parametrize("term", list(NETWORK))
 def test_network_term_finds(opened, term):
+    # A colour collision needs a second device's BSS to collide with
+    if term == "collision":
+        opened.js("""networks.push(Object.assign({}, networks[0],
+            {bssid: '0A:99:00:00:00:01', channel: 6, color: [77, 0]}))""")
+
     assert opened.js("""([term, extra]) => {
         const n = Object.assign({}, networks[0], extra);
         filterText = term;
