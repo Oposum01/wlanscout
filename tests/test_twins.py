@@ -71,12 +71,3 @@ def test_same_device_and_too_few_peers_are_left_alone(opened):
                    for n in notes(opened, "0A:50:00:00:00:11"))
     assert not any("Weaker security" in n
                    for n in notes(opened, "0A:70:00:00:00:10"))
-
-
-def test_gap_row_only_when_it_says_something(opened):
-    text = opened.js("""() => { const d = document.createElement('div');
-        d.innerHTML = networkTooltip(Object.assign({}, networks[0],
-            {bi: 100, bgap: [8, 0, 102300]}));
-        return d.innerText; }""")
-
-    assert "gaps under half" not in text

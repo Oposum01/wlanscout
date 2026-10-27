@@ -24,6 +24,20 @@ def test_ap_qos_management(opened):
     assert "QoS Mgmt" not in tooltip(opened, {})
 
 
+def test_scs_said_once(opened):
+    # A Wi-Fi 7 AP with SCS in EHT Capabilities and the WFA element:
+    # only in the QoS Mgmt row
+    text = tooltip(opened, {"std": 7, "ehtcap": [0x21, 0, 1], "wfacapa": 4})
+
+    assert text.count("SCS traffic description") == 1
+    assert "QoS MgmtSCS traffic description" in text.replace("\t", "")
+    assert "EPCS priority access" in text
+
+    # Without the WFA element the Standard row says it
+    assert "EPCS priority access, SCS traffic description" in \
+        tooltip(opened, {"std": 7, "ehtcap": [0x21, 0, 1]})
+
+
 def test_station_qos_management_and_rsn_selection(opened):
     text = station_tooltip(opened, {"wfacapa": 1, "rsnsel": 1})
 

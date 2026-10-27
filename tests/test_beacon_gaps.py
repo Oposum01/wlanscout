@@ -21,6 +21,15 @@ def test_no_note_for_a_few_late_beacons(opened):
                    notes_of(opened, {"bi": 100, "bgap": [6, 5, 2000]}))
 
 
+def test_gap_row_only_when_it_says_something(opened):
+    text = opened.js("""() => { const d = document.createElement('div');
+        d.innerHTML = networkTooltip(Object.assign({}, networks[0],
+            {bi: 100, bgap: [8, 0, 102300]}));
+        return d.innerText; }""")
+
+    assert "gaps under half" not in text
+
+
 def test_tooltip_row_and_filter(opened):
     text = opened.js("""() => { const d = document.createElement('div');
         d.innerHTML = networkTooltip(Object.assign({}, networks[0],

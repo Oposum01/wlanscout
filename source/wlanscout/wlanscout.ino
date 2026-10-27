@@ -51,10 +51,10 @@
 /*
  * OUI vendor table.
  *
- * oui_table.h is generated from the IEEE MA-L registry by
- * tools/make_oui.py and must sit next to this sketch. It
- * needs a partition scheme with a large app partition,
- * e.g. "Huge APP" in the Arduino IDE.
+ * oui_table.h is generated from the IEEE registries (MA-L,
+ * MA-M, MA-S, IAB) by tools/make_oui.py and must sit next to
+ * this sketch. It needs a large app partition, which the
+ * sketch's own partitions.csv provides.
  */
 #include "oui_table.h"
 
@@ -150,6 +150,47 @@ struct CfgSnap
     bool     mde;                // Mobility Domain element sent
     uint16_t mdid;               // its ID
     bool     ftOverDs;           // FT over the DS
+};
+
+/*
+ * A BSS whose course is recorded while its tooltip shows the Graphs
+ * tab, see handleWatch(): one sample per WATCH_STEP_MS in a ring in
+ * PSRAM, nothing for any other BSS.
+ */
+#define WATCH_MAX       4
+#define WATCH_STEP_MS   5000
+#define WATCH_SAMPLES   17280          // 24 h of 5 s
+// Dropped without a renewal; long enough for a background tab, which
+// browsers let poll about once a minute
+#define WATCH_IDLE_MS   180000
+
+struct WatchSample
+{
+    int8_t   rssiMin, rssiAvg, rssiMax;  // 0 nothing heard
+    uint8_t  util;                       // BSS Load %, 255 none
+    uint16_t stations;                   // BSS Load, 0xFFFF none
+    uint8_t  seen;                       // stations the sensor sees
+    uint8_t  heard;                      // beacons in the step
+};
+
+struct BssWatch
+{
+    bool         used;
+    bool         keep;                   // recorded without a viewer,
+                                         // kept in NVS across restarts
+    uint8_t      bssid[6];
+    uint32_t     renewed;                // millis()
+    uint32_t     stepStart;              // millis() of the open step
+    uint32_t     next;                   // samples written so far
+    uint32_t     startEpoch;             // of sample 0, 0 no clock
+    uint32_t     startUp;                // seconds since boot, sample 0
+    WatchSample *ring;
+
+    // The open step
+    int8_t       rMin, rMax;
+    int32_t      rSum;
+    uint16_t     rCount;
+    int16_t      util, stations;
 };
 
 /*
@@ -552,7 +593,7 @@ void handleNotFound();
 #define ZB_HEADER_BYTES 24
 
 // Firmware version, shown in the header and in /api/live
-#define FW_VERSION "2.7.0"
+#define FW_VERSION "2.8.0"
 
 // ============================================================
 // HEAP PROBE  (diagnostic, remove once the culprit is known)
@@ -846,25 +887,51 @@ struct MloInfo
 // OUI / Vendor
 //
 // Lookups go against the generated oui_table.h, which is
-// built from the IEEE MA-L registry. MA-M and MA-S blocks
-// (28 and 36 bit) are not covered by that registry, so for
-// those only the block holder would be named.
+// built from the IEEE registries: an address in an MA-M or
+// MA-S block (28 and 36 bit) gets the block's holder, not
+// "IEEE Registration Authority" who holds the OUI around it.
 // ============================================================
 
-const char *lookupVendor(const uint8_t *mac)
+const char *lookupVendor(const uint8_t *mac, uint8_t *bits = nullptr)
 {
+    if (bits != nullptr)
+        *bits = 0;
+
     // Bit 1 of the first byte: locally administered
     if (mac[0] & 0x02)
         return "randomised (LAA)";
 
-    uint32_t key =
-        ((uint32_t)mac[0] << 16) |
-        ((uint32_t)mac[1] << 8) |
-        (uint32_t)mac[2];
-
-    const char *name = ouiLookupFull(key);
+    const char *name = ouiLookupMac(mac, bits);
 
     return name != nullptr ? name : "";
+}
+
+/*
+ * The owner of a vendor element's OUI: 24 bit only, the octets
+ * after it are no address and must not hit an MA-M or MA-S block.
+ */
+const char *lookupOui(const uint8_t *oui)
+{
+    if (oui[0] & 0x02)
+        return "";
+
+    const char *name = ouiLookupFull(((uint32_t)oui[0] << 16) |
+                                     ((uint32_t)oui[1] << 8) | oui[2]);
+
+    return name != nullptr ? name : "";
+}
+
+/*
+ * ,"vblk":28 or 36 after a vendor that came from an MA-M or MA-S
+ * block (also IAB); nothing for a plain OUI.
+ */
+void outVendorBlock(uint8_t bits)
+{
+    if (bits != 28 && bits != 36)
+        return;
+
+    outStr(",\"vblk\":");
+    outNum(bits);
 }
 
 /*
@@ -883,25 +950,26 @@ const char *lookupVendor(const uint8_t *mac)
  * Returns a static buffer in case 2, valid until the next call.
  */
 const char *lookupBssidVendor(const uint8_t *bssid,
-                              const struct MloInfo &mlo)
+                              const struct MloInfo &mlo,
+                              uint8_t *bits = nullptr)
 {
     if (!(bssid[0] & 0x02))
-        return lookupVendor(bssid);
+        return lookupVendor(bssid, bits);
 
     if (mlo.present && !(mlo.mldMac[0] & 0x02))
     {
-        const char *name = lookupVendor(mlo.mldMac);
+        const char *name = lookupVendor(mlo.mldMac, bits);
 
         if (*name)
             return name;
     }
 
-    uint32_t key =
-        ((uint32_t)(bssid[0] & ~0x02) << 16) |
-        ((uint32_t)bssid[1] << 8) |
-        (uint32_t)bssid[2];
+    uint8_t base[6];
 
-    const char *name = ouiLookupFull(key);
+    memcpy(base, bssid, sizeof(base));
+    base[0] &= ~0x02;
+
+    const char *name = ouiLookupMac(base, bits);
 
     if (name != nullptr)
     {
@@ -1217,6 +1285,15 @@ struct WiFiNetwork
      */
     uint8_t  csaChannel;
     uint8_t  csaCount;
+    uint8_t  csaMode;            // 1: stations stop sending until the switch
+
+    // The width after it, see csaWideOf(): 0 not announced
+    uint16_t csaWidth;
+    uint8_t  csaCenter, csaCenter2;
+    char     csaCountry[3];      // New Country, "" none
+
+    // Max Channel Switch Time (ext 52) in TU, 0 not sent
+    uint32_t csaTime;
 
     // Lowest basic rate in units of 500 kbit/s, 0 if none
     uint8_t  basicRate;
@@ -1257,6 +1334,9 @@ struct WiFiNetwork
 
     // Hotspot 2.0 Indication element, 50:6F:9A type 0x10
     bool     hs20;
+
+    // An Xbox's link to its controllers, see xboxWirelessCost()
+    bool     xbox;
 
     // Interworking (107) as sent, decoded in the browser
     uint8_t  iw[9];
@@ -1310,6 +1390,8 @@ struct WiFiNetwork
     uint8_t  p2pDevCap;
     uint8_t  p2pGroupCap;
     char     p2pName[33];
+    uint16_t pdtCat;             // WSC Primary Device Type, 0 none
+    uint16_t pdtSub;             //   and its subcategory (WFA OUI)
     int32_t  wfdInfo;            // WFD Device Information, -1 none
     bool     mboSeen;
     uint8_t  mboCap;             // AP Capability Indication
@@ -3754,7 +3836,9 @@ void noteApClock(const uint8_t *bssid, int64_t offsetUs)
  *   decoded:  0 SSID, 1/50 rates, 3 DS, 5 TIM (DTIM period,
  *             buffered traffic), 6 IBSS Parameter Set,
  *             7 Country, 11 BSS Load,
- *             36 Supported Channels, 37/60 channel switch, 42 ERP,
+ *             36 Supported Channels, 37/60 channel switch, 194 Wide
+ *             Bandwidth Channel Switch and 196 Channel Switch Wrapper
+ *             (the width and country after it), 42 ERP,
  *             45/61 HT, 48 RSN, 54 Mobility Domain, 59 Operating
  *             Classes, 70 RM Capabilities, 71 Multiple BSSID,
  *             113/114 Mesh, 127 Extended Capabilities, 191/192 VHT,
@@ -3770,8 +3854,9 @@ void noteApClock(const uint8_t *bssid, int64_t offsetUs)
  *             90 BSS Max Idle Period, 56 Timeout Interval (the
  *             comeback time of a temporary association reject);
  *             ext 35 HE Capabilities, 36 HE Operation (BSS colour),
- *             42 BSS Color Change Announcement, 59 HE 6 GHz,
- *             107 Multi-Link, 108 EHT Capabilities
+ *             42 BSS Color Change Announcement, 52 Max Channel
+ *             Switch Time, 59 HE 6 GHz, 107 Multi-Link, 108 EHT
+ *             Capabilities
  *   passed:   4 CF Parameter Set (point coordination, never used;
  *             an old Linksys sends it), 33 Power Capability, 46 QoS Capability,
  *             47 ERP (the 802.11g draft's number, Broadcom sends
@@ -3802,10 +3887,10 @@ void noteApClock(const uint8_t *bssid, int64_t offsetUs)
 static const uint8_t decodedIes[] = {
     0, 1, 3, 5, 6, 7, 11, 32, 35, 36, 37, 40, 42, 45, 48, 50, 54, 55, 56,
     59, 60, 61, 66, 67, 69, 70, 71, 76, 90, 98, 107, 108, 113, 114, 127,
-    133, 191, 192, 193, 195, 199, 201, 216
+    133, 191, 192, 193, 194, 195, 196, 199, 201, 216
 };
 
-static const uint8_t decodedExt[] = { 35, 36, 42, 59, 106, 107, 108 };
+static const uint8_t decodedExt[] = { 35, 36, 42, 52, 59, 106, 107, 108 };
 
 static const uint8_t passedIes[] = {
     4, 10, 33, 46, 47, 51, 52, 62, 72, 74, 128, 150, 168, 200, 231, 240, 244
@@ -3909,6 +3994,37 @@ void fixedName(const uint8_t *v, int len, char *out, size_t size)
         k--;
 
     out[k] = 0;
+}
+
+/*
+ * Microsoft's Network Cost element (00:50:F2 type 0x11) as an Xbox
+ * sends it for its controllers: 12 octets after the type, cost level
+ * 1 and 0x10 beside it ("01 10 06 2c 01 28 00 …"), where a Windows
+ * hotspot sends the documented 4.
+ */
+bool xboxWirelessCost(const uint8_t *cost, int len)
+{
+    return cost != nullptr && len == 12 && cost[0] == 0x01 &&
+           cost[1] == 0x10;
+}
+
+/*
+ * WSC Primary Device Type, 8 octets: category, the OUI, subcategory.
+ * In the WPS element (attribute 0x1054) and the P2P Device Info. The
+ * subcategories are the Wi-Fi Alliance's (OUI 00:50:F2:04) only, so
+ * another OUI keeps the category alone: 7/1 a TV, 3 a printer.
+ */
+static void primaryDeviceType(const uint8_t *t, WiFiNetwork &n)
+{
+    uint16_t cat = (t[0] << 8) | t[1];
+
+    if (cat == 0)
+        return;
+
+    bool wfa = t[2] == 0x00 && t[3] == 0x50 && t[4] == 0xF2 && t[5] == 0x04;
+
+    n.pdtCat = cat;
+    n.pdtSub = wfa ? (t[6] << 8) | t[7] : 0;
 }
 
 /*
@@ -4243,6 +4359,8 @@ void parseApExtras(const uint8_t *ies, int ieLength,
             fixedName(p + i + 4, l, n.wpsModel, sizeof(n.wpsModel));
         else if (attr == 0x1024 && l > 0)
             fixedName(p + i + 4, l, n.wpsModelNo, sizeof(n.wpsModelNo));
+        else if (attr == 0x1054 && l == 8)
+            primaryDeviceType(p + i + 4, n);
 
         i += 4 + l;
     }
@@ -4455,6 +4573,8 @@ void parseWfaElements(const uint8_t *ies, int ieLength,
         // secondary types, then the WPS device name attribute
         if (id == 13 && l >= 17)
         {
+            primaryDeviceType(v + 8, n);
+
             int at = 17 + v[16] * 8;
 
             if (at + 4 <= l && v[at] == 0x10 && v[at + 1] == 0x11)
@@ -6090,31 +6210,36 @@ void noteSixGhz(const uint8_t *bssid, uint8_t opClass,
     }
 
     /*
-     * Name it if we can: the same-SSID bit says it carries the
-     * reporting AP's name, otherwise the short SSID may match
-     * one we already know.
+     * Name it if we can, on every report, so a renamed network
+     * does not keep its old name: the same-SSID bit says it
+     * carries the reporting AP's name, otherwise the short SSID
+     * may match one we already know. A name the short SSID no
+     * longer matches goes.
      */
-    if (e.ssid[0] == 0)
+    if (e.sameSsid && reporterSsid != nullptr &&
+        reporterSsid[0] != 0 &&
+        strcmp(reporterSsid, "<hidden>") != 0)
     {
-        if (e.sameSsid && reporterSsid != nullptr &&
-            reporterSsid[0] != 0 &&
-            strcmp(reporterSsid, "<hidden>") != 0)
-        {
-            strncpy(e.ssid, reporterSsid, 32);
-        }
-        else if (e.haveShortSsid && networks != nullptr)
-        {
-            for (int i = 0; i < MAX_NETWORKS; i++)
-            {
-                if (!networks[i].valid || networks[i].ssid[0] == 0)
-                    continue;
+        strncpy(e.ssid, reporterSsid, 32);
+        e.ssid[32] = 0;
+    }
+    else if (e.haveShortSsid)
+    {
+        if (e.ssid[0] != 0 &&
+            crc32ssid(e.ssid, strlen(e.ssid)) != e.shortSsid)
+            e.ssid[0] = 0;
 
-                if (crc32ssid(networks[i].ssid,
-                              strlen(networks[i].ssid)) == e.shortSsid)
-                {
-                    strncpy(e.ssid, networks[i].ssid, 32);
-                    break;
-                }
+        for (int i = 0; e.ssid[0] == 0 && networks != nullptr &&
+                        i < MAX_NETWORKS; i++)
+        {
+            if (!networks[i].valid || networks[i].ssid[0] == 0)
+                continue;
+
+            if (crc32ssid(networks[i].ssid,
+                          strlen(networks[i].ssid)) == e.shortSsid)
+            {
+                strncpy(e.ssid, networks[i].ssid, 32);
+                e.ssid[32] = 0;
             }
         }
     }
@@ -7897,6 +8022,69 @@ void puncturedText(char *out, size_t size, uint16_t width, uint8_t centre,
 }
 
 /*
+ * Max Channel Switch Time (extension 52), sent beside a channel
+ * switch: the longest gap from the last beacon on the old channel to
+ * the first on the new one, 3 octets in TU, little endian. A Ruckus
+ * AP moving from 1 to 6 sent 97. 0 without it.
+ */
+uint32_t csaTimeOf(const uint8_t *ies, int ieLength)
+{
+    int len = 0;
+    const uint8_t *t = findExtendedIE(ies, ieLength, 52, len);
+
+    if (t == nullptr || len < 3)
+        return 0;
+
+    return t[0] | ((uint32_t)t[1] << 8) | ((uint32_t)t[2] << 16);
+}
+
+/*
+ * The width after a channel switch: the Wide Bandwidth Channel Switch
+ * (194), on its own or inside the Channel Switch Wrapper (196), which
+ * may also carry a New Country (7) and a New Transmit Power Envelope
+ * (195). 194 has the fields of the VHT Operation, see vhtWidthOf();
+ * width 0 is 20 or 40 MHz and gives no width here. False without 194.
+ */
+bool csaWideOf(const uint8_t *ies, int ieLength, uint16_t &width,
+               uint8_t &centre, uint8_t &centre2, char *country)
+{
+    int len = 0;
+
+    country[0] = 0;
+
+    const uint8_t *wrap = findIE(ies, ieLength, 196, len);
+    const uint8_t *wide = nullptr;
+    int wideLen = 0;
+
+    if (wrap != nullptr)
+    {
+        // Subelements laid out as elements
+        wide = findIE(wrap, len, 194, wideLen);
+
+        int ccLen = 0;
+        const uint8_t *cc = findIE(wrap, len, 7, ccLen);
+
+        if (cc != nullptr && ccLen >= 2 && cc[0] >= 'A' && cc[0] <= 'Z' &&
+            cc[1] >= 'A' && cc[1] <= 'Z')
+        {
+            country[0] = cc[0];
+            country[1] = cc[1];
+            country[2] = 0;
+        }
+    }
+
+    if (wide == nullptr)
+        wide = findIE(ies, ieLength, 194, wideLen);
+
+    width   = 0;
+    centre  = 0;
+    centre2 = 0;
+
+    return wide != nullptr && wideLen >= 3 &&
+           vhtWidthOf(wide, width, centre, centre2);
+}
+
+/*
  * VHT Operation (192): channel width, then the two centre frequency
  * segments CCFS0 and CCFS1. Today's APs give 160 MHz as width 1 with
  * CCFS0 the centre of the primary 80 MHz and CCFS1 that of the whole
@@ -8136,6 +8324,8 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
         stations    = (int16_t)(load[0] | (load[1] << 8));
         channelUtil = (int16_t)((load[2] * 100) / 255);
     }
+
+    watchFrame(bssid, rssi, stations, channelUtil);
 
     // --------------------------------------------------------
     // HT Operation (ID 61)
@@ -8393,11 +8583,13 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
      */
     uint8_t csaChannel = 0;
     uint8_t csaCount   = 0;
+    uint8_t csaMode    = 0;
 
     const uint8_t *csa = findIE(ies, ieLength, 37, capLen);
 
     if (csa != nullptr && capLen >= 3)
     {
+        csaMode    = csa[0];
         csaChannel = csa[1];
         csaCount   = csa[2];
     }
@@ -8407,10 +8599,23 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
 
         if (csa != nullptr && capLen >= 4)
         {
+            csaMode    = csa[0];
             csaChannel = csa[2];
             csaCount   = csa[3];
         }
     }
+
+    // And the width it moves to, with a new country if any
+    uint16_t csaWidth = 0;
+    uint8_t  csaCenter = 0, csaCenter2 = 0;
+    char     csaCountry[3];
+
+    if (csaChannel)
+        csaWideOf(ies, ieLength, csaWidth, csaCenter, csaCenter2, csaCountry);
+    else
+        csaCountry[0] = 0;
+
+    uint32_t csaTime = csaChannel ? csaTimeOf(ies, ieLength) : 0;
 
     // --------------------------------------------------------
     // Security
@@ -8534,6 +8739,32 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
                              0x50, 0x6F, 0x9A, 0x10,
                              hs20Len) != nullptr;
 
+    /*
+     * A Wi-Fi Direct device in its Listen state answers probe
+     * requests with the SSID "DIRECT-" and the Privacy bit, but no
+     * RSN element: it is no group yet, and once it is one it uses
+     * WPA2. Not WEP.
+     */
+    int p2pLen = 0;
+
+    bool p2pListen = ssidLength == 7 && memcmp(ssid, "DIRECT-", 7) == 0 &&
+                     findVendorIE(ies, ieLength, 0x50, 0x6F, 0x9A, 0x09,
+                                  p2pLen) != nullptr;
+
+    /*
+     * An Xbox (One on, also switched off in standby) beacons for its
+     * controllers on 5 GHz: no SSID, the Privacy bit without RSN, and
+     * Microsoft's Network Cost element with 12 octets where the
+     * documented one has 4. One console seen (October 2026).
+     */
+    int costLen = 0;
+
+    const uint8_t *cost = findVendorIE(ies, ieLength, 0x00, 0x50, 0xF2,
+                                       0x11, costLen);
+
+    bool xbox = privacy && hidden && !rsn.present && !wpa.present &&
+                xboxWirelessCost(cost, costLen);
+
     char security[16];
 
     // A WPA element counts only with something to log in with; an
@@ -8564,6 +8795,10 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
         strcpy(security, "WPA");
     else if (osen.present)
         strcpy(security, "OSEN");
+    else if (privacy && p2pListen)
+        strcpy(security, "Wi-Fi Direct");
+    else if (xbox)
+        strcpy(security, "Xbox Wireless");
     else if (privacy)
         strcpy(security, "WEP");
     else
@@ -8819,6 +9054,12 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     n.multiBssid     = multiBssid;
     n.csaChannel     = csaChannel;
     n.csaCount       = csaCount;
+    n.csaMode        = csaMode;
+    n.csaWidth       = csaWidth;
+    n.csaCenter      = csaCenter;
+    n.csaCenter2     = csaCenter2;
+    memcpy(n.csaCountry, csaCountry, sizeof(n.csaCountry));
+    n.csaTime        = csaTime;
     n.basicRate      = basicRate;
     n.basicRateCount = basicRateCount;
 
@@ -8837,6 +9078,7 @@ void parseBeacon(const uint8_t *frame, uint16_t length,
     n.badSuite       = rsn.badSeen ? rsn.badSuite : wpa.badSuite;
     n.wpaNoAkm       = wpa.present && !wpaOffered;
     n.hs20           = hs20;
+    n.xbox           = xbox;
     n.oweTrans       = oweTrans;
 
     /*
@@ -10417,7 +10659,13 @@ static const uint32_t reviewedVendor[] = {
     // Consortium's type 10 in a car's Wi-Fi Direct group (MBUX),
     // ten octets that look like type-length-value, not described
     // anywhere public
-    0x04DF690A
+    0x04DF690A,
+
+    // A catalog of October 2026: NETGEAR's type 3, seven octets of
+    // 01 and zeros, the same on both nodes of a mesh, and Belkin's
+    // type 0 from a Linksys, 00 01 00 03 on all three BSSIDs;
+    // neither described anywhere
+    0x00146C03, 0x08863B00
 };
 
 bool vendorDecoded(uint32_t key)
@@ -13919,11 +14167,18 @@ void sendNetworksJSON()
         outStr(",\"bssid\":");
         outMac(n.bssid);
 
+        uint8_t vblk;
+
         outStr(",\"vendor\":");
-        outJSON(lookupBssidVendor(n.bssid, n.mlo));
+        outJSON(lookupBssidVendor(n.bssid, n.mlo, &vblk));
+        outVendorBlock(vblk);
 
         outStr(",\"resolved\":");
         outNum(n.ssidResolved ? 1 : 0);
+
+        // Its graphs recorded without a viewer
+        if (watchKept(n.bssid))
+            outStr(",\"wk\":1");
 
         outStr(",\"pcapf\":");
         outNum(n.pcapFrames);
@@ -14424,6 +14679,15 @@ void sendNetworksJSON()
             outStr("]");
         }
 
+        if (n.pdtCat)
+        {
+            outStr(",\"pdt\":[");
+            outNum(n.pdtCat);
+            outStr(",");
+            outNum(n.pdtSub);
+            outStr("]");
+        }
+
         if (n.wfdInfo >= 0)
         {
             outStr(",\"wfd\":");
@@ -14638,6 +14902,36 @@ void sendNetworksJSON()
         outStr(",\"csacnt\":");
         outNum(n.csaCount);
 
+        // A switch announced: its mode, the width after it, a new country
+        if (n.csaChannel)
+        {
+            outStr(",\"csamode\":");
+            outNum(n.csaMode);
+
+            if (n.csaWidth)
+            {
+                outStr(",\"csaw\":[");
+                outNum(n.csaWidth);
+                outStr(",");
+                outNum(n.csaCenter);
+                outStr(",");
+                outNum(n.csaCenter2);
+                outStr("]");
+            }
+
+            if (n.csaCountry[0])
+            {
+                outStr(",\"csacc\":");
+                outJSON(n.csaCountry);
+            }
+
+            if (n.csaTime)
+            {
+                outStr(",\"csatime\":");
+                outNum(n.csaTime);
+            }
+        }
+
         outStr(",\"basic\":");
         outNum(n.basicRate);
 
@@ -14679,6 +14973,9 @@ void sendNetworksJSON()
 
         outStr(",\"hs20\":");
         outNum(n.hs20 ? 1 : 0);
+
+        if (n.xbox)
+            outStr(",\"xbox\":1");
 
         outStr(",\"owename\":");
         outNum(n.ssidFromOwe ? 1 : 0);
@@ -14850,7 +15147,7 @@ void outVendorOuis(const uint8_t (*list)[4], uint8_t count)
         outStr(",");
         outNum(list[i][3]);
         outStr(",");
-        outJSON((list[i][0] & 0x02) ? "" : lookupVendor(list[i]));
+        outJSON(lookupOui(list[i]));
         outStr("]");
     }
 
@@ -14862,8 +15159,11 @@ void outClientObject(ClientEntry &c, uint32_t now)
         outStr("{\"mac\":");
         outMac(c.mac);
 
+        uint8_t vblk;
+
         outStr(",\"vendor\":");
-        outJSON(lookupVendor(c.mac));
+        outJSON(lookupVendor(c.mac, &vblk));
+        outVendorBlock(vblk);
 
         outStr(",\"bssid\":");
         outMac(c.bssid);
@@ -16639,7 +16939,7 @@ void sendCatalogJSON()
                                (uint8_t)(e.key >> 8), 0, 0, 0 };
 
             outStr(",\"vn\":");
-            outJSON((oui[0] & 0x02) ? "" : lookupVendor(oui));
+            outJSON(lookupOui(oui));
         }
 
         outStr(",\"len\":");
@@ -17164,6 +17464,460 @@ void handleCoreDump()
     reqDone();
 
     lastRequestServed = millis();
+}
+
+// ============================================================
+// Graphs of one BSS, recorded only while asked for
+// ============================================================
+
+BssWatch watches[WATCH_MAX];
+
+int watchIndex(const uint8_t *bssid)
+{
+    for (int i = 0; i < WATCH_MAX; i++)
+        if (watches[i].used && memcmp(watches[i].bssid, bssid, 6) == 0)
+            return i;
+
+    return -1;
+}
+
+// For /api/system: every recording, kept or watched
+void watchListJson()
+{
+    bool firstOne = true;
+
+    for (int i = 0; i < WATCH_MAX; i++)
+    {
+        const BssWatch &w = watches[i];
+
+        if (!w.used)
+            continue;
+
+        uint32_t epoch = w.startEpoch;
+
+        if (epoch == 0 && pcapClockSource != 0)
+            epoch = deviceEpoch() - (millis() / 1000 - w.startUp);
+
+        outStr(firstOne ? "[" : ",[");
+        outMac(w.bssid);
+        outStr(",");
+        outNum(w.keep ? 1 : 0);
+        outStr(",");
+        outNum(epoch);
+        outStr(",");
+        outNum(w.startUp);
+        outStr(",");
+        outNum(w.next > WATCH_SAMPLES ? WATCH_SAMPLES : w.next);
+        outStr("]");
+
+        firstOne = false;
+    }
+}
+
+// For the network table: recorded without a viewer
+bool watchKept(const uint8_t *bssid)
+{
+    int i = watchIndex(bssid);
+
+    return i >= 0 && watches[i].keep;
+}
+
+/*
+ * A new recording of the BSS in a free slot: the slot, -1 when all
+ * are taken, -2 without the memory for its ring.
+ */
+int watchStart(const uint8_t *mac)
+{
+    int i = -1;
+
+    for (int k = 0; k < WATCH_MAX && i < 0; k++)
+        if (!watches[k].used)
+            i = k;
+
+    if (i < 0)
+        return -1;
+
+    WatchSample *ring = (WatchSample *)ps_malloc(sizeof(WatchSample) *
+                                                 WATCH_SAMPLES);
+
+    if (ring == nullptr)
+        return -2;
+
+    BssWatch &w = watches[i];
+
+    memset(&w, 0, sizeof(w));
+    memcpy(w.bssid, mac, 6);
+
+    w.used       = true;
+    w.ring       = ring;
+    w.stepStart  = millis();
+    w.renewed    = millis();
+    w.startUp    = millis() / 1000;
+    w.startEpoch = pcapClockSource != 0 ? deviceEpoch() : 0;
+
+    watchStepReset(i);
+
+    return i;
+}
+
+// The kept BSSIDs in NVS, six octets each
+void watchKeepSave()
+{
+    uint8_t list[WATCH_MAX * 6];
+    size_t  n = 0;
+
+    for (int i = 0; i < WATCH_MAX; i++)
+        if (watches[i].used && watches[i].keep)
+        {
+            memcpy(list + n, watches[i].bssid, 6);
+            n += 6;
+        }
+
+    prefs.begin("analyzer", false);
+
+    if (n)
+        prefs.putBytes("watchkeep", list, n);
+    else
+        prefs.remove("watchkeep");
+
+    prefs.end();
+}
+
+// At the start: the kept ones are recorded again, from nothing
+void watchKeepLoad()
+{
+    uint8_t list[WATCH_MAX * 6];
+
+    prefs.begin("analyzer", true);
+
+    size_t len = prefs.getBytesLength("watchkeep");
+
+    if (len > sizeof(list) || len % 6)
+        len = 0;
+
+    if (len)
+        prefs.getBytes("watchkeep", list, len);
+
+    prefs.end();
+
+    for (size_t o = 0; o < len; o += 6)
+    {
+        int i = watchStart(list + o);
+
+        if (i >= 0)
+            watches[i].keep = true;
+    }
+}
+
+void watchStepReset(int i)
+{
+    BssWatch &w = watches[i];
+
+    w.rMin     = 0;
+    w.rMax     = 0;
+    w.rSum     = 0;
+    w.rCount   = 0;
+    w.util     = -1;
+    w.stations = -1;
+}
+
+// A beacon or probe response of the BSS, with its BSS Load (-1 none)
+void watchFrame(const uint8_t *bssid, int8_t rssi, int16_t stations,
+                int16_t util)
+{
+    int i = watchIndex(bssid);
+
+    if (i < 0)
+        return;
+
+    BssWatch &w = watches[i];
+
+    if (w.rCount == 0 || rssi < w.rMin)
+        w.rMin = rssi;
+
+    if (w.rCount == 0 || rssi > w.rMax)
+        w.rMax = rssi;
+
+    w.rSum += rssi;
+    w.rCount++;
+
+    if (util >= 0)
+        w.util = util;
+
+    if (stations >= 0)
+        w.stations = stations;
+}
+
+void watchClose(int i)
+{
+    BssWatch &w = watches[i];
+    WatchSample &s = w.ring[w.next % WATCH_SAMPLES];
+
+    s.rssiMin  = w.rCount ? w.rMin : 0;
+    s.rssiMax  = w.rCount ? w.rMax : 0;
+    s.rssiAvg  = w.rCount ? (int8_t)(w.rSum / (int32_t)w.rCount) : 0;
+    s.util     = w.util >= 0 ? (uint8_t)w.util : 255;
+    s.stations = w.stations >= 0 ? (uint16_t)w.stations : 0xFFFF;
+
+    uint16_t seen = countClients(w.bssid);
+
+    s.seen  = seen > 255 ? 255 : seen;
+    s.heard = w.rCount > 255 ? 255 : w.rCount;
+
+    w.next++;
+    w.stepStart += WATCH_STEP_MS;
+
+    watchStepReset(i);
+}
+
+void watchStop(int i)
+{
+    free(watches[i].ring);
+    memset(&watches[i], 0, sizeof(watches[i]));
+}
+
+// From loop(): steps closed on time, watches nobody renews dropped
+void watchLoop()
+{
+    uint32_t now = millis();
+
+    for (int i = 0; i < WATCH_MAX; i++)
+    {
+        if (!watches[i].used)
+            continue;
+
+        if (!watches[i].keep && now - watches[i].renewed > WATCH_IDLE_MS)
+        {
+            watchStop(i);
+            continue;
+        }
+
+        // A stalled loop gives empty steps, not one long one
+        while (now - watches[i].stepStart >= WATCH_STEP_MS)
+            watchClose(i);
+    }
+}
+
+/*
+ * The samples a watch holds as CSV, one line per 5 s step: its start
+ * in the display timezone (seconds since boot without a clock), the
+ * RSSI, the BSS Load and the stations; empty cells where nothing was
+ * heard or the AP sends no BSS Load.
+ */
+void watchCsv(const BssWatch &w, uint32_t first)
+{
+    char name[48];
+    char stamp[24];
+    char tz[16];
+
+    snprintf(name, sizeof(name), "graph-%02X%02X%02X%02X%02X%02X.csv",
+             w.bssid[0], w.bssid[1], w.bssid[2], w.bssid[3], w.bssid[4],
+             w.bssid[5]);
+
+    formatTzLabel(tz, sizeof(tz));
+
+    lastRequestServed = millis();
+    outBuf = "";
+    outBuf.reserve(1400);
+
+    reqStart(200, "text/csv", -1, name);
+
+    outStr(w.startEpoch ? "time (" : "seconds since boot");
+
+    if (w.startEpoch)
+    {
+        outStr(tz);
+        outStr(")");
+    }
+
+    outStr(",rssi min,rssi avg,rssi max,bss load %,stations per the AP,"
+           "stations seen,beacons\r\n");
+
+    for (uint32_t k = first; k < w.next; k++)
+    {
+        const WatchSample &s = w.ring[k % WATCH_SAMPLES];
+        uint32_t at = k * (WATCH_STEP_MS / 1000);
+
+        if (w.startEpoch)
+        {
+            formatStamp(w.startEpoch + at, stamp, sizeof(stamp));
+            outStr(stamp);
+        }
+        else
+            outNum(w.startUp + at);
+
+        if (s.heard)
+        {
+            outStr(",");
+            outNum(s.rssiMin);
+            outStr(",");
+            outNum(s.rssiAvg);
+            outStr(",");
+            outNum(s.rssiMax);
+        }
+        else
+            outStr(",,,");
+
+        outStr(",");
+
+        if (s.util != 255)
+            outNum(s.util);
+
+        outStr(",");
+
+        if (s.stations != 0xFFFF)
+            outNum(s.stations);
+
+        outStr(",");
+        outNum(s.seen);
+        outStr(",");
+        outNum(s.heard);
+        outStr("\r\n");
+    }
+
+    outEnd();
+}
+
+/*
+ * GET /api/watch?bssid=…&since=N: start recording this BSS or renew
+ * it, and answer the samples from number N on; &stop=1 ends it. A
+ * watch nobody renews for WATCH_IDLE_MS ends by itself, the page
+ * renews it with each poll while the Graphs tab is open.
+ * {"ok":1,"step":5,"next":…,"first":…,"epoch":…,"up":…,"s":[[min,
+ * avg,max,util,stations,seen,heard],…]}: sample k covers the step
+ * from epoch (or up, seconds since boot) + k * step on; min, avg,
+ * max 0 when nothing was heard, util 255 and stations 65535 without
+ * a BSS Load element.
+ */
+void handleWatch()
+{
+    uint8_t mac[6];
+
+    if (!reqHasArg("bssid") || !parseMacArg(reqArg("bssid"), mac))
+    {
+        reqSend(400, "text/plain", "bssid missing or not a MAC address");
+        return;
+    }
+
+    int i = watchIndex(mac);
+
+    bool hasKeep = reqHasArg("keep");
+    bool keep    = reqArg("keep").toInt() != 0;
+
+    /*
+     * Closing the tab stops a recording, but not a kept one: that
+     * takes keep=0 as well, from Settings or the checkbox
+     */
+    if (reqArg("stop").toInt() != 0)
+    {
+        if (i >= 0 && (!watches[i].keep || (hasKeep && !keep)))
+        {
+            bool wasKept = watches[i].keep;
+
+            watchStop(i);
+
+            if (wasKept)
+                watchKeepSave();
+        }
+
+        reqSend(200, "application/json", "{\"ok\":1}");
+        return;
+    }
+
+    // The CSV of one that runs; it starts none
+    bool csv = reqArg("csv").toInt() != 0;
+
+    if (i < 0 && csv)
+    {
+        reqSend(404, "text/plain", "this BSS is not being recorded");
+        return;
+    }
+
+    if (i < 0)
+    {
+        i = watchStart(mac);
+
+        if (i == -1)
+        {
+            reqSend(200, "application/json",
+                    "{\"ok\":0,\"error\":\"too many graphs open\"}");
+            return;
+        }
+
+        if (i < 0)
+        {
+            reqSend(200, "application/json",
+                    "{\"ok\":0,\"error\":\"no memory for the graphs\"}");
+            return;
+        }
+    }
+
+    BssWatch &w = watches[i];
+
+    w.renewed = millis();
+
+    if (hasKeep && keep != w.keep)
+    {
+        w.keep = keep;
+        watchKeepSave();
+    }
+
+    // The clock may have come since the start
+    if (w.startEpoch == 0 && pcapClockSource != 0)
+        w.startEpoch = deviceEpoch() - (millis() / 1000 - w.startUp);
+
+    uint32_t first = w.next > WATCH_SAMPLES ? w.next - WATCH_SAMPLES : 0;
+    uint32_t since = reqHasArg("since") ? (uint32_t)reqArg("since").toInt()
+                                        : first;
+
+    if (since < first)
+        since = first;
+
+    if (csv)
+    {
+        watchCsv(w, first);
+        return;
+    }
+
+    outBegin();
+
+    outStr("{\"ok\":1,\"keep\":");
+    outNum(w.keep ? 1 : 0);
+    outStr(",\"step\":");
+    outNum(WATCH_STEP_MS / 1000);
+    outStr(",\"next\":");
+    outNum(w.next);
+    outStr(",\"first\":");
+    outNum(first);
+    outStr(",\"epoch\":");
+    outNum(w.startEpoch);
+    outStr(",\"up\":");
+    outNum(w.startUp);
+    outStr(",\"s\":[");
+
+    for (uint32_t k = since; k < w.next; k++)
+    {
+        const WatchSample &s = w.ring[k % WATCH_SAMPLES];
+
+        outStr(k > since ? ",[" : "[");
+        outNum(s.rssiMin);
+        outStr(",");
+        outNum(s.rssiAvg);
+        outStr(",");
+        outNum(s.rssiMax);
+        outStr(",");
+        outNum(s.util);
+        outStr(",");
+        outNum(s.stations);
+        outStr(",");
+        outNum(s.seen);
+        outStr(",");
+        outNum(s.heard);
+        outStr("]");
+    }
+
+    outStr("]}");
+    outEnd();
 }
 
 /*
@@ -18109,6 +18863,12 @@ void sendSystemJSON()
 
     outStr("}");
 
+    // ---- graphs recorded: [bssid, kept, epoch, up, samples] ----
+
+    outStr(",\"watch\":[");
+    watchListJson();
+    outStr("]");
+
     // ---- memory ----
 
     outStr(",\"mem\":{\"heap\":");
@@ -18477,8 +19237,11 @@ void sendExportJSON()
             outStr(",\"ssid\":");
             outJSON(n.ssid);
 
+            uint8_t vblk;
+
             outStr(",\"vendor\":");
-            outJSON(lookupBssidVendor(n.bssid, n.mlo));
+            outJSON(lookupBssidVendor(n.bssid, n.mlo, &vblk));
+            outVendorBlock(vblk);
 
             outStr(",\"ch\":");
             outNum(n.channel);
@@ -18590,8 +19353,11 @@ void sendExportJSON()
             outStr("{\"mac\":");
             outMac(c.mac);
 
+            uint8_t vblk;
+
             outStr(",\"vendor\":");
-            outJSON(lookupVendor(c.mac));
+            outJSON(lookupVendor(c.mac, &vblk));
+            outVendorBlock(vblk);
 
             outStr(",\"bssid\":");
             outMac(c.bssid);
@@ -20249,6 +21015,7 @@ const ApiRoute apiRoutes[] = {
     { "/api/coredump",      handleCoreDump },
     { "/api/changes",       sendChangesJSON },
     { "/api/cfgmute",       handleCfgMute },
+    { "/api/watch",         handleWatch },
     { "/api/snapshot",      handleSnapshot }
 };
 
@@ -20630,6 +21397,8 @@ void setup()
 
     cfgMuteLoad();
 
+    watchKeepLoad();
+
     otaInit();
 
     // --------------------------------------------------------
@@ -20779,6 +21548,8 @@ void loop()
     catalogLoop();
 
     clockFillLoop();
+
+    watchLoop();
 
     otaLoop();
 

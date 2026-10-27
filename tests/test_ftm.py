@@ -136,19 +136,48 @@ def test_ftm_section(opened):
 
     assert "12 requests from 2 stations, 40 FTM frames sent" in text
     assert "8 FTM frames per burst, 2 bursts, every 2 s, ASAP, VHT 80 MHz" in text
-    assert "50.49512° N, 12.13780° W, 373 m (LCI, as configured)" in text
-    assert "Hauptst 12, Plauen, DE, floor 2 (Location Civic)" in text
+    assert "[map] 50.49512° N, 12.13780° W, 373 m (LCI, as configured)" in text
+    assert "[map] Hauptst 12, Plauen, DE, floor 2 (Location Civic)" in text
 
 
-def test_position_links_to_openstreetmap(opened):
-    href = opened.js("""o => { const d = document.createElement('div');
+def map_links(app, extra):
+    return app.js("""o => { const d = document.createElement('div');
         d.innerHTML = networkTooltip(Object.assign({}, networks[0], o));
-        const a = [...d.querySelectorAll('a')].find(a =>
-            a.href.includes('openstreetmap'));
-        return a ? a.getAttribute('href') : null; }""", AP)
+        return [...d.querySelectorAll('a')].filter(a =>
+            a.href.includes('openstreetmap')).map(a => [a.textContent,
+            a.className, !!a.querySelector('svg'), a.getAttribute('href')]);
+        }""", extra)
 
-    assert href == ("https://www.openstreetmap.org/?mlat=50.495120"
-                    "&mlon=-12.137800#map=18/50.495120/-12.137800")
+
+def test_position_and_address_link_to_openstreetmap(opened):
+    # [<external link icon>map] as for the drones
+    pos, addr = map_links(opened, AP)
+
+    assert pos == ["[map]", "dl ext", True,
+                   "https://www.openstreetmap.org/?mlat=50.495120"
+                   "&mlon=-12.137800#map=18/50.495120/-12.137800"]
+    # The address searched without floor, building and room
+    assert addr == ["[map]", "dl ext", True,
+                    "https://www.openstreetmap.org/search?query="
+                    "Hauptst%2012%2C%20Plauen%2C%20DE"]
+
+
+def test_address_without_a_place_has_no_link(opened):
+    # Only the floor: nothing OpenStreetMap could find
+    floor = (b"DE" + bytes([27, 1]) + b"2").hex()
+
+    assert map_links(opened, dict(AP, ftmlci=None, ftmciv=floor)) == []
+    assert "DE, floor 2 (Location Civic)" in tip(
+        opened, dict(AP, ftmlci=None, ftmciv=floor))
+
+
+def test_address_quotes_in_the_link(opened):
+    # A quote in the street must not end the href
+    civ = (b"DE" + bytes([34, 9]) + b"O'Connell" + bytes([3, 6]) +
+           b"Plauen").hex()
+    (addr,) = map_links(opened, dict(AP, ftmlci=None, ftmciv=civ))
+
+    assert addr[3].endswith("query=O%27Connell%2C%20Plauen%2C%20DE")
 
 
 def test_no_section_without_frames(opened):

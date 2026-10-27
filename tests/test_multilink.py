@@ -255,6 +255,9 @@ def test_he_details_and_colour_collision(opened):
     assert any(n.startswith("#c8a050 BSS colour 12 also on Two 0A:22:00:00:00:01 "
                             "on this channel") for n in one)
     # Its own device's second BSS is no collision, another channel neither
+    assert not any("OneToo" in n for n in one)
+    assert not any("One 0A:11:00:00:00:01" in n
+                   for n in notes("0A:11:00:00:00:02"))
     assert not any("colour collision" in n for n in notes("0A:33:00:00:00:01"))
 
 

@@ -229,8 +229,13 @@ def test_filter_basic_rates(opened):
         filterText = ''; return r; }"""
 
     assert opened.js(match, [{"basicrates": []}, "none"])
-    assert opened.js(match, [{"basicrates": [2, 4]}, "basic rates 1"])
+    assert opened.js(match, [{"basicrates": [2, 4]}, "basic:1"])
+    assert opened.js(match, [{"basicrates": [11]}, "basic:5.5"])
+    assert opened.js(match, [{"basicrates": []}, "basic:none"])
     assert not opened.js(match, [{"basicrates": [12]}, "none"])
+    assert not opened.js(match, [{"basicrates": [12]}, "basic:none"])
+    # Exactly, not 1 in 11 or in a MAC address
+    assert not opened.js(match, [{"basicrates": [22, 24]}, "basic:1"])
 
 
 def test_intolerant_but_40_mhz_itself_is_red(opened):
@@ -404,3 +409,31 @@ def test_camera_kit(opened):
     assert opened.js("""networkNotes(Object.assign({}, networks[0],
         {camkit: 'Signal:059'})).some(n => n[0] === '#7aaed0' &&
         n[1].startsWith('Wireless camera kit: camera, link'))""")
+
+
+def test_channel_switch_with_its_width(opened):
+    def note(extra):
+        return opened.js("""o => networkNotes(Object.assign({}, networks[0], o))
+            .map(n => n[1]).find(t => t.startsWith('Channel switch'))""", extra)
+
+    # As a FRITZ!Box sent it: 40/80 to 36 within the same 80 MHz
+    same = note({"channel": 40, "bandwidth": 80, "center": 42, "csach": 36,
+                 "csacnt": 1, "csamode": 0, "csaw": [80, 42, 0]})
+
+    assert same == ("Channel switch announced: moving to channel 36, 80 MHz "
+                    "(centre 42) in 1 beacon. The same 80 MHz as now, only "
+                    "the primary channel moves: the AP's own channel "
+                    "selection, no radar")
+
+    # Mode 1: radar, with a new width and country
+    radar = note({"channel": 100, "bandwidth": 80, "center": 106, "csach": 36,
+                  "csacnt": 5, "csamode": 1, "csaw": [160, 50, 0],
+                  "csacc": "CH"})
+
+    assert radar.startswith("Channel switch announced: moving to channel 36, "
+                            "160 MHz (centre 50), country CH in 5 beacons. "
+                            "Its stations stop sending until then")
+
+    # Without the wide element as before
+    assert note({"csach": 11, "csacnt": 3}).startswith(
+        "Channel switch announced: moving to channel 11 in 3 beacons. Usually")

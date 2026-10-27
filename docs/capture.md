@@ -30,7 +30,7 @@ easily runs past 600. The main ring and the beacon slots keep the first
 512 octets of a frame and note its real length, so Wireshark shows a
 longer frame as cut off by the capture rather than as malformed.
 
-Each buffer can be downloaded and cleared on its own from the settings
-page. Downloads are libpcap with a radiotap header per frame, so
+Each buffer can be downloaded and cleared on its own under Settings →
+Capture, *Stored on the sensor*, which also shows how full it is. Downloads are libpcap with a radiotap header per frame, so
 Wireshark shows channel and signal strength. The FCS is stripped when
 the frame is queued, and the radiotap flags say so.

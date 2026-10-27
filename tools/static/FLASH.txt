@@ -33,5 +33,5 @@ The esptool shipped with arduino-esp32 is in ~/.arduino15/packages/esp32/tools/e
 
 Alternatively build source/wlanscout/wlanscout.ino in the Arduino IDE:
 board "ESP32C5 Dev Module", Flash Size 16MB, PSRAM enabled. partitions.csv
-next to the sketch is used automatically, the Partition Scheme menu is
-ignored (leave it on "Huge APP" for the size check).
+next to the sketch is used automatically; set the Partition Scheme menu
+to "Custom", the size check of "Huge APP" (3 MB) is too small.

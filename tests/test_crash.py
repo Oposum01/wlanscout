@@ -7,7 +7,7 @@ CRASH = {"task": "loopTask", "cause": "load access fault",
 
 def crash_box(app, extra):
     app.api["system"] = dict(app.api["system"], **extra)
-    app.js("showSettings()")
+    app.js("showSettings('log')")
     app.js("updateSystem()")
     app.page.wait_for_timeout(300)
 

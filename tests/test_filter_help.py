@@ -1,9 +1,10 @@
 """The "?" beside both filters: the list of terms opens and closes, and
-every term in it finds a BSS or station that has what it says."""
+every term in it finds a BSS or station that has what it says, and
+not the same one without it."""
 
 import pytest
 
-# A BSS or station with what each term stands for, besides the fixture's
+# What each term stands for, added to a BSS or station that has none of it
 NETWORK = {
     "ch:36": {"channel": 36},
     "80mhz": {"bandwidth": 80},
@@ -29,7 +30,7 @@ NETWORK = {
     "ftm responder": {"v": 1, "wnm": 1 << 8},
     "colour change": {"bcc": [12, 3, 1]},
     "broken suite": {"suitebad": [1, 0x000FAC04]},
-    "basic rates 1": {"basicrates": [2, 4]},
+    "basic:1": {"basicrates": [2, 4]},
     "headunit": {"voui": [["04DF69", 10, "Car Connectivity Con"]]},
     "camera": {"camkit": "Signal:063"},
     "punctured": {"eht": [160, 50, 0b1100000]},
@@ -37,6 +38,7 @@ NETWORK = {
     "wave2": {"std": 5, "vhtcap": 49},
     "collision": {"color": [77, 0], "channel": 6, "bssid": "0A:77:00:00:00:01"},
     "broadcom chip": {"voui": [["001018", 2, "Broadcom"]]},
+    "ma-m": {"bssid": "F8:2B:E6:20:4A:2A", "vblk": 28},
 }
 
 STATION = {
@@ -54,12 +56,17 @@ STATION = {
     "mlo": {"mld": "02:00:00:00:00:01"},
     "awdl": {"awdlonly": {"cls": 1}},
     "broadcom chip": {"voui": [["001018", 2, "Broadcom"]]},
+    "ma-m": {"mac": "F8:2B:E6:20:4A:2B", "vblk": 28, "vendor": "Flextronics"},
 }
 
 
 def test_lists_name_exactly_the_tested_terms(opened):
     assert [t for t, _ in opened.js("FILTER_HELP")] == list(NETWORK)
     assert [t for t, _ in opened.js("STATION_FILTER_HELP")] == list(STATION)
+
+
+# The fixture's Plain BSS, moved off what the terms find in it anyway
+BASE = {"cc": "FR", "channel": 149, "pair": "TKIP", "group": "TKIP"}
 
 
 @pytest.mark.parametrize("term", list(NETWORK))
@@ -69,12 +76,14 @@ def test_network_term_finds(opened, term):
         opened.js("""networks.push(Object.assign({}, networks[0],
             {bssid: '0A:99:00:00:00:01', channel: 6, color: [77, 0]}))""")
 
-    assert opened.js("""([term, extra]) => {
-        const n = Object.assign({}, networks[0], extra);
+    assert opened.js("""([term, base, extra]) => {
+        const plain = Object.assign({},
+            networks.find(x => x.ssid === 'Plain'), base);
         filterText = term;
-        const hit = matchesFilter(n);
+        const hit = [matchesFilter(plain),
+                     matchesFilter(Object.assign({}, plain, extra))];
         filterText = '';
-        return hit; }""", [term, NETWORK[term]])
+        return hit; }""", [term, BASE, NETWORK[term]]) == [False, True]
 
 
 @pytest.mark.parametrize("term", list(STATION))
@@ -82,12 +91,14 @@ def test_station_term_finds(opened, term):
     opened.page.evaluate("updateClients()")
     opened.page.wait_for_function("() => stations.length > 0")
 
+    # The fixture's second station, without vendor elements
     assert opened.js("""([term, extra]) => {
-        const c = Object.assign({}, stations[0], extra);
+        const plain = stations.find(c => c.mac === '02:00:00:00:01:02');
         stationFilterText = term;
-        const hit = stationMatches(c);
+        const hit = [stationMatches(plain),
+                     stationMatches(Object.assign({}, plain, extra))];
         stationFilterText = '';
-        return hit; }""", [term, STATION[term]])
+        return hit; }""", [term, STATION[term]]) == [False, True]
 
 
 def test_question_mark_opens_and_closes(opened):

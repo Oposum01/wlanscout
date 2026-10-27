@@ -62,6 +62,7 @@ follow it. The **?** beside it lists the terms it adds itself:
 | `mlo` | multi-link (Wi-Fi 7) |
 | `awdl` | Apple Wireless Direct Link, also `apple` |
 | `broadcom chip` | Wi-Fi chip from the vendor elements |
+| `ma-m` | address from a small IEEE block, also `ma-s` |
 
 **Flush**, at the right of the same row, empties the station table
 on the sensor, after asking, together with the network names learned

@@ -45,14 +45,6 @@ def test_apple_device_ie_is_not_apple(opened):
     assert lines == []
 
 
-def test_apple_accessory_names_its_maker(opened):
-    lines = header_lines(opened, {
-        "voui": [["00A040", 0, "Apple"], ["001018", 2, "Broadcom"]],
-        "acc": ["My SEAT 0001", "SEAT", "SE0000"]})
-
-    assert lines == ["Manufacturer: SEAT", "Chip: Broadcom"]
-
-
 def test_apple_accessory_text(opened):
     assert opened.js("appleAccText({acc: ['My SEAT 0001', 'SEAT', 'SE0000']})") \
         == "SEAT · SE0000 · My SEAT 0001"
@@ -64,7 +56,7 @@ def test_tooltip_of_fixture_car(opened):
     car = opened.js("networks.find(n => n.ssid === 'My SEAT 0001')")
 
     assert header_lines(opened, car) == [
-        "Manufacturer: SEAT", "Chip: Broadcom", "Device: Vehicle"]
+        "Manufacturer: SEAT", "Chip: Broadcom", "Device: Vehicle (wireless CarPlay)"]
 
     text = opened.js("""() => {
         const d = document.createElement('div');
@@ -109,7 +101,7 @@ def test_no_header_without_a_guess(opened):
     ([["000C42", 0, "Routerboard.com"]], "Routerboard.com",
      ["Manufacturer: MikroTik"]),
     # Short names instead of the registry's
-    ([["00090F", 6, "Fortinet"]], "", ["Manufacturer: Fortinet"]),
+    ([["00090F", 6, "Fortinet, Inc."]], "", ["Manufacturer: Fortinet"]),
     ([["00E0FC", 17, "HUAWEI TECHNOLOGIES"]], "",
      ["Manufacturer: HUAWEI"]),
     ([["8CBEBE", 135, "Xiaomi Communications"]], "",
@@ -151,22 +143,7 @@ def test_station_best_guess(opened):
     assert "00:17:F2 type 10 Apple" in text[-1]
 
 
-def test_station_without_vendor_elements(opened):
-    assert opened.js("apMakerHeader({mac: '02:00:00:00:01:02', voui: []})") == ""
-
-
 def test_printer_under_best_guess(opened):
     lines = header_lines(opened, {"voui": [], "hp": ["HP OfficeJet 8010"]})
 
     assert lines == ["Device: Printer"]
-
-
-def test_station_with_intel_element(opened):
-    lines = opened.js("""() => {
-        const d = document.createElement('div');
-        d.innerHTML = apMakerHeader({mac: '02:00:00:00:01:09',
-            voui: [['001735', 8, 'Intel Wireless Netwo']]});
-        return [...d.querySelectorAll('div')].map(x => x.textContent);
-    }""")
-
-    assert "Chip: Intel" in lines

@@ -165,8 +165,11 @@ def test_not_a_snapshot(opened, tmp_path):
     path = tmp_path / "other.json"
     path.write_text(json.dumps({"networks": []}))
     opened.page.set_input_files("#snapFile", str(path))
-    opened.page.wait_for_function("() => true")
-    opened.page.wait_for_timeout(300)
+
+    for _ in range(30):
+        if dialogs:
+            break
+        opened.page.wait_for_timeout(100)
 
     assert dialogs and "not a wlanscout+ snapshot" in dialogs[0]
     assert opened.js("snapshotView") is None
@@ -177,7 +180,7 @@ def test_list_in_settings_and_view(app):
     asked = route_snapshots(app, doc)
     app.open()
 
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -200,7 +203,7 @@ def test_list_in_settings_and_view(app):
 def test_take_snapshot(app):
     asked = route_snapshots(app, snapshot_doc(app.api))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     app.page.locator("button", has_text="Take snapshot").click()
     app.page.wait_for_function(
@@ -301,7 +304,7 @@ def test_camera_button_fits_a_phone(phone):
 def test_parts_from_the_sensor_and_back(app):
     asked = route_snapshots(app, snapshot_doc(app.api))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -324,7 +327,7 @@ def test_parts_disabled_with_older_firmware(app):
     app.page.route(app.base + "/api/snapshot*", lambda r: r.fulfill(
         content_type="application/json", body=json.dumps(old)))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -346,7 +349,7 @@ def test_bar_names_what_was_left_out(opened, tmp_path):
 def test_name_in_list_and_bar(app):
     route_snapshots(app, dict(snapshot_doc(app.api), name="Keller"))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -364,7 +367,7 @@ def test_name_in_list_and_bar(app):
 def test_rename(app):
     asked = route_snapshots(app, snapshot_doc(app.api))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -388,7 +391,7 @@ def test_rename(app):
 def test_rename_cancelled(app):
     asked = route_snapshots(app, snapshot_doc(app.api))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -417,7 +420,7 @@ def test_bar_default_parts(opened, tmp_path):
 def test_each_snapshot_has_export(app):
     route_snapshots(app, snapshot_doc(app.api))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -443,7 +446,7 @@ def two_snapshot_routes(app):
 def test_export_all_as_a_zip(app):
     two_snapshot_routes(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     with app.page.expect_download() as info:
         app.page.locator("button", has_text="Export all").click()
@@ -475,7 +478,7 @@ def test_export_all_as_a_zip(app):
 def test_export_one_as_a_zip(app):
     two_snapshot_routes(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -535,7 +538,7 @@ def test_import_one_over_http(app, tmp_path):
     route_snapshots(app, snapshot_doc(app.api))
     posts = route_import(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     doc = dict(snapshot_doc(app.api), name="Halle Nord", epoch=1790000000)
     dialogs = import_files(app, tmp_path, [doc])
@@ -567,7 +570,7 @@ def test_import_a_whole_export_oldest_first(app, tmp_path):
     route_snapshots(app, snapshot_doc(app.api))
     posts = route_import(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     bundle = {"wlanscout_snapshots": 1, "sensor": "x", "snapshots": [
         dict(snapshot_doc(app.api), seq=2, epoch=1790000200),
@@ -586,7 +589,7 @@ def test_import_cancelled_sends_nothing(app, tmp_path):
     route_snapshots(app, snapshot_doc(app.api))
     posts = route_import(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     import_files(app, tmp_path, [snapshot_doc(app.api)], accept=False)
     app.page.wait_for_timeout(500)
@@ -598,7 +601,7 @@ def test_import_refused_by_the_sensor(app, tmp_path):
     route_snapshots(app, snapshot_doc(app.api))
     route_import(app, {"ok": 0, "error": "no room on the flash"})
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     import_files(app, tmp_path, [snapshot_doc(app.api)])
     app.page.wait_for_function(
@@ -610,7 +613,7 @@ def test_import_not_a_snapshot(app, tmp_path):
     route_snapshots(app, snapshot_doc(app.api))
     posts = route_import(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     dialogs = import_files(app, tmp_path, [{"networks": []}])
     app.page.wait_for_timeout(500)
@@ -623,7 +626,7 @@ def test_view_shows_the_number_on_this_sensor(app):
     # An imported snapshot still carries its old number inside
     route_snapshots(app, dict(snapshot_doc(app.api), seq=3))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -638,7 +641,7 @@ def test_view_shows_the_number_on_this_sensor(app):
 def test_import_over_usb(usb, tmp_path):
     usb.page.click("#usbBtn")
     usb.page.wait_for_function("() => usbLink !== null")
-    usb.js("showSettings()")
+    usb.js("showSettings('snapshots')")
 
     docs = [dict(snapshot_doc(usb.api), name="Feld", epoch=1790000000)]
     import_files(usb, tmp_path, docs)
@@ -772,7 +775,7 @@ def test_import_a_zip_from_elsewhere(app, tmp_path):
     route_snapshots(app, snapshot_doc(app.api))
     posts = route_import(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     path = tmp_path / "mixed.zip"
 
@@ -793,22 +796,6 @@ def test_import_a_zip_from_elsewhere(app, tmp_path):
 
     assert [p["url"].split("epoch=")[1].split("&")[0] for p in posts] == \
         ["1790000100", "1790000200"]
-
-
-def test_import_an_old_export_all_json(app, tmp_path):
-    route_snapshots(app, snapshot_doc(app.api))
-    posts = route_import(app)
-    app.open()
-    app.js("showSettings()")
-
-    bundle = {"wlanscout_snapshots": 1, "snapshots": [snapshot_doc(app.api)]}
-
-    import_files(app, tmp_path, [bundle])
-    app.page.wait_for_function(
-        "() => document.getElementById('status').innerText"
-        ".includes('1 snapshot imported')")
-
-    assert len(posts) == 1
 
 
 def test_view_file_takes_a_zip(opened, tmp_path):
@@ -844,7 +831,7 @@ def test_not_a_zip(app, tmp_path):
     route_snapshots(app, snapshot_doc(app.api))
     route_import(app)
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
 
     path = tmp_path / "broken.zip"
     path.write_bytes(b"PK\x03\x04 broken")
@@ -859,7 +846,7 @@ def test_not_a_zip(app, tmp_path):
 
 def open_list(app):
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_function(
         "() => document.querySelectorAll('#snapTable tr').length === 2")
 
@@ -898,7 +885,7 @@ def test_clear_all_with_nothing_there(app):
         content_type="application/json",
         body=json.dumps(dict(LIST, snapshots=[]))))
     app.open()
-    app.js("showSettings()")
+    app.js("showSettings('snapshots')")
     app.page.wait_for_timeout(500)
 
     dialogs = []

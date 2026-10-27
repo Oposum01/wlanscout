@@ -25,17 +25,8 @@ def test_best_guess(opened):
     assert lines[0] == "BEST GUESS"
     assert "Manufacturer: DJI" in lines
     assert "Device: Drone" in lines
-    assert "Height: 25.5 m above takeoff" in lines
-    assert "Pilot: map" in lines
-
-    href = opened.js("""n => {
-        const d = document.createElement('div');
-        d.innerHTML = apMakerHeader(n);
-        return d.querySelector('a').href;
-    }""", {"voui": [], "rid": RID})
-
-    assert href.startswith("https://www.openstreetmap.org/?mlat=48.001000"
-                           "&mlon=11.002000")
+    # Height and the pilot's map are in the REMOTE ID section, not twice
+    assert not [x for x in lines if x.startswith(("Height", "Pilot"))]
 
 
 def test_other_aircraft_type(opened):
@@ -50,13 +41,28 @@ def test_remote_id_section(opened):
     assert "airborne" in text
     assert "7.0 m/s towards 357°, climbing 6.0 m/s" in text
     assert "425 m GNSS, 293.5 m barometric" in text
-    assert "map 48.000000, 11.000000" in text
-    assert "map 48.001000, 11.002000, 403 m altitude" in text
+    assert "[map] 48.000000, 11.000000" in text
+    assert "[map] 48.001000, 11.002000, 403 m altitude" in text
     assert "open category, class C1" in text
     assert "Test flight" in text
     assert "3 s ago" in text
 
     assert "REMOTE ID" not in tooltip(opened, {})
+
+
+def test_map_link_looks_like_one(opened):
+    # [<external link icon>map], leaving for OpenStreetMap in a new tab
+    a = opened.js("""() => {
+        const d = document.createElement('div');
+        d.innerHTML = ridMapLink(480000000, 110000000, 'map');
+        const a = d.querySelector('a');
+        return [a.className, a.target, a.textContent,
+                !!a.querySelector('svg'), a.href];
+    }""")
+
+    assert a[:4] == ["dl ext", "_blank", "[map]", True]
+    assert a[4].startswith("https://www.openstreetmap.org/?mlat=48.000000"
+                           "&mlon=11.000000")
 
 
 def test_without_location_or_pilot(opened):

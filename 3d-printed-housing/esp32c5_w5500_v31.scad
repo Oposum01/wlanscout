@@ -3,7 +3,7 @@
 // SPDX-FileContributor: Jan Fuchs <jf [at] simonwunderlich . de>
 
 // =====================================================================
-//  Enclosure v21 - form-fitting, soldered wiring, connectors at the front,
+//  Enclosure v31 - form-fitting, soldered wiring, connectors at the front,
 //  tool-less snap-fit closure: the hood has a skirt that overlaps the tray
 //  wall; latch beams in the skirt (fixed at both ends, bending in the layer
 //  plane) snap over ramped bumps on the tray.
@@ -27,13 +27,13 @@ part = "assembly";
 wall    = 2.8;
 floor_t = 2.0;
 roof_t  = 2.0;
-hood_extra = 6.0;    // extra headroom inside the hood (cable connectors)
+hood_extra = 6.0;
 // edge rounding
 r_vert   = 3.0;     // vertical outer corners (plan view)
 r_inner  = 2.0;     // concave corners where the bridge meets the bars
 r_top    = 2.0;     // top edge of the hood
 r_bot    = 1.2;     // bottom edge of the tray
-r_steps  = 8;       // slices per rounded edge
+r_steps  = 8;       // slices per rounded edge    // extra headroom inside the hood (cable connectors)
 pclr    = 0.3;       // pocket clearance around each PCB
 rf_clear = 15.0;     // antenna area -> W5500 copper (Espressif >= 15 mm)
 bridge_l = 16.0;     // width of the wire bridge between the boards (wires stay >= 15 mm from the antenna)
@@ -42,17 +42,43 @@ bridge_l = 16.0;     // width of the wire bridge between the boards (wires stay 
 esp_l = 61.5;  esp_w = 25.6;  esp_t = 1.6;   // antenna ends flush with the rear PCB edge
 esp_comp_h = 3.3;           // tallest part on the component side
 pad_h      = 5.0;           // carrier board above floor
-esp_pad = 2.5;  esp_pad_front_x = 8.5;   // front pads behind the USB-C (check buttons)
+esp_pad = 2.0;  esp_pad_front_x = 8.5;   // front pads behind the USB-C (clear of the button flexures)
+// ESP buttons (RESET / BOOT) face the floor here (board flipped). Positions taken
+// from the MagSafe case (BTN_X = +-7.25 from the PCB centre line, BTN_Y = 57.2
+// with the PCB front edge at y = 45.8 -> 11.4 mm behind the front edge). VERIFY.
+// Seen from the front: RESET right (-y), BOOT left (+y) - mirrored vs. MagSafe.
+btn_dy    = 7.25;      // from the PCB centre line
+btn_x     = 11.4;      // from the PCB front edge
+btn_h     = 2.0;       // button height below the PCB bottom face
+btn_gap   = 0.2;       // plunger top -> button
+plunger_d = 3.0;
+tongue_w  = 6.0;  tongue_l = 16.0;  tongue_t = 1.4;   // floor flexure, hinge at the rear
+tongue_front = 2.5;    // tongue free end lies this far in front of the button (lever ~13.5 mm)
+tongue_slot = 0.5;
+// button markings engraved into the underside of the tongues; they read with
+// the case upside down and the ports facing left
+btn_mark_depth = 0.4;
+btn_label_h = 2.5;     // cap height of "RESET"
 esp_pin_h  = 8.5;           // header plastic + pin above PCB (clip pins to lower)
 wire_sp    = 2.5;           // solder joint + wire bend above pin tips
 mod_w = 18.0;
-usb_pitch = 13.0;  usb_yoff = 0.0;       // MEASURE (board is flipped)
-usb_lower = 2.0;    // USB-C opening extended below the skirt bottom (into the tray front wall)
-usb_plug_w = 12.5;  usb_h = 7.5;  usb_proj = 0.8;  usb_body_h = 3.26;
+// USB-C openings taken from the MagSafe case (esp32-c5-magsafe-case-b-pcbbox):
+// two stadium-shaped holes 10.14 x 4.1 mm (end radius 2.05), centres at
+// -6.19 / +6.33 mm from the PCB centre, 2.0 mm wall. The board lies flipped
+// here, so the port order is mirrored (+y = left seen from the front).
+usb_pitch = 12.52;  usb_yoff = 0.07;
+usb_open_w = 10.14;  usb_open_h = 4.1;
+usb_proj = 0.8;  usb_body_h = 3.26;
 // Rear retention: horizontal beam behind the PCB edge, spanning the full pocket
 // width and anchored in both side walls (fixed-fixed). It flexes in the layer
 // plane like the hood latches; strain ~12*t*lip/span^2.
-clip_t = 1.2;  clip_lip = 0.8;  clip_lip_l = 14.0;      // ESP: lip centred on the beam
+clip_t = 1.2;  clip_lip = 0.7;  clip_lip_l = 14.0;      // ESP: lip centred on the beam
+// ESP longitudinal fixing (USB-C plug forces): rigid stops front and rear,
+// the spring beam only holds the board down
+esp_stop_gap = 0.1;        // play per side between PCB edge and stop
+esp_rstop_w = 1.5;         // rigid end blocks of the rear beam = rear stops (y width)
+esp_beam_gap = 0.2;        // PCB edge -> beam front face (middle, free part)
+usb_stop_margin = 0.4;     // front stop tabs keep this distance to the receptacles
 w55_clip_t = 1.2;  w55_clip_lip = 0.6;                    // W5500: lip on the inner half only
 clip_h = 2.8;                                             // beam height
 
@@ -83,19 +109,30 @@ bump_zh  = 1.6;     // bump height incl. lead-in ramp
 finger_d = 4.0;
 
 // ---------------- Lid text ----------------
-txt1 = "wlanscout+";  txt2a = "5x DHCP or Static:";  txt2b = "192.168.1.1";
-txt1_h = 6.5;  txt2_h = 4.0;
+txt1 = "wlanscout+";  txt2a = "DHCP";  txt2b = "or 192.168.1.1";
+txt1_h = 9.0;  txt2_h = 5.0;     // target cap heights (width-limited if needed)
+txt_maxw = 60;                   // max. text width on each roof
 txt_font = "DejaVu Sans Condensed:style=Bold";
 txt_depth = 0.8;
+// port labels on the front face, above the USB-C openings
+// (seen from the front: UART left = +y, USB right = -y)
+port_labels = [["UART", 1], ["USB", -1]];
+port_label_h = 2.5;        // cap height
+port_label_gap = 1.2;      // opening top edge -> label bottom
+port_label_depth = 0.4;
 
 $fn = 40;
 
 // ---------------- Derived layout (interior coordinates) ----------------
-esp_x0 = 0.3;                                  // USB-C reaches into the front wall
+// USB-C receptacle front to outer face = 2.0 mm (as in the MagSafe case):
+// the PCB edge sits on the pocket line, receptacles reach usb_proj into the wall
+usb_wall = 2.0;
+esp_x0 = usb_proj - (wall - usb_wall);         // = 0.0 with wall 2.8 / proj 0.8
 esp_y0 = pclr;
 ze     = floor_t + pad_h;                      // ESP carrier, bottom face
 rim    = ze + esp_t;                           // tray rim = ESP top (flush)
-esp_pl = esp_x0 + esp_l + 0.2 + clip_t + clip_lip + 0.3;  // ESP pocket length incl. clip beam + flex room
+esp_beam_x = esp_x0 + esp_l + esp_beam_gap;     // rear spring beam
+esp_pl = esp_beam_x + clip_t + clip_lip + 0.2;  // + flex room behind the beam (= lip overlap + 0.2)
 esp_pw = esp_w + 2*pclr;
 
 ant_edge = esp_y0 + (esp_w + mod_w)/2;         // module edge on the W5500 side
@@ -198,19 +235,83 @@ module tray() {
     // front wall in front of the ESP ends at the skirt bottom; above it the
     // hood skirt alone forms the wall (keeps the USB-C receptacles clear)
     translate([-0.1, wall, z_s0]) cube([wall + 0.11, esp_pw, rim]);
-    // USB-C opening reaches usb_lower further down into the tray front wall
-    translate([-0.1, wall + esp_y0 + esp_w/2 + usb_yoff - (usb_pitch + usb_plug_w)/2, z_s0 - usb_lower])
-      cube([wall + 0.11, usb_pitch + usb_plug_w, usb_lower + 0.01]);
+    // button flexures in the floor: U-slot through the floor, tongue thinned from above
+    translate([wall, wall, 0]) for (by = btn_ys()) {
+      tx0 = esp_x0 + btn_x - tongue_front;
+      translate([0, 0, -1]) linear_extrude(floor_t + 1.1) difference() {
+        translate([tx0 - tongue_slot, by - tongue_w/2 - tongue_slot]) square([tongue_l + tongue_slot, tongue_w + 2*tongue_slot]);
+        translate([tx0, by - tongue_w/2]) square([tongue_l + 0.01, tongue_w]);
+      }
+      translate([tx0, by - tongue_w/2, tongue_t]) cube([tongue_l, tongue_w, floor_t]);
+    }
+    // markings: RESET (right seen from the front = lower y), camera icon on BOOT
+    translate([wall, wall, -1]) linear_extrude(1 + btn_mark_depth) {
+      bx = esp_x0 + btn_x - tongue_front + tongue_l/2;
+      translate([bx, btn_ys()[0]]) mirror([0, 1, 0])
+        text("RESET", size = btn_label_h / 0.73, font = txt_font, halign = "center", valign = "center");
+      translate([bx, btn_ys()[1]]) mirror([0, 1, 0]) camera_icon();
+    }
   }
+  // plungers on the tongues
+  translate([wall, wall, 0]) for (by = btn_ys())
+    translate([esp_x0 + btn_x, by, tongue_t - 0.01])
+      cylinder(d = plunger_d, h = ze - btn_h - btn_gap - tongue_t + 0.01);
   for (p = snaps()) at_snap(p) latch_bump(p[3], p[4]);
+  translate([wall, wall, 0]) esp_front_stops();
+}
+
+// camera pictogram from snapshot-camera.svg (24x24 viewBox, stroke width 2,
+// round joins), rebuilt natively: OpenSCAD's SVG import ignores strokes.
+// Path points converted to y-up and centred on the viewBox centre (12, 12).
+camera_h = 5.0;        // overall icon height incl. stroke (tongue is 6 mm wide)
+camera_path = [[-8, 5], [-5, 5], [-3, 8], [3, 8], [5, 5], [8, 5], [8.2588, 4.9659], [8.5, 4.866],
+  [8.7071, 4.7071], [8.866, 4.5], [8.9659, 4.2588], [9.0, 4.0], [9, -7], [8.9659, -7.2588],
+  [8.866, -7.5], [8.7071, -7.7071], [8.5, -7.866], [8.2588, -7.9659], [8.0, -8.0], [-8, -8],
+  [-8.2588, -7.9659], [-8.5, -7.866], [-8.7071, -7.7071], [-8.866, -7.5], [-8.9659, -7.2588],
+  [-9.0, -7.0], [-9, 4], [-8.9659, 4.2588], [-8.866, 4.5], [-8.7071, 4.7071], [-8.5, 4.866],
+  [-8.2588, 4.9659]];
+module camera_icon() {
+  scale(camera_h / 18) {                       // stroke outline spans 18 units in height
+    difference() {                             // body, stroke 2 centred on the path
+      offset(r = 1, $fn = 24) polygon(camera_path);
+      offset(delta = -1) polygon(camera_path);
+    }
+    translate([0, -1]) difference() {          // lens: circle r 3.5 at (12, 13)
+      circle(r = 4.5, $fn = 64);
+      circle(r = 2.5, $fn = 64);
+    }
+  }
+}
+
+function btn_ys() = [esp_y0 + esp_w/2 - btn_dy, esp_y0 + esp_w/2 + btn_dy];
+
+// front stop tabs against the ESP front edge, between and beside the USB-C
+// receptacles (in the tray inset behind the hood skirt, outside the openings)
+module esp_front_stops() {
+  c  = esp_y0 + esp_w/2 + usb_yoff;
+  hw = 8.94/2 + usb_stop_margin;                     // receptacle half width + margin
+  r_lo = [c - usb_pitch/2 - hw, c - usb_pitch/2 + hw];
+  r_hi = [c + usb_pitch/2 - hw, c + usb_pitch/2 + hw];
+  x0 = -(wall - skirt_t - sgap);
+  for (seg = [[0, r_lo[0]], [r_lo[1], r_hi[0]], [r_hi[1], esp_pw]])
+    if (seg[1] - seg[0] > 0.8)
+      translate([x0, seg[0], z_s0 - 0.01]) cube([x0 * -1 - esp_stop_gap, seg[1] - seg[0], rim - z_s0 + 0.01]);
 }
 
 module tray_supports() {
   for (x = [esp_x0 + esp_pad_front_x, esp_x0 + esp_l - esp_pad], y = [esp_y0, esp_y0 + esp_w - esp_pad])
     translate([x, y, 0]) cube([esp_pad, esp_pad, ze]);
   // ESP rear beam, lip centred (keeps clear of the header strips at the long edges)
-  beam_clip(esp_x0 + esp_l + 0.2, 0, esp_pw, rim, clip_t, clip_lip,
-            esp_pw/2 - clip_lip_l/2, esp_pw/2 + clip_lip_l/2);
+  beam_clip(esp_beam_x, 0, esp_pw, rim, clip_t, clip_lip,
+            esp_pw/2 - clip_lip_l/2, esp_pw/2 + clip_lip_l/2, esp_beam_gap);
+  // rigid end blocks of the beam, standing on the floor: they touch the PCB
+  // edge (esp_stop_gap) and act as rear stops; the free beam span between
+  // them does the snapping
+  for (y = [0, esp_pw - esp_rstop_w])
+    translate([esp_x0 + esp_l + esp_stop_gap, y, 0])
+      cube([esp_beam_gap - esp_stop_gap + clip_t, esp_rstop_w, rim]);
+  echo(str("ESP rear beam: free span ", esp_pw - 2*esp_rstop_w, " mm, strain approx. ",
+           round(12000 * clip_t * clip_lip / pow(esp_pw - 2*esp_rstop_w, 2)) / 10, " %"));
   // W5500 rear beam, lip only on the inner half (right, seen from the RJ45);
   // the outer half with the 2x5 header gets no lip
   beam_clip(w55_x0 + w55_l + pclr, w55_y0 - pclr, w55_y0 + w55_w + pclr, w55_top, w55_clip_t, w55_clip_lip,
@@ -223,7 +324,7 @@ module tray_supports() {
 // Beam clip behind a PCB edge (board on the -x side), spanning y0..y1 between
 // the pocket walls. The lip (y range ly0..ly1) catches the PCB top face; a lead-in
 // ramp on top lets the board push the beam back when pressed in.
-module beam_clip(x, y0, y1, z_pcb_top, t, lip, ly0, ly1) {
+module beam_clip(x, y0, y1, z_pcb_top, t, lip, ly0, ly1, reach = 0) {
   span = y1 - y0;
   echo(str("Beam clip span ", span, " mm, lip ", lip, ": strain approx. ",
            round(12000 * t * lip / pow(span, 2)) / 10, " %"));
@@ -231,7 +332,7 @@ module beam_clip(x, y0, y1, z_pcb_top, t, lip, ly0, ly1) {
   // ends anchored in the side walls (only below the rim, the hood sits above)
   for (ya = [y0 - 0.5, y1]) translate([x, ya, z_pcb_top - 1.0]) cube([t, 0.5, min(clip_h, rim - (z_pcb_top - 1.0))]);
   translate([x, ly0, z_pcb_top + 0.1]) hull() {
-    translate([-lip, 0, 0]) cube([lip + t, ly1 - ly0, 0.4]);
+    translate([-lip - reach, 0, 0]) cube([lip + reach + t, ly1 - ly0, 0.4]);
     translate([0, 0, clip_h - 1.2]) cube([t, ly1 - ly0, 0.1]);
   }
 }
@@ -275,19 +376,34 @@ module hood() {
     translate([wall, wall, 0]) for (z = zones)
       translate([0, 0, rim - 1]) linear_extrude(z[1] - rim + 1) zone(z[0]);
     common_cuts();
-    // debossed text on the ESP roof
+    // port labels engraved into the front face
+    for (pl = port_labels) port_label(pl[0], pl[1]);
+    // debossed text - ESP roof: product name; W5500 roof: network defaults
     translate([wall + esp_pl/2, wall + esp_pw/2, h_top + roof_t - txt_depth])
+      linear_extrude(txt_depth + 1) fit_text(txt1, txt1_h, 78.5, txt_maxw);
+    translate([wall + ix/2, wall + w55_y0 + w55_w/2, h_top + roof_t - txt_depth])
       linear_extrude(txt_depth + 1) {
-        maxw = esp_pl - 4;
-        translate([0,  6.5]) fit_text(txt1,  txt1_h, 78.5, maxw);
-        translate([0, -1.0]) fit_text(txt2a, txt2_h, 124.5, maxw);
-        translate([0, -7.0]) fit_text(txt2b, txt2_h, 124.5, maxw);
+        // both lines in the same size, set by the longer second line
+        translate([0,  4.5]) fit_text(txt2a, txt2_h, 99.3, txt_maxw);
+        translate([0, -4.5]) fit_text(txt2b, txt2_h, 99.3, txt_maxw);
       }
   }
+  // hold-down finger on the ESP centre line above the buttons (button force pushes up)
+  translate([wall + esp_x0 + btn_x, wall + esp_y0 + esp_w/2, rim]) cylinder(d = finger_d + 1, h = h_top - rim + 0.5);
   // hold-down fingers on the W5500 corners
   // (rear corners: header on the outer side, snap clip on the inner side)
   for (p = [[w55_x0 + 2.5, w55_y0 + 2.5], [w55_x0 + 2.5, w55_y0 + w55_w - 2.5]]) let(x = p[0], y = p[1])
     translate([wall + x, wall + y, w55_top]) cylinder(d = finger_d, h = h_top - w55_top + 0.5);
+}
+
+// text in the front face plane: reads left-to-right seen from the front
+// (right = -y, up = +z), cut port_label_depth deep into the face at x = 0
+module port_label(t, side) {
+  yc = wall + esp_y0 + esp_w/2 + usb_yoff + side * usb_pitch/2;
+  zc = usb_zc + usb_open_h/2 + port_label_gap + port_label_h/2;
+  multmatrix([[0, 0, -1, port_label_depth], [-1, 0, 0, yc], [0, 1, 0, zc], [0, 0, 0, 1]])
+    linear_extrude(port_label_depth + 1)
+      text(t, size = port_label_h / 0.73, font = txt_font, halign = "center", valign = "center");
 }
 
 module fit_text(t, h, w10, maxw) {
@@ -296,11 +412,12 @@ module fit_text(t, h, w10, maxw) {
 
 // cut-outs shared by tray and hood
 module common_cuts() {
-  // 2x USB-C front (one slot)
+  // 2x USB-C front (two stadium holes, MagSafe case geometry)
   translate([-1, wall + esp_y0 + esp_w/2 + usb_yoff, usb_zc])
     rotate([0, 90, 0]) linear_extrude(wall + 2)
-      hull() for (dy = [-usb_pitch/2, usb_pitch/2])
-        translate([0, dy]) offset(r = 2.5) square([usb_h - 5, usb_plug_w - 5], center = true);
+      for (dy = [-usb_pitch/2, usb_pitch/2])
+        translate([0, dy]) hull() for (e = [-1, 1])
+          translate([0, e * (usb_open_w - usb_open_h)/2]) circle(d = usb_open_h, $fn = 48);
   // RJ45 front
   translate([-1, wall + w55_y0 + w55_w/2 + rj45_yoff - (rj45_w + 0.8)/2, w55_top - 0.2])
     cube([wall + 2, rj45_w + 0.8, rj45_h + 0.5]);

@@ -104,12 +104,6 @@ def test_header_fits_a_small_phone(browser):
     assert right - rows[-1][1] < 30
 
 
-def test_view_tab_names(opened):
-    names = opened.js("[...document.querySelectorAll('.tabs .tab')].map(t => t.innerText.trim())")
-
-    assert names == ["BSSIDs", "Stations", "RSSI spectrum", "IE catalog"]
-
-
 def tab_rows(browser, width):
     from conftest import App, load_fixtures
 

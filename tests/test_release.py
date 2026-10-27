@@ -36,10 +36,19 @@ def test_folders(tmp_path):
 
     names = sorted(p.name for p in (out / "firmware").iterdir())
 
-    assert names == ["FLASH.txt", "boot_app0.bin", "wlanscout.ino.bin",
-                     "wlanscout.ino.bootloader.bin",
+    assert names == ["FLASH.txt", "boot_app0.bin", "version.json",
+                     "wlanscout.ino.bin", "wlanscout.ino.bootloader.bin",
                      "wlanscout.ino.merged.bin",
                      "wlanscout.ino.partitions.bin"]
+
+    # What the page asks for new firmware: version, size, hash of the image
+    import hashlib
+    import json
+    info = json.loads((out / "firmware" / "version.json").read_text())
+    image = (out / "firmware" / "wlanscout.ino.bin").read_bytes()
+
+    assert info == {"version": version(), "size": len(image),
+                    "sha256": hashlib.sha256(image).hexdigest()}
 
     flash = (out / "firmware" / "FLASH.txt").read_text()
 
@@ -53,8 +62,12 @@ def test_folders(tmp_path):
         assert (out / name).is_file(), name
 
     # The flasher loads from firmware/, no copies next to it
-    assert 'const PARTS_DIR = "firmware/";' in (out / "flash.html").read_text()
+    flasher = (out / "flash.html").read_text()
+
+    assert 'const PARTS_DIR = "firmware/";' in flasher
+    assert "fetch(PARTS_DIR + part.file" in flasher
     assert not (out / "wlanscout.ino.bin").exists()
+    assert not (out / "boot_app0.bin").exists()
     assert not (out / "site").exists()
 
 

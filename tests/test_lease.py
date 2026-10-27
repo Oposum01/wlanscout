@@ -1,15 +1,15 @@
-"""The DHCP lease row in the network table of Settings."""
+"""The DHCP lease row in Settings, Network, DHCP."""
 
 
 def net_rows(app, net):
     app.api["system"] = dict(app.api["system"],
                              net=dict(app.api["system"]["net"], **net))
-    app.js("showSettings()")
+    app.js("showSettings('network')")
     app.js("updateSystem()")
     app.page.wait_for_function(
-        "() => document.querySelectorAll('#netTable tr').length > 0")
+        "() => document.querySelectorAll('#dhcpTable tr').length > 0")
 
-    return dict(app.js("""[...document.querySelectorAll('#netTable tr')]
+    return dict(app.js("""[...document.querySelectorAll('#dhcpTable tr')]
         .map(r => [...r.cells].map(c => c.textContent))"""))
 
 
@@ -31,3 +31,11 @@ def test_lease_before_first_ack(opened):
 
 def test_no_lease_row_on_older_firmware(opened):
     assert "DHCP lease" not in net_rows(opened, {})
+
+
+def test_lease_not_renewed_yet(opened):
+    r = net_rows(opened, {"lease": {
+        "state": "bound", "time": 5400, "left": 5340, "ack": 60,
+        "server": "192.0.2.1", "renewals": 0, "renew": 2640}})
+
+    assert r["DHCP lease"].endswith(", not renewed since start")

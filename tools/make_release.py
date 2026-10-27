@@ -22,6 +22,9 @@ the repository.
                 boot_app0.bin                the parts for esptool
                 wlanscout.ino.merged.bin     everything at 0x0, wipes all
                 FLASH.txt                    which file goes where
+                version.json                 version, size and SHA-256 of
+                                             wlanscout.ino.bin, which the
+                                             page asks for new firmware
     index.html, manifest.webmanifest, sw.js, favicon.svg,
     icon-192.png, icon-512.png    the page, installable as an app
     flash.html                    the flasher, loading from firmware/
@@ -30,6 +33,8 @@ the repository.
 """
 
 import argparse
+import hashlib
+import json
 import pathlib
 import shutil
 import subprocess
@@ -90,6 +95,14 @@ def main():
         encoding="utf-8")
     (firmware / "FLASH.txt").write_text(text.replace("@VERSION@", version),
                                         encoding="utf-8")
+
+    # What the page compares with its sensor's version, from GitHub Pages
+    image = (firmware / "wlanscout.ino.bin").read_bytes()
+    (firmware / "version.json").write_text(json.dumps({
+        "version": version,
+        "size": len(image),
+        "sha256": hashlib.sha256(image).hexdigest(),
+    }) + "\n", encoding="utf-8")
 
     subprocess.run([sys.executable, str(ROOT / "tools" / "make_static.py"),
                     str(out), "--page", "index.html", "--firmware",

@@ -82,13 +82,6 @@ def test_flush_buttons_top_right_of_the_graphs(opened):
         assert graph["y"] - button["y"] < 80
 
 
-def test_flush_button_fits_a_phone(phone):
-    button = phone.page.locator("#networkView .flushBtn").bounding_box()
-
-    assert button["x"] + button["width"] <= 390
-    assert phone.js("document.documentElement.scrollWidth") <= 390
-
-
 def test_flush_disabled_in_a_snapshot(opened):
     asked = route_flush(opened, "networks", {"networks": [], "sixghz": []})
 

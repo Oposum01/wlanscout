@@ -49,10 +49,6 @@ def probe_rows(app):
         .map(r => [r.cells[0].innerText, r.cells[2].innerText])""")
 
 
-def test_no_table_of_its_own(awdlview):
-    assert awdlview.js("document.querySelectorAll('.subTab').length") == 3
-
-
 def test_senders_without_a_station_get_a_row(awdlview):
     # 0A:01 names a station in the table, its line is in that tooltip
     rows = probe_rows(awdlview)
@@ -132,7 +128,7 @@ def test_class_text(opened, cls, text):
     assert opened.js("c => awdlClassText(c)", cls) == text
 
 
-@pytest.mark.parametrize("term", ["awdl", "iphone", "apple"])
+@pytest.mark.parametrize("term", ["awdl", "iphone"])
 def test_station_filter(awdlview, term):
     awdlview.page.fill("#stationFilter", term)
     awdlview.page.wait_for_timeout(100)

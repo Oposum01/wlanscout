@@ -1,10 +1,9 @@
 """source/wlanscout/index_html_gz.h: the packed copy the sensor serves."""
 
 import gzip
+import importlib.util
 import pathlib
 import re
-import subprocess
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKETCH = ROOT / "source" / "wlanscout"
@@ -33,11 +32,15 @@ def test_packed_copy_is_this_page():
     assert size == len(page()) + 1
 
 
-def test_the_script_makes_the_same_file(tmp_path):
-    before = (SKETCH / "index_html_gz.h").read_bytes()
-
-    subprocess.run([sys.executable, str(ROOT / "tools" / "make_page_gz.py")],
-                   check=True, capture_output=True)
-
+def test_the_script_makes_the_same_file():
+    # What the script would write, without writing it: a stale copy
+    # stays stale and fails here again on the next run.
     # No time stamp inside, the same page gives the same bytes
-    assert (SKETCH / "index_html_gz.h").read_bytes() == before
+    spec = importlib.util.spec_from_file_location(
+        "make_page_gz", ROOT / "tools" / "make_page_gz.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+
+    text, _ = tool.header(tool.page_bytes())
+
+    assert (SKETCH / "index_html_gz.h").read_text(encoding="utf-8") == text

@@ -59,7 +59,8 @@ remembered, so if you leave it open it comes back open.
 **Save as default** stores the ticked channels as the default channel
 plan (`defmask` in NVS), **Load default** ticks and applies it again.
 Until one is saved, the default is the startup plan, everything below
-channel 149. Clicking a BSS in the graph or an AP node narrows the
+channel 149. *Scan only channel …* in the tooltip of a BSS in the
+graph or of an AP node (click it to keep the tooltip open) narrows the
 sweep to one channel; as long as the sweep differs from the default,
 the BSSID and station views show a *Back to default channels* button.
 A restart always comes back with the default plan; the selection in

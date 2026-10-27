@@ -1,5 +1,8 @@
-# Raw IEEE registry download, only needed to regenerate oui_table.h
+# Raw IEEE registry downloads, only needed to regenerate oui_table.h
 oui.csv
+mam.csv
+oui36.csv
+iab.csv
 
 # Test runs
 __pycache__/

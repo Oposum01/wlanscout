@@ -28,10 +28,13 @@ rule, not a choice here. Built images of the current version are in
 `firmware/` as well, with `FLASH.txt`, for flashing without building.
 
 3. The vendor table `oui_table.h` comes with the repository, generated
-   from the IEEE MA-L registry. It is a sorted table with a binary
-   search over it, with the usual legal suffixes trimmed from company
-   names. The full registry is about 40000 entries and lands at
-   700–900 kB in flash, which is why the large app partition below is
+   from the IEEE registries: MA-L (24-bit OUIs) and the small blocks
+   inside OUIs IEEE holds itself, MA-M (28 bit), MA-S and IAB (36 bit),
+   so an address from such a block is named after its holder, not
+   after "IEEE Registration Authority". They are sorted tables with a
+   binary search over them, with the usual legal suffixes trimmed from
+   company names. Together about 59000 entries, they land at roughly
+   1.3 MB in flash, which is why the large app partition below is
    needed. To pick up newer assignments, regenerate it — see
    [Updating the vendor table](#updating-the-vendor-table).
 
@@ -41,7 +44,7 @@ rule, not a choice here. Built images of the current version are in
 | Setting | Value |
 |---------|-------|
 | Flash Size | **16MB (128Mb)** |
-| Partition Scheme | any, it is ignored (see below) |
+| Partition Scheme | **Custom** (see below) |
 | PSRAM | **Enabled** — without it the allocations fail at boot and nothing comes up |
 
    The partition table is `partitions.csv` next to the sketch, which
@@ -49,10 +52,12 @@ rule, not a choice here. Built images of the current version are in
    default: two firmware slots of 6.25 MB for updates over the network,
    3.4 MB LittleFS for the IE catalog, NVS and `otadata` where
    every other scheme has them. With arduino-esp32 3.3.12 the sketch
-   compiles to about 2.6 MB, roughly 600 kB of it the vendor table and
+   compiles to about 3.1 MB, roughly 1 MB of it the vendor table and
    170 kB the web interface. The compiler still checks the size against
-   the menu's scheme; with "Huge APP" selected that is 3 MB and fits,
-   with the 4 MB default (1.2 MB) the build is refused as too large.
+   the menu's scheme: "Custom" allows up to 16 MB, while "Huge APP"
+   (3 MB) refuses the build as too large. With arduino-cli,
+   `--build-property upload.maximum_size=6553600` checks against the
+   real slot of 6.25 MB.
 
 The web interface has to stay in `index_html.h` rather than move into
 the sketch. The sensor serves it gzip-packed from `index_html_gz.h`,
@@ -66,22 +71,29 @@ The sketch refuses to build while the packed copy is of another page.
 
 ### Updating the vendor table
 
-`tools/make_oui.py` turns the IEEE registry into `oui_table.h`. Fetch the
-current listing from IEEE, as IEEE asks users to do, and run it:
+`tools/make_oui.py` turns the IEEE registries into `oui_table.h`. Fetch
+the current listings from IEEE, as IEEE asks users to do, and run it:
 
 ```sh
 curl -o oui.csv https://standards-oui.ieee.org/oui/oui.csv
-python3 tools/make_oui.py oui.csv > source/wlanscout/oui_table.h
+curl -o mam.csv https://standards-oui.ieee.org/oui28/mam.csv
+curl -o oui36.csv https://standards-oui.ieee.org/oui36/oui36.csv
+curl -o iab.csv https://standards-oui.ieee.org/iab/iab.csv
+python3 tools/make_oui.py oui.csv mam.csv oui36.csv iab.csv \
+    > source/wlanscout/oui_table.h
 ```
 
-`oui.csv` is only the raw download and is kept out of the repository by
+The script tells the registries apart by the length of the assignment,
+so any of the last three may be left out. IEEE's server rejects some
+browser user agents; curl's own goes through. The CSV files are only
+the raw downloads and are kept out of the repository by
 `.gitignore`. Options of the script: `--max-len N` truncates vendor
 names (default 20), `--only PREFIX,…` keeps only vendors starting with
 one of the given prefixes, to shrink the table.
 
 ### Updating over the network
 
-**Settings → Firmware update** takes a new firmware: choose
+**Settings → Sensor → Firmware** takes a new firmware: choose
 `wlanscout.ino.bin` (in the Arduino IDE *Sketch → Export Compiled
 Binary*, or from `firmware/` in the repository) and
 press *Upload and restart*, over Ethernet or, from the phone, over USB
@@ -90,6 +102,19 @@ not running from, restarts into it and the page reloads once the new
 version answers (over USB it reconnects instead). Settings and the IE catalog stay, except rows of
 elements the new firmware decodes, which go together with the frames
 kept only for them (see [IE catalog](wifi-views.md#ie-catalog)).
+
+**New firmware from GitHub.** Once a session, when Settings opens,
+and with *Check for new firmware*, the page asks the public repository
+on GitHub Pages for `firmware/version.json` (version, size and SHA-256
+of the newest release). The browser asks, not the sensor, so a sensor
+without internet access is no obstacle; a browser without one shows
+nothing, or says so after the button. For a newer release *Download
+vX* fetches `wlanscout.ino.bin` into the browser and checks its size,
+and its SHA-256 where the browser allows it (the static copy over https
+does, the sensor's own http page does not); *Install vX* then writes
+it like a chosen file, after the same question. Pages may serve the
+old files for some minutes after a release, a size that does not match
+is refused with "try again in a minute".
 
 The sensor refuses a file that is not an ESP32-C5 image or does not
 carry the wlanscout+ version marker, and checks length and SHA-256

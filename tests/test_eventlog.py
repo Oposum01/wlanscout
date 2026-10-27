@@ -60,7 +60,7 @@ def log_page(app):
 
 def test_twenty_to_a_page(opened):
     opened.api["log"] = long_log(45)
-    opened.js("showSettings()")
+    opened.js("showSettings('log')")
     opened.js("updateLog()")
     opened.page.wait_for_function(
         "() => document.querySelectorAll('#logTable tr').length === 20")

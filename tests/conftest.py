@@ -84,8 +84,30 @@ class App:
         # API requests that went over HTTP
         self.http_api = []
 
+        # GitHub Pages as the update check sees it: {"version.json": dict,
+        # "wlanscout.ino.bin": bytes}; nothing there answers 404, so no
+        # test goes out to the real one
+        self.updates = {}
+        self.update_requests = []
+
         page.on("pageerror", lambda e: self.errors.append(str(e)))
         page.route(base + "/**", self._answer)
+        page.route("https://oposum01.github.io/**", self._update)
+
+    def _update(self, route):
+        name = route.request.url.split("/")[-1].split("?")[0]
+        self.update_requests.append(name)
+        body = self.updates.get(name)
+
+        if body is None:
+            route.fulfill(status=404, body="")
+        elif isinstance(body, bytes):
+            route.fulfill(content_type="application/octet-stream", body=body,
+                          headers={"Access-Control-Allow-Origin": "*"})
+        else:
+            route.fulfill(content_type="application/json",
+                          body=json.dumps(body),
+                          headers={"Access-Control-Allow-Origin": "*"})
 
     def _answer(self, route):
         path = route.request.url[len(self.base):].split("?")[0]

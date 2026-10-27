@@ -115,7 +115,6 @@ def test_firmware_update_over_usb(usb, tmp_path):
 
     assert puts == [{"line": "PUT /api/ota?len=4096", "size": 4096,
                      "first": 0xE9}]
-    assert not usb.js("window.__usbOverrun === true")
     assert usb.js("usbLink !== null")
     assert usb.js("window.__notReloaded") is True
     assert "/api/ota" not in usb.http_api

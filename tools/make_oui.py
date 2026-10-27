@@ -3,19 +3,28 @@
 # SPDX-FileCopyrightText: 2026 Dr.-Ing. Simon Wunderlich Systementwicklung & Beratung
 # SPDX-FileContributor: Jan Fuchs <jf [at] simonwunderlich . de>
 """
-Generates oui_table.h from the IEEE MA-L registry.
+Generates oui_table.h from the IEEE registries.
 
-Source (CSV, about 4 MB):
-    https://standards-oui.ieee.org/oui/oui.csv
+Sources (CSV, from IEEE):
+    https://standards-oui.ieee.org/oui/oui.csv       MA-L, 24 bit
+    https://standards-oui.ieee.org/oui28/mam.csv     MA-M, 28 bit
+    https://standards-oui.ieee.org/oui36/oui36.csv   MA-S, 36 bit
+    https://standards-oui.ieee.org/iab/iab.csv       IAB, 36 bit
 
 Usage:
-    python3 tools/make_oui.py oui.csv > source/wlanscout/oui_table.h
+    python3 tools/make_oui.py oui.csv mam.csv oui36.csv iab.csv \
+        > source/wlanscout/oui_table.h
 
-The result is a sorted table searched by bisection. With the
-full registry (about 35000 entries) it takes roughly 700-900 kB
-of flash, so it needs a partition scheme with a large app
-partition, in the Arduino IDE e.g.
-"Huge APP (3MB No OTA/1MB SPIFFS)".
+Each file may be left out but oui.csv; which registry a row
+belongs to follows from the length of its assignment (6, 7 or 9
+hex digits). An MA-M or MA-S block lies inside a 24-bit OUI that
+IEEE holds itself ("IEEE Registration Authority"), so the lookup
+tries the 36-bit blocks, then the 28-bit ones, then the OUI.
+
+The results are sorted tables searched by bisection. With all
+four registries (about 59000 entries) they take roughly 1.3 MB of
+flash, so they need a large app partition; the sketch has its
+own partitions.csv with two 6.25 MB slots.
 
 Options:
     --max-len N     truncate vendor names to N characters
@@ -28,62 +37,76 @@ Options:
 import argparse
 import csv
 import sys
+import unicodedata
+
+
+# Strip legal forms, they only cost space
+SUFFIXES = (" Inc.", " Inc", " Ltd.", " Ltd", " LLC",
+            " GmbH", " Co., Ltd.", " Co.,Ltd.", " Co., Ltd",
+            " Co.", " Corporation", " Corp.", " Corp",
+            " Technologies", " Technology", " S.A.", " AG",
+            " B.V.", " N.V.", " Pte.", " Pty")
+
+
+def clean_name(name, max_len):
+    # Full-width forms as some registrants type them: "（SuZhou)",
+    # and runs of spaces: "MAGNETI MARELLI   S.E. S.p.A."
+    name = " ".join(unicodedata.normalize("NFKC", name).split())
+
+    # Repeat: "Foo Technologies, Inc." needs two passes, and
+    # the comma the first pass leaves behind would otherwise
+    # keep the second one from matching.
+    for _ in range(4):
+        name = name.strip().rstrip(",").strip()
+
+        for suffix in SUFFIXES:
+            if name.lower().endswith(suffix.lower()):
+                name = name[: -len(suffix)]
+                break
+        else:
+            break
+
+    name = name.strip().rstrip(",").strip()
+
+    name = name.replace('"', "'")[:max_len]
+
+    return name.strip().rstrip(",").strip()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("csvfile")
+    parser.add_argument("csvfiles", nargs="+")
     parser.add_argument("--max-len", type=int, default=20)
     parser.add_argument("--only", default="")
     args = parser.parse_args()
 
     wanted = [p.strip().lower() for p in args.only.split(",") if p.strip()]
 
-    entries = {}
+    # Assignment length in hex digits -> registry table
+    tables = {6: {}, 7: {}, 9: {}}
 
-    with open(args.csvfile, newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            assignment = row.get("Assignment", "").strip()
-            name = row.get("Organization Name", "").strip()
+    for path in args.csvfiles:
+        with open(path, newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                assignment = row.get("Assignment", "").strip()
+                name = row.get("Organization Name", "").strip()
 
-            if len(assignment) != 6 or not name:
-                continue
+                if len(assignment) not in tables or not name:
+                    continue
 
-            try:
-                oui = int(assignment, 16)
-            except ValueError:
-                continue
+                try:
+                    key = int(assignment, 16)
+                except ValueError:
+                    continue
 
-            if wanted and not any(name.lower().startswith(p) for p in wanted):
-                continue
+                if wanted and not any(name.lower().startswith(p)
+                                      for p in wanted):
+                    continue
 
-            # Strip legal forms, they only cost space
-            suffixes = (" Inc.", " Inc", " Ltd.", " Ltd", " LLC",
-                        " GmbH", " Co., Ltd.", " Co.,Ltd.", " Co., Ltd",
-                        " Co.", " Corporation", " Corp.", " Corp",
-                        " Technologies", " Technology", " S.A.", " AG",
-                        " B.V.", " N.V.", " Pte.", " Pty")
+                tables[len(assignment)][key] = clean_name(name,
+                                                          args.max_len)
 
-            # Repeat: "Foo Technologies, Inc." needs two passes, and
-            # the comma the first pass leaves behind would otherwise
-            # keep the second one from matching.
-            for _ in range(4):
-                name = name.strip().rstrip(",").strip()
-
-                for suffix in suffixes:
-                    if name.lower().endswith(suffix.lower()):
-                        name = name[: -len(suffix)]
-                        break
-                else:
-                    break
-
-            name = name.strip().rstrip(",").strip()
-
-            name = name.replace('"', "'")[: args.max_len]
-
-            name = name.strip().rstrip(",").strip()
-
-            entries[oui] = name
+    entries = tables[6]
 
     keys = sorted(entries)
 
@@ -100,11 +123,14 @@ def main():
         "AdditionRef-wlanscout-linking-exception\n"
         " *\n"
         " * The data below has been assembled from the IEEE public\n"
-        " * OUI listing (MA-L) available from:\n"
+        " * listings (MA-L, MA-M, MA-S, IAB) available from:\n"
         " * <https://standards-oui.ieee.org/oui/oui.csv>\n"
+        " * <https://standards-oui.ieee.org/oui28/mam.csv>\n"
+        " * <https://standards-oui.ieee.org/oui36/oui36.csv>\n"
+        " * <https://standards-oui.ieee.org/iab/iab.csv>\n"
         " *\n"
-        " * Entries: %d\n"
-        " */\n\n" % len(keys))
+        " * Entries: %d MA-L, %d MA-M, %d MA-S and IAB\n"
+        " */\n\n" % (len(keys), len(tables[7]), len(tables[9])))
     out.write("#pragma once\n\n#include <Arduino.h>\n\n")
 
     out.write("static const uint32_t ouiFullKeys[] = {\n")
@@ -147,6 +173,100 @@ def main():
         "    return nullptr;\n"
         "}\n"
     )
+
+    write_blocks(out, "ouiMam", "uint32_t", "0x%07X", tables[7])
+    write_blocks(out, "ouiMas", "uint64_t", "0x%09XULL", tables[9])
+
+    out.write(
+        "\n"
+        "/*\n"
+        " * Vendor of an address: its 36-bit block (MA-S, IAB), its\n"
+        " * 28-bit block (MA-M), else its 24-bit OUI (MA-L). bits,\n"
+        " * if given, gets the size of the prefix that matched.\n"
+        " */\n"
+        "inline const char *ouiLookupMac(const uint8_t *mac,\n"
+        "                                uint8_t *bits = nullptr)\n"
+        "{\n"
+        "    uint64_t k36 = ((uint64_t)mac[0] << 28) |\n"
+        "                   ((uint64_t)mac[1] << 20) |\n"
+        "                   ((uint64_t)mac[2] << 12) |\n"
+        "                   ((uint64_t)mac[3] << 4) | (mac[4] >> 4);\n"
+        "    uint32_t k28 = (uint32_t)(k36 >> 8);\n"
+        "\n"
+        "    uint8_t size = 36;\n"
+        "    const char *name = ouiBlockFind(ouiMasKeys, ouiMasNames,\n"
+        "                                    OUI_MAS_COUNT, k36);\n"
+        "\n"
+        "    if (name == nullptr)\n"
+        "    {\n"
+        "        size = 28;\n"
+        "        name = ouiBlockFind(ouiMamKeys, ouiMamNames,\n"
+        "                            OUI_MAM_COUNT, k28);\n"
+        "    }\n"
+        "\n"
+        "    if (name == nullptr)\n"
+        "    {\n"
+        "        size = 24;\n"
+        "        name = ouiLookupFull((uint32_t)(k36 >> 12));\n"
+        "    }\n"
+        "\n"
+        "    if (bits != nullptr)\n"
+        "        *bits = name != nullptr ? size : 0;\n"
+        "\n"
+        "    return name;\n"
+        "}\n"
+    )
+
+
+def write_blocks(out, prefix, ctype, fmt, entries):
+    """A table of 28- or 36-bit blocks, sorted"""
+    keys = sorted(entries)
+
+    out.write("\nstatic const %s %sKeys[] = {\n" % (ctype, prefix))
+
+    for i in range(0, len(keys), 6):
+        chunk = keys[i:i + 6]
+        out.write("    " + ", ".join(fmt % k for k in chunk) + ",\n")
+
+    out.write("};\n\n")
+
+    out.write("static const char *const %sNames[] = {\n" % prefix)
+
+    for key in keys:
+        out.write('    "%s",\n' % entries[key])
+
+    out.write("};\n\n")
+
+    out.write("#define %s_COUNT (sizeof(%sKeys) / sizeof(%sKeys[0]))\n"
+              % (prefix.upper().replace("OUIM", "OUI_M"), prefix, prefix))
+
+    if prefix == "ouiMam":
+        out.write(
+            "\n"
+            "template <typename K>\n"
+            "inline const char *ouiBlockFind(const K *keys,\n"
+            "                                const char *const *names,\n"
+            "                                int count, K key)\n"
+            "{\n"
+            "    int lo = 0;\n"
+            "    int hi = count - 1;\n"
+            "\n"
+            "    while (lo <= hi)\n"
+            "    {\n"
+            "        int mid = (lo + hi) / 2;\n"
+            "\n"
+            "        if (keys[mid] == key)\n"
+            "            return names[mid];\n"
+            "\n"
+            "        if (keys[mid] < key)\n"
+            "            lo = mid + 1;\n"
+            "        else\n"
+            "            hi = mid - 1;\n"
+            "    }\n"
+            "\n"
+            "    return nullptr;\n"
+            "}\n"
+        )
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ time.
 Everything runs on the device. No cloud, no app store, no external
 dependencies beyond the Arduino core.
 
-![firmware](https://img.shields.io/badge/firmware-2.7.0-blue)
+![firmware](https://img.shields.io/badge/firmware-2.8.0-blue)
 ![licence](https://img.shields.io/badge/licence-GPL--2.0--only_+_linking_exception-blue)
 
 ![Wi-Fi overview](docs/images/01-wifi-overview.png)
@@ -89,22 +89,22 @@ More on the motivation, the intended use and related tools in
 ## Hardware
 
 - **Waveshare ESP32-C5-WIFI6-KIT** with **16 MB flash** and **8 MB
-  PSRAM**. The flash holds two firmware slots of 6.25 MB for updates and
+  PSRAM** ([this one](https://www.amazon.de/dp/B0GDFY22Q1) was used). The flash holds two firmware slots of 6.25 MB for updates and
   the storage for the IE catalog and the snapshots. The PSRAM is the
   memory for the capture ring and the tables, about 5 MB of it is
   allocated at boot; it is mandatory, boards without PSRAM such as the
   ESP32-C5-Mini do not run this firmware
 - **W5500 Ethernet module** on SPI (SCLK 23, MOSI 24, MISO 25, CS 26,
-  RST 4) — or none, for the board on a phone over USB
-- optional **3D-printed enclosure** in [`3d-printed-housing/`](3d-printed-housing/)
-  for both boards; without the W5500 (phone over USB) the board fits
-  cases on MakerWorld, listed in [Hardware](docs/hardware.md#enclosure)
+  RST 4; [this one](https://www.amazon.de/dp/B0FB94KPVT) was used) — or none, for the board on a phone over USB
+- optional **3D-printed cases** in [`3d-printed-housing/`](3d-printed-housing/):
+  one for both boards, and a MagSafe case for the board alone on the
+  back of a phone, see [Hardware](docs/hardware.md#enclosure)
 
 The W5500 has no auto-MDI/MDI-X: use a straight cable to a switch, a
 crossover cable to a PC. Wiring, pin table and details in
 [Hardware](docs/hardware.md).
 
-![Hardware, open and closed](docs/images/02-hardware.jpg)
+![The Ethernet sensor in its case, closed and open](docs/images/02-hardware.jpg)
 
 ---
 
@@ -122,9 +122,9 @@ crossover cable to a PC. Wiring, pin table and details in
    without a network.
 4. Start it, tap **USB** and allow the board.
 
-![The board in its MagSafe case on the back of a phone, lid off, with a short angled USB-C cable](docs/images/28-phone-sensor-open.jpg)
+![The board in its MagSafe case on the back of a phone: closed, lid off, and the underside with the ring and a short angled USB-C cable](docs/images/23-phone-sensor.jpg)
 
-Updates come from *Settings → Firmware update* with `wlanscout.ino.bin`
+Updates come from *Settings → Sensor → Firmware* with `wlanscout.ino.bin`
 of the [latest release](https://github.com/Oposum01/wlanscout/releases/latest),
 or again from the flasher. Details in
 [Sensor on a phone over USB](docs/usb.md).
@@ -161,7 +161,7 @@ wlanscout/
     index_html.h           web interface, the source of the page
     index_html_gz.h        the same packed, as the sensor serves it
                            (tools/make_page_gz.py)
-    oui_table.h            vendor table, generated from the IEEE registry
+    oui_table.h            vendor table, generated from the IEEE registries
     partitions.csv         partition table, used instead of the menu
   firmware/              the built images of the current version and
                          FLASH.txt (which file goes where)
@@ -192,7 +192,8 @@ the version in `wlanscout.ino`: after a build,
 ```sh
 MAP="-ffile-prefix-map=$HOME/.arduino15=~/.arduino15"
 arduino-cli compile \
-    --fqbn esp32:esp32:esp32c5:FlashSize=16M,PartitionScheme=huge_app,PSRAM=enabled \
+    --fqbn esp32:esp32:esp32c5:FlashSize=16M,PartitionScheme=custom,PSRAM=enabled \
+    --build-property "upload.maximum_size=6553600" \
     --build-property "compiler.c.extra_flags=$MAP" \
     --build-property "compiler.cpp.extra_flags=$MAP" \
     --build-path build source/wlanscout
@@ -285,6 +286,13 @@ Beratung (<https://www.simonwunderlich.de/>). Written by Jan Fuchs
 <jf [at] simonwunderlich . de> as work for Simon Wunderlich. Source:
 <https://github.com/Oposum01/wlanscout>.
 
+**Except the MagSafe case.** `3d-printed-housing/esp32-c5-magsafe-case-v6.scad`
+and its two STLs are adapted from
+[Biscuit – DIY MagSafe case, ESP32-C5 Waveshare](https://makerworld.com/de/models/2590419-biscuit-diy-magsafe-case-esp32-c5-waveshare)
+by [Dtmcnamara](https://makerworld.com/de/@Dtmcnamara) and, like it, licensed under
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/),
+not the GPL. Their SPDX tag says so.
+
 Every source file carries the licence as an
 [SPDX](https://spdx.org/licenses/GPL-2.0-only.html) tag instead of the
 long notice. The firmware sources (`source/wlanscout/wlanscout.ino`,
@@ -297,8 +305,9 @@ name the exception:
 // SPDX-FileContributor: Jan Fuchs <jf [at] simonwunderlich . de>
 ```
 
-`tools/make_oui.py` and the enclosure in `3d-printed-housing/` are not
-linked with anything and carry plain `GPL-2.0-only`.
+`tools/make_oui.py` and the Ethernet case in `3d-printed-housing/` are
+not linked with anything and carry plain `GPL-2.0-only`; the MagSafe
+case carries `CC-BY-NC-SA-4.0`, see above.
 
 The exception can only be granted by whoever holds the copyright.
 Contributions from outside therefore have to accept it as well, or the
@@ -309,12 +318,15 @@ firmware they touch could no longer be distributed as a built image.
 stands.
 
 **Vendor table.** `oui_table.h` is generated by `tools/make_oui.py` from
-the IEEE public OUI listing (<https://standards-oui.ieee.org/oui/oui.csv>).
+the IEEE public listings: MA-L (<https://standards-oui.ieee.org/oui/oui.csv>),
+MA-M (<https://standards-oui.ieee.org/oui28/mam.csv>), MA-S
+(<https://standards-oui.ieee.org/oui36/oui36.csv>) and IAB
+(<https://standards-oui.ieee.org/iab/iab.csv>).
 Like Wireshark's generated `manuf-data.c`, it carries the licence of the
 code it is linked into and names the listing as its source in the file
-header. IEEE does not assert any copyright in the OUI public listing or
+header. IEEE does not assert any copyright in the public listings or
 restrict its distribution; Debian ships the same data as public domain
 in its `ieee-data` package. IEEE asks users to fetch the list from them
 and update it regularly — see
 [Updating the vendor table](docs/install.md#updating-the-vendor-table).
-The raw `oui.csv` download is not part of the repository.
+The raw CSV downloads are not part of the repository.

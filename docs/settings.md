@@ -2,6 +2,21 @@
 
 ![Settings](images/11-settings.png)
 
+Settings is split into tabs, on the left (on a phone on top), each
+with a short status beside it:
+
+| Tab | What it holds |
+|-----|---------------|
+| Sensor | name, sensor id, scanner mode, uptime, boot, source and author; the firmware with *Upload and restart*, *Back to* and *Check for new firmware*; the time with the timezone, the clock source, NTP and the corrections |
+| Network | Ethernet (address, mask, gateway, DNS, MAC, hostname, link) and DHCP (client, lease, failed attempts) |
+| Capture | sweep and frame counters, the capture settings, and the stores on the sensor (frame ring, beacons, association requests, association history) with their fill and *download all* / *clear*; the graphs recorded, kept or with their tab open, with *CSV* and *stop* |
+| Snapshots | the snapshots and the export |
+| Event log | the event log and, after a crash, the core dump; the tab says *crash* in red then |
+| Diagnostics | CPU, memory, tasks and the allocated buffers |
+
+The tab picked is kept per browser. The longer explanations are behind
+the **?** of each box.
+
 These survive a reboot, stored in NVS:
 
 | Setting | Key |
@@ -16,6 +31,7 @@ These survive a reboot, stored in NVS:
 | sensor name | `name`, also used for the DHCP hostname |
 | boot counter, for the catalog | `boots`, raised on every start |
 | what a snapshot keeps | `snapparts`, bits as for `/api/snapshot?parts=` |
+| graphs kept without a viewer | `watchkeep`, six octets per BSSID |
 
 They are written only when one of them actually changes, never on a
 poll, so the flash sees a handful of writes a session rather than
@@ -57,7 +73,7 @@ crash replaces it.
 page shows the log 20 entries to a page, newest first, with a page
 choice under it.
 
-The **CPU** section of Settings says how busy the sensor is, from
+The **CPU** box under Settings → Diagnostics says how busy the sensor is, from
 `/api/system` (`cpu`, `temp`, `loop`), measured every 10 s:
 
 - the load, what the idle task did not get, and per task its share
@@ -68,7 +84,7 @@ The **CPU** section of Settings says how busy the sensor is, from
   with its path, in the last 10 s and since the start;
 - the highest fill of the management queue. While loop() answers a
   request it reads no frames: the queue fills, and once full, frames
-  are dropped (*Management frames dropped* under the counters). Long
+  are dropped (*Management frames dropped* under Capture). Long
   answers do that, `/api/networks` with many networks above all;
 - the answers given up since the start, with the last client: a client
   that stops reading in the middle of one, a VPN switched off for

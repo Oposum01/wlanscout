@@ -85,15 +85,15 @@ two failed attempts, which recovers it in about a second.
 what the lease did. The first lease is logged with its server and time,
 and so is a renewal the server did not answer at once, the step to
 rebinding and a lease that ended. A renewal that goes through on the first
-try is only counted; Settings shows the count, the state and the time
-left in the *DHCP lease* row. Once lwIP has dropped the address it is
+try is only counted; Settings → Network shows the count, the state and
+the time left in the *DHCP lease* row. Once lwIP has dropped the address it is
 logged as lost, and the same recovery as without a lease starts: two
 attempts, then the interface is reinitialised.
 
 ![Ethernet with the DHCP lease](images/26-settings-net.png)
 
 **After a crash.** The event log names the task, the address and the
-cause, and Settings offers the core dump. It is decoded on a PC with
+cause, and Settings → Event log offers the core dump. It is decoded on a PC with
 [esp-coredump](https://github.com/espressif/esp-coredump) (`pip install
 esp-coredump`) and the `.elf` of the very firmware that crashed — the
 build directory's `wlanscout.ino.elf`; the box says whether that is the

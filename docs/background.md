@@ -34,7 +34,8 @@ comes down to "does this handset even support 802.11r", that is the
 difference between an afternoon of guessing and a glance at a table.
 
 Waiting for a station to join by itself can take a while, so force it:
-click the BSS in the spectrum view to lock the sweep to its channel,
+click the BSS in the spectrum view and *scan only channel …* in its
+tooltip to lock the sweep to its channel,
 then make the client reconnect — toggle its Wi-Fi, or walk it out of
 range and back. The association request lands straight away, and with
 the sweep parked there it will not be missed.

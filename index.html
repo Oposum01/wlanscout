@@ -202,12 +202,152 @@ h1 {
     margin-left: 10px;
 }
 
-#sysTable td:first-child,
-#netTable td:first-child,
-#memTable td:first-child,
-#cntTable td:first-child {
+/* Settings: label and value, one label width in every table */
+table.kv td {
+    white-space: normal;
+}
+
+table.kv td:first-child {
     color: #888;
-    width: 260px;
+    width: 190px;
+}
+
+/* Settings in tabs: on the left, on a phone on top */
+.setLayout {
+    display: flex;
+    align-items: flex-start;
+}
+
+.setTabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 190px;
+    padding: 15px 0 15px 15px;
+    position: sticky;
+    top: 0;
+}
+
+.setTabs button {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    text-align: left;
+    background: none;
+    color: #aaa;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    padding: 9px 12px;
+    font-size: 14px;
+}
+
+.setTabs button:hover {
+    color: #fff;
+    background: #1c1c1c;
+}
+
+.setTabs button.active {
+    color: #fff;
+    background: #181818;
+    border-left-color: #3a7fb0;
+}
+
+.setHint {
+    font-size: 11px;
+    color: #888;
+    white-space: nowrap;
+}
+
+.setHint.setAlert {
+    color: #d08080;
+}
+
+.setPanes {
+    flex: 1;
+    min-width: 0;
+}
+
+.setPane {
+    display: none;
+}
+
+.setPane.active {
+    display: block;
+}
+
+/* The boxes of a tab one below the other */
+.setGrid > .section {
+    min-width: 0;
+}
+
+.setHelpBtn {
+    float: right;
+    min-width: 1.8em;
+    padding: 0 4px;
+    font-size: 12px;
+}
+
+.setHelp {
+    display: none;
+    margin-bottom: 8px;
+    line-height: 1.45;
+}
+
+.setHelp.open {
+    display: block;
+}
+
+/* Fill of a capture ring */
+.fillBar {
+    height: 5px;
+    background: #2a2a2a;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 4px;
+    max-width: 260px;
+}
+
+.fillBar i {
+    display: block;
+    height: 100%;
+    background: #4ea3d8;
+}
+
+@media (max-width: 900px) {
+    .setLayout {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .setTabs {
+        flex-direction: row;
+        min-width: 0;
+        padding: 10px 15px 0;
+        border-bottom: 1px solid #333;
+        overflow-x: auto;
+        position: static;
+    }
+
+    .setTabs button {
+        border-left: none;
+        border-bottom: 3px solid transparent;
+        white-space: nowrap;
+        padding: 8px 10px;
+    }
+
+    .setTabs button.active {
+        border-bottom-color: #3a7fb0;
+    }
+
+    .setHint {
+        display: none;
+    }
+
+    table.kv td:first-child {
+        width: 120px;
+    }
 }
 
 canvas {
@@ -456,6 +596,19 @@ a.dl:hover {
     color: #8fd0f5;
 }
 
+/* Leaves the page: the usual box with an arrow out of it */
+a.dl.ext {
+    border-bottom: none;
+    white-space: nowrap;
+}
+
+a.dl.ext svg {
+    width: 0.85em;
+    height: 0.85em;
+    margin-right: 0.2em;
+    vertical-align: -0.05em;
+}
+
 /* At least one association request was captured, so the
    capability data for this station is the complete set */
 tbody tr.assocSeen {
@@ -572,10 +725,77 @@ tbody tr.assocSeen.highlight {
     display: block;
 }
 
+/* A button in the tooltip of a graph, see withScanButton() */
+#tip .tipAction {
+    margin-top: 8px;
+}
+
+#tip .scanOnly {
+    background: #1b1b1b;
+    border: 1px solid #4ea3d8;
+    border-radius: 3px;
+    color: #ddd;
+    font-size: 11px;
+    padding: 2px 9px;
+}
+
 #tip .tipHint {
     margin-top: 6px;
     color: #777;
     font-size: 11px;
+}
+
+/* Details | Graphs in a pinned network tooltip, see addGraphTab() */
+#tip .tipTabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+#tip .tipTab {
+    background: #1b1b1b;
+    border: 1px solid #444;
+    border-radius: 3px;
+    color: #aaa;
+    font-size: 11px;
+    padding: 2px 9px;
+}
+
+#tip .tipTab.active {
+    border-color: #4ea3d8;
+    color: #fff;
+}
+
+/* Graphs recorded on the sensor, in the network table */
+.wkBadge {
+    color: #4ea3d8;
+}
+
+.wkBadge svg {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.12em;
+}
+
+#tip .graphCtl {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 2px;
+    font-size: 11px;
+    color: #aaa;
+}
+
+/* Under the mouse, before the row is clicked: shown, not yet usable */
+#tip .tipTabs.preview .tipTab:not(.active) {
+    color: #777;
+    border-style: dashed;
+}
+
+#tip .tipGraph canvas {
+    display: block;
+    width: 100%;
+    height: 72px;
 }
 
 /* Phones held upright: less padding, so more of a row fits */
@@ -1560,8 +1780,9 @@ over. A green row means at least one association request was
 captured, so its capability data is the complete set rather
 than the subset a probe request carries.
 
-Clicking an AP node restricts the sweep to its channel,
-which captures far more traffic. Stations are derived from
+Clicking an AP node keeps its tooltip open; its scan only
+channel button restricts the sweep to that channel, which
+captures far more traffic. Stations are derived from
 data frames (ToDS/FromDS), probe requests and
 (re)association requests. To AP / From AP are frame counts,
 byte counts are in the tooltip. Peer is Addr3, the address
@@ -1781,13 +2002,59 @@ and are therefore useless for tracking.
 <div id="settingsMode"
      class="modeView">
 
+<div class="setLayout">
+
+<!-- Tabs: on the left, on a phone on top; each with a short status -->
+<nav class="setTabs"
+     id="setTabs">
+<button data-tab="sensor" onclick="window.showSettingsTab('sensor')">Sensor <span class="setHint" id="hintSensor"></span></button>
+<button data-tab="network" onclick="window.showSettingsTab('network')">Network <span class="setHint" id="hintNetwork"></span></button>
+<button data-tab="capture" onclick="window.showSettingsTab('capture')">Capture <span class="setHint" id="hintCapture"></span></button>
+<button data-tab="snapshots" onclick="window.showSettingsTab('snapshots')">Snapshots <span class="setHint" id="hintSnapshots"></span></button>
+<button data-tab="log" onclick="window.showSettingsTab('log')">Event log <span class="setHint" id="hintLog"></span></button>
+<button data-tab="diag" onclick="window.showSettingsTab('diag')">Diagnostics <span class="setHint" id="hintDiag"></span></button>
+</nav>
+
+<div class="setPanes">
+
+<!-- ======================= SENSOR ======================= -->
+<div class="setPane"
+     id="setSensor">
+
+<div class="setGrid">
+
 <div class="section">
 
 <div class="title">
-System
+Sensor
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
+</button>
 </div>
 
-<table>
+<div class="small setHelp">
+The sensor id is the board's MAC and stays; the name is free and goes into the export, the snapshots and the DHCP hostname. The settings page does not change the radio mode, the scanner keeps running in whatever mode it was in.
+</div>
+
+<div class="controls">
+
+<input type="text"
+       id="sensorName"
+       autocomplete="off"
+       placeholder="sensor name, e.g. hall-north"
+       style="background:#1a1a1a;color:#ddd;border:1px solid #3a3a3a;
+              border-radius:3px;padding:4px 8px;font-size:13px;
+              width:220px">
+
+<button onclick="window.saveSensorName()">
+Save name
+</button>
+
+</div>
+
+<table class="kv">
 <tbody id="sysTable">
 </tbody>
 </table>
@@ -1798,13 +2065,19 @@ System
 <div class="section">
 
 <div class="title">
-Firmware update
+Firmware
 <span class="small"
       id="otaInfo">
 </span>
 </div>
 
-<div class="networkControls">
+<table class="kv">
+<tbody id="fwTable">
+</tbody>
+</table>
+
+<div class="networkControls"
+     style="margin-top:10px">
 
 <input type="file"
        id="otaFile"
@@ -1826,60 +2099,28 @@ Back to previous firmware
 
 </div>
 
-</div>
+<div class="networkControls">
 
+<button onclick="uiAction(window.checkFirmwareUpdate, true)">
+Check for new firmware
+</button>
 
-<div class="section">
+<button id="otaFetch"
+        style="display:none"
+        onclick="uiAction(window.fetchFirmwareUpdate)">
+Download
+</button>
 
-<div class="title">
-Ethernet
-</div>
+<button id="otaInstall"
+        style="display:none"
+        onclick="uiAction(window.installFirmwareUpdate)">
+Install
+</button>
 
-<table>
-<tbody id="netTable">
-</tbody>
-</table>
-
-</div>
-
-
-<div class="section">
-
-<div class="title">
-CPU
 <span class="small"
-      id="cpuInfo">
+      id="otaUpdate">
 </span>
-</div>
 
-<table>
-<tbody id="cpuTable">
-</tbody>
-</table>
-
-<div style="height:15px"></div>
-
-<table>
-<thead>
-<tr>
-<th style="cursor:default">Task</th>
-<th style="cursor:default">CPU</th>
-<th style="cursor:default">Stack never used</th>
-</tr>
-</thead>
-<tbody id="cpuTasks">
-</tbody>
-</table>
-
-<div class="small"
-     style="margin-top:8px">
-Shares of the last 10 s, from the run time FreeRTOS counts for every
-task; the load is what the idle task did not get, interrupts count
-for the task they interrupt. <i>loopTask</i> runs the parser and the
-web server, <i>wifi</i> and <i>tiT</i> (lwIP) the radio and the
-network. While loop() answers a request it reads no frames: the
-management queue fills up and, once full, frames are dropped. The
-temperature is the chip's own, not the air around it.
 </div>
 
 </div>
@@ -1888,59 +2129,25 @@ temperature is the chip's own, not the air around it.
 <div class="section">
 
 <div class="title">
-Memory
-</div>
-
-<table>
-<tbody id="memTable">
-</tbody>
-</table>
-
-<div style="height:15px"></div>
-
-<div class="title">
-Allocated buffers
-</div>
-
-<table>
-<thead id="allocHead">
-</thead>
-<tbody id="allocTable">
-</tbody>
-</table>
-
-</div>
-
-
-<div class="section">
-
-<div class="title">
-Sensor identity and export
-</div>
-
-<table>
-<tbody id="idTable">
-</tbody>
-</table>
-
-<div class="controls"
-     style="margin-top:10px">
-
-<input type="text"
-       id="sensorName"
-       autocomplete="off"
-       placeholder="sensor name, e.g. hall-north"
-       style="background:#1a1a1a;color:#ddd;border:1px solid #3a3a3a;
-              border-radius:3px;padding:4px 8px;font-size:13px;
-              width:260px">
-
-<button onclick="window.saveSensorName()">
-Save name
+Time
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
 </button>
+</div>
 
-<button onclick="apiOpen('/api/export')">
-Open export
-</button>
+<div class="small setHelp">
+The timezone shifts displayed times only. Inside the device
+everything stays on UTC &mdash; the capture timestamps, the
+export and the clock arithmetic &mdash; so a capture taken
+here still lines up with one taken anywhere else. There is no
+daylight saving rule on board; pick the offset that applies.
+</div>
+
+<div class="controls">
+
+<span class="small">Timezone</span>
 
 <select id="tzSelect"
         onchange="uiAction(window.setTimezone, this.value)"
@@ -1989,24 +2196,87 @@ Open export
 
 </div>
 
-<div class="small"
-     style="margin-top:8px">
-The timezone shifts displayed times only. Inside the device
-everything stays on UTC &mdash; the capture timestamps, the
-export and the clock arithmetic &mdash; so a capture taken
-here still lines up with one taken anywhere else. There is no
-daylight saving rule on board; pick the offset that applies.
+<table class="kv">
+<tbody id="timeTable">
+</tbody>
+</table>
+
 </div>
 
-<div class="small"
-     style="margin-top:8px">
-/api/export returns everything this sensor knows as one JSON
-document, meant to be merged with other sensors covering the
-same area. Captured frames are not included, those stay
-behind /api/pcap. Every timestamp is absolute UTC epoch
-seconds rather than an age, so records from several sensors
-line up. Narrow the document with sections=networks,clients
-and with since=&lt;epoch&gt; to get only what changed.
+</div>
+
+</div>
+
+
+<!-- ======================= NETWORK ====================== -->
+<div class="setPane"
+     id="setNetwork">
+
+<div class="setGrid">
+
+<div class="section">
+
+<div class="title">
+Ethernet
+</div>
+
+<table class="kv">
+<tbody id="netTable">
+</tbody>
+</table>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+DHCP
+</div>
+
+<table class="kv">
+<tbody id="dhcpTable">
+</tbody>
+</table>
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- ======================= CAPTURE ====================== -->
+<div class="setPane"
+     id="setCapture">
+
+<div class="setGrid">
+
+<div class="section">
+
+<div class="title">
+Sweep and frames
+</div>
+
+<table class="kv">
+<tbody id="cntTable">
+</tbody>
+</table>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Capture
+</div>
+
+<table class="kv">
+<tbody id="capTable">
+</tbody>
+</table>
+
 </div>
 
 </div>
@@ -2015,10 +2285,101 @@ and with since=&lt;epoch&gt; to get only what changed.
 <div class="section">
 
 <div class="title">
+Stored on the sensor
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
+</button>
+</div>
+
+<div class="small setHelp">
+Each ring keeps the newest; once full the oldest go, as designed. <i>download all</i> gives a pcap for Wireshark, <i>clear</i> empties only that store. The association history holds station records, not frames, so it has nothing to download.
+</div>
+
+<table>
+<thead>
+<tr>
+<th style="cursor:default">Store</th>
+<th style="cursor:default">Fill</th>
+<th style="cursor:default">Size</th>
+<th style="cursor:default"></th>
+</tr>
+</thead>
+<tbody id="storeTable">
+</tbody>
+</table>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Graphs recorded
+<span class="small"
+      id="watchInfo">
+</span>
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
+</button>
+</div>
+
+<div class="small setHelp">
+The Graphs tab of a pinned tooltip records its BSS while it is open.
+With <i>keep recording without this tab</i> the sensor goes on
+without it, also after a restart (the samples start anew then), until
+it is unticked or stopped here. Four at most at once, 24 hours each;
+<i>CSV</i> gives the samples, one line per 5 s step.
+</div>
+
+<table>
+<tbody id="watchTable">
+</tbody>
+</table>
+
+</div>
+
+</div>
+
+
+<!-- ====================== SNAPSHOTS ===================== -->
+<div class="setPane"
+     id="setSnapshots">
+
+<div class="section">
+
+<div class="title">
 Snapshots
 <span class="small"
       id="snapInfo">
 </span>
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
+</button>
+</div>
+
+<div class="small setHelp">
+A snapshot keeps what the page shows at one moment on the
+sensor's flash, the last ten (fewer when the tables are full and
+the flash runs short); <i>Keep</i> chooses what goes in,
+stored on the sensor. The camera button next to the status badge
+takes one from any view, and so does a short press on the board's
+BOOT button, without the page; the LED blinks green twice
+when it is written, red when it failed. <i>View</i> shows it with the
+usual tables and tooltips until <i>Back to live</i>. <i>Export</i>
+saves one as a .zip, <i>Export all</i> every one in a single .zip;
+<i>Import</i> puts such files on a sensor again, this one or another,
+where they count as the newest. <i>View file</i> shows a file without
+putting it on the sensor, also without one; <i>Clear all</i>
+deletes every snapshot on the sensor. The capture buffers are
+not included: the pcap links in a snapshot ask the connected sensor
+for what it holds now, so the frames may be gone, and for a snapshot
+from another sensor they were never there; the message then says so.
 </div>
 
 <div class="controls">
@@ -2076,28 +2437,52 @@ Clear all
 </tbody>
 </table>
 
-<div class="small"
-     style="margin-top:8px">
-A snapshot keeps what the page shows at one moment on the
-sensor's flash, the last ten (fewer when the tables are full and
-the flash runs short); <i>Keep</i> chooses what goes in,
-stored on the sensor. The camera button next to the status badge
-takes one from any view, and so does a short press on the board's
-BOOT button, without the page; the LED blinks green twice
-when it is written, red when it failed. <i>View</i> shows it with the
-usual tables and tooltips until <i>Back to live</i>. <i>Export</i>
-saves one as a .zip, <i>Export all</i> every one in a single .zip;
-<i>Import</i> puts such files on a sensor again, this one or another,
-where they count as the newest. <i>View file</i> shows a file without
-putting it on the sensor, also without one; <i>Clear all</i>
-deletes every snapshot on the sensor. The capture buffers are
-not included: the pcap links in a snapshot ask the connected sensor
-for what it holds now, so the frames may be gone, and for a snapshot
-from another sensor they were never there; the message then says so.
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Export
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
+</button>
+</div>
+
+<div class="small setHelp">
+/api/export returns everything this sensor knows as one JSON
+document, meant to be merged with other sensors covering the
+same area. Captured frames are not included, those stay
+behind /api/pcap. Every timestamp is absolute UTC epoch
+seconds rather than an age, so records from several sensors
+line up. Narrow the document with sections=networks,clients
+and with since=&lt;epoch&gt; to get only what changed.
+</div>
+
+<table class="kv">
+<tbody id="idTable">
+</tbody>
+</table>
+
+<div class="controls"
+     style="margin-top:10px">
+
+<button onclick="apiOpen('/api/export')">
+Open export
+</button>
+
+</div>
+
 </div>
 
 </div>
 
+
+<!-- ====================== EVENT LOG ===================== -->
+<div class="setPane"
+     id="setLog">
 
 <div class="section">
 
@@ -2106,6 +2491,21 @@ Event log
 <span class="small"
       id="logInfo">
 </span>
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
+</button>
+</div>
+
+<div class="small setHelp">
+Configuration changes with the address they came from, newest
+first, 20 to a page. The last 80 entries are kept on the device's flash, so they
+survive a restart and a power cut; each start is logged with its
+reason (power on, crash, watchdog, restart by the firmware); after a
+crash the box above the table holds its core dump. Entries
+from an earlier start have no age when the clock was not known
+then.
 </div>
 
 <div id="crashBox"
@@ -2130,16 +2530,45 @@ Event log
      id="logPages">
 </div>
 
-<div class="small"
-     style="margin-top:8px">
-Configuration changes with the address they came from, newest
-first, 20 to a page. The last 80 entries are kept on the device's flash, so they
-survive a restart and a power cut; each start is logged with its
-reason (power on, crash, watchdog, restart by the firmware); after a
-crash the box above the table holds its core dump. Entries
-from an earlier start have no age when the clock was not known
-then.
 </div>
+
+</div>
+
+
+<!-- ===================== DIAGNOSTICS ==================== -->
+<div class="setPane"
+     id="setDiag">
+
+<div class="setGrid">
+
+<div class="section">
+
+<div class="title">
+CPU
+<span class="small"
+      id="cpuInfo">
+</span>
+<button class="helpBtn setHelpBtn"
+        title="What this shows"
+        onclick="window.toggleSetHelp(this)">
+?
+</button>
+</div>
+
+<div class="small setHelp">
+Shares of the last 10 s, from the run time FreeRTOS counts for every
+task; the load is what the idle task did not get, interrupts count
+for the task they interrupt. <i>loopTask</i> runs the parser and the
+web server, <i>wifi</i> and <i>tiT</i> (lwIP) the radio and the
+network. While loop() answers a request it reads no frames: the
+management queue fills up and, once full, frames are dropped. The
+temperature is the chip's own, not the air around it.
+</div>
+
+<table class="kv">
+<tbody id="cpuTable">
+</tbody>
+</table>
 
 </div>
 
@@ -2147,18 +2576,57 @@ then.
 <div class="section">
 
 <div class="title">
-Counters and capture
+Memory
 </div>
 
-<table>
-<tbody id="cntTable">
+<table class="kv">
+<tbody id="memTable">
 </tbody>
 </table>
 
-<div class="small"
-     style="margin-top:8px">
-The settings page does not change the radio mode, the
-scanner keeps running in whatever mode it was in.
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Tasks
+</div>
+
+<table>
+<thead>
+<tr>
+<th style="cursor:default">Task</th>
+<th style="cursor:default">CPU</th>
+<th style="cursor:default">Stack never used</th>
+</tr>
+</thead>
+<tbody id="cpuTasks">
+</tbody>
+</table>
+
+</div>
+
+
+<div class="section">
+
+<div class="title">
+Allocated buffers
+</div>
+
+<table>
+<thead id="allocHead">
+</thead>
+<tbody id="allocTable">
+</tbody>
+</table>
+
+</div>
+
+</div>
+
+</div>
+
 </div>
 
 </div>
@@ -2953,14 +3421,15 @@ const FILTER_HELP = [
     ["ftm responder", "FTM announced (also ftm initiator)"],
     ["colour change", "BSS colour change announced"],
     ["broken suite", "cipher suite under a misplaced OUI"],
-    ["basic rates 1", "a basic rate (basic rates none: none marked)"],
+    ["basic:1", "a basic rate in Mbit/s, exactly (basic:none: none marked)"],
     ["headunit", "a car's (Car Connectivity Consortium element, CarPlay accessory)"],
     ["camera", "wireless camera kit (Xiongmai/AltoBeam element)"],
     ["punctured", "Wi-Fi 7 subchannels left out (preamble puncturing)"],
     ["twt", "Target Wake Time offered or scheduled (twt schedule: a broadcast one)"],
     ["wave2", "Wi-Fi 5 AP with MU-MIMO (Wave 2), wave1 without"],
     ["collision", "BSS colour also used by another device on the channel"],
-    ["broadcom chip", "Wi-Fi chip from the vendor elements"]
+    ["broadcom chip", "Wi-Fi chip from the vendor elements"],
+    ["ma-m", "BSSID from a small IEEE block, also ma-s"]
 ];
 
 const STATION_FILTER_HELP = [
@@ -2977,7 +3446,8 @@ const STATION_FILTER_HELP = [
     ["mumimo", "the station takes MU-MIMO (MU beamformee)"],
     ["mlo", "multi-link (Wi-Fi 7)"],
     ["awdl", "Apple Wireless Direct Link, also apple"],
-    ["broadcom chip", "Wi-Fi chip from the vendor elements"]
+    ["broadcom chip", "Wi-Fi chip from the vendor elements"],
+    ["ma-m", "address from a small IEEE block, also ma-s"]
 ];
 
 function filterHelpHtml(list, what)
@@ -3208,14 +3678,82 @@ function setActiveScan(on)
 let uiPage = "wifi";
 
 
-function showSettings()
+function showSettings(tab)
 {
     uiPage = "settings";
 
     applyModeUI();
 
+    showSettingsTab(tab || settingsTab());
+
     updateSystem();
     updateSnapshots();
+}
+
+
+/*
+ * The tab of Settings shown, kept per browser; Sensor when none was
+ * picked yet or the stored one no longer exists.
+ */
+const SETTINGS_TABS = ["sensor", "network", "capture", "snapshots", "log",
+                       "diag"];
+
+function settingsTab()
+{
+    let tab = null;
+
+    try
+    {
+        tab = localStorage.getItem("wlanscout.settingsTab");
+    }
+    catch (e)
+    {
+    }
+
+    return SETTINGS_TABS.includes(tab) ? tab : "sensor";
+}
+
+function showSettingsTab(tab)
+{
+    if (!SETTINGS_TABS.includes(tab))
+        tab = "sensor";
+
+    document.querySelectorAll("#setTabs button").forEach(b =>
+        b.classList.toggle("active", b.dataset.tab === tab));
+
+    document.querySelectorAll(".setPane").forEach(p =>
+        p.classList.toggle("active",
+            p.id === "set" + tab[0].toUpperCase() + tab.slice(1)));
+
+    try
+    {
+        localStorage.setItem("wlanscout.settingsTab", tab);
+    }
+    catch (e)
+    {
+    }
+}
+
+window.showSettingsTab = showSettingsTab;
+
+// The "?" of a Settings box opens its explanation
+function toggleSetHelp(button)
+{
+    const help = button.closest(".section").querySelector(".setHelp");
+
+    if (help)
+        help.classList.toggle("open");
+}
+
+window.toggleSetHelp = toggleSetHelp;
+
+// The short status beside a tab
+function setHint(id, text)
+{
+    const el = document.getElementById(id);
+
+    if (el)
+        el.innerText = text || "";
 }
 
 
@@ -4764,6 +5302,9 @@ function showSnapshotList(list)
         ? "(" + list.snapshots.length + " of " + list.keep + ")"
         : "(no flash file system)";
 
+    setHint("hintSnapshots", list.fs
+        ? list.snapshots.length + " of " + list.keep : "");
+
     // Firmware before 1.70.0 keeps everything and has no setting
     document.querySelectorAll("#snapParts input").forEach(box =>
     {
@@ -4912,9 +5453,13 @@ function showTip(html, clientX, clientY, pinnable = false)
     if (tipPinned && /^mouse/.test((window.event || {}).type || ""))
         return;
 
-    // How to keep it open, for the mouse on a table row
+    // How to keep it open, for the mouse on a table row or a graph
     if (pinnable && !tipPinned && lastPointerType === "mouse")
-        html += "<div class='tipHint'>click the row to keep it open</div>";
+        html += "<div class='tipHint'>" +
+                (pinnable === true ? "click the row" : pinnable) +
+                " to keep it open" +
+                (html.includes("tipDetails") ? ", then Graphs works" : "") +
+                "</div>";
 
     // What is on screen: on a phone the page can be wider than
     // that, and a tooltip placed by the page width ran off it
@@ -4930,9 +5475,19 @@ function showTip(html, clientX, clientY, pinnable = false)
     // Never taller than the screen; the rest scrolls inside it
     tip.style.maxHeight = (viewH - 8) + "px";
 
+    // Another tooltip: the graphs of the one before stop recording
+    stopGraphWatch();
+
     tip.innerHTML =
         "<button class='tipClose' aria-label='Close' " +
         "onclick='hideTip()'>\u2715</button>" + html;
+
+    // A tap's tooltip stays and takes taps, it can switch to graphs;
+    // under the mouse the tabs show already, so Graphs can be found
+    if (lastPointerType !== "mouse")
+        addGraphTab(tip);
+    else if (!tipPinned)
+        addGraphTab(tip, true);
 
     // Only when it opens: mousemove calls this again and again
     if (tip.style.display !== "block")
@@ -5005,16 +5560,47 @@ function pinOnClick(tr, makeHtml)
             ev.target.closest("a, button, input"))
             return;
 
-        tipPinned = false;
-        showTip(makeHtml(), ev.clientX, ev.clientY);
-
-        const tip = document.getElementById("tip");
-
-        tipPinned = true;
-        tip.classList.add("pinned");
-        tip.style.pointerEvents = "";
+        pinTip(makeHtml(), ev.clientX, ev.clientY);
     });
 }
+
+function pinTip(html, clientX, clientY)
+{
+    tipPinned = false;
+    showTip(html, clientX, clientY);
+
+    const tip = document.getElementById("tip");
+
+    tipPinned = true;
+    tip.classList.add("pinned");
+    tip.style.pointerEvents = "";
+
+    addGraphTab(tip);
+}
+
+/*
+ * A click on a network or station in a graph pins its tooltip, like
+ * a click on a table row; restricting the sweep to its channel, which
+ * the click did before, is a button in it now. On a touch screen the
+ * tapped tooltip stays anyway and has the button too.
+ */
+function withScanButton(html, ch, pinning)
+{
+    if (!ch || snapshotView || (!pinning && lastPointerType === "mouse"))
+        return html;
+
+    return html + "<div class='tipAction'><button class='scanOnly' " +
+        "onclick='scanOnlyChannel(" + ch + ")'>scan only channel " + ch +
+        "</button></div>";
+}
+
+function scanOnlyChannel(ch)
+{
+    focusChannel(ch);
+    hideTip();
+}
+
+window.scanOnlyChannel = scanOnlyChannel;
 
 document.addEventListener("keydown", e =>
 {
@@ -5082,6 +5668,471 @@ function hideTip()
     document.getElementById("tip").classList.remove("pinned");
 
     document.getElementById("tip").style.display = "none";
+
+    stopGraphWatch();
+}
+
+
+// ==========================================================
+// Graphs of one BSS in its pinned tooltip
+// ==========================================================
+
+/*
+ * Recorded by the sensor only while asked for: the Graphs tab starts
+ * it with /api/watch and renews it every GRAPH_POLL_MS, fetching the
+ * samples since the last ones; closing or replacing the tooltip stops
+ * it, and a sensor nobody renews stops it after 3 min. One sample per
+ * step (5 s): RSSI min/avg/max of the beacons and probe responses,
+ * the BSS Load's utilisation and stations, the stations the sensor
+ * sees on the BSS.
+ */
+const GRAPH_POLL_MS = 5000;
+
+let graphWatch = null;
+
+function addGraphTab(tip, preview = false)
+{
+    const details = tip.querySelector(".tipDetails");
+    const shown = tip.querySelector(".tipTabs");
+
+    // Pinned: the preview gives way to the tabs that work
+    if (shown && !preview && shown.classList.contains("preview"))
+        shown.remove();
+    else if (shown)
+        return;
+
+    if (!details)
+        return;
+
+    const tabs = document.createElement("div");
+
+    // preview: the tooltip that follows the mouse, it takes no clicks
+    tabs.className = "tipTabs" + (preview ? " preview" : "");
+    tabs.innerHTML =
+        "<button class='tipTab active' data-tab='details'>Details</button>" +
+        "<button class='tipTab' data-tab='graphs'" +
+        (preview ? " title='Click to keep the tooltip open'" : "") +
+        ">Graphs</button>";
+
+    if (preview)
+    {
+        details.before(tabs);
+        return;
+    }
+
+    const graphs = document.createElement("div");
+
+    graphs.className = "tipGraphs";
+    graphs.style.display = "none";
+
+    details.before(tabs);
+    details.after(graphs);
+
+    tabs.addEventListener("click", ev =>
+    {
+        const b = ev.target.closest(".tipTab");
+
+        if (!b)
+            return;
+
+        const toGraphs = b.dataset.tab === "graphs";
+
+        tabs.querySelectorAll(".tipTab").forEach(t =>
+            t.classList.toggle("active", t === b));
+
+        details.style.display = toGraphs ? "none" : "";
+        graphs.style.display = toGraphs ? "" : "none";
+
+        if (toGraphs)
+            startGraphWatch(details.dataset.bssid, graphs);
+        else
+            stopGraphWatch();
+    });
+}
+
+function startGraphWatch(bssid, box)
+{
+    stopGraphWatch();
+
+    if (snapshotView)
+    {
+        box.innerHTML = "<span class='dim'>Graphs are recorded live, " +
+                        "there are none in a snapshot.</span>";
+        return;
+    }
+
+    graphWatch = { bssid: bssid, box: box, next: 0, samples: [],
+                   step: 5, epoch: 0, up: 0, first: 0, error: "",
+                   answered: false, restarts: 0,
+                   seed: graphSeed(bssid),
+                   timer: setInterval(fetchGraphWatch, GRAPH_POLL_MS) };
+
+    drawGraphWatch();
+    fetchGraphWatch();
+}
+
+/*
+ * What the tooltip says when the tab opens, as the point before the
+ * first step: the curves start with something instead of nothing
+ */
+function graphSeed(bssid)
+{
+    const n = networks.find(x => x.bssid === bssid);
+
+    if (!n || !n.rssi)
+        return null;
+
+    return { k: -1, seed: true,
+             s: [n.rssi, n.rssi, n.rssi,
+                 n.util >= 0 ? n.util : 255,
+                 n.sta >= 0 ? n.sta : 65535,
+                 n.clients || 0, 1] };
+}
+
+/*
+ * The checkbox of the Graphs tab: the sensor records this BSS on
+ * without the tab, after a restart as well, until it is unticked
+ */
+function setGraphKeep(on)
+{
+    if (graphWatch)
+        fetchGraphWatch("&keep=" + (on ? 1 : 0));
+}
+
+function stopGraphWatch()
+{
+    if (!graphWatch)
+        return;
+
+    clearInterval(graphWatch.timer);
+
+    const bssid = graphWatch.bssid;
+
+    graphWatch = null;
+
+    api("/api/watch?bssid=" + bssid + "&stop=1", { cache: "no-store" })
+        .catch(() => { });
+}
+
+async function fetchGraphWatch(extra = "")
+{
+    const w = graphWatch;
+
+    if (!w)
+        return;
+
+    try
+    {
+        const response = await api("/api/watch?bssid=" + w.bssid +
+                                   "&since=" + w.next + extra,
+                                   { cache: "no-store",
+                                     signal: timeoutSignal(4000) });
+
+        const j = await response.json();
+
+        // Stopped or replaced meanwhile
+        if (graphWatch !== w)
+            return;
+
+        if (!j.ok)
+        {
+            w.error = j.error || "not recorded";
+            drawGraphWatch();
+            return;
+        }
+
+        /*
+         * The sensor dropped the recording (no poll for a while, a
+         * restart) and began a new one: its numbers start at 0
+         * again, so the old points go and the new one is read whole
+         */
+        if (w.answered && j.up !== w.up)
+        {
+            // An earlier start than the old one: the sensor restarted
+            w.restartedSensor = j.up < w.up;
+            w.samples = [];
+            w.seed = null;
+            w.next = 0;
+            w.up = j.up;
+            w.restarts++;
+            return fetchGraphWatch();
+        }
+
+        w.answered = true;
+        w.keep = !!j.keep;
+        w.error = "";
+        w.step = j.step;
+        w.epoch = j.epoch;
+        w.up = j.up;
+        w.first = j.first;
+
+        // Samples the ring no longer holds go here as well
+        w.samples = w.samples.concat(j.s.map((s, i) =>
+            ({ k: Math.max(w.next, j.first) + i, s: s })))
+            .filter(x => x.k >= j.first);
+
+        w.next = j.next;
+
+        drawGraphWatch();
+    }
+    catch (e)
+    {
+        if (graphWatch === w)
+        {
+            w.error = "no answer from the sensor";
+            drawGraphWatch();
+        }
+    }
+}
+
+// The time a sample's step began, as text
+function graphTimeText(w, k)
+{
+    if (w.epoch)
+        return new Date((w.epoch + k * w.step) * 1000)
+            .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    const ago = (w.next - k) * w.step;
+
+    return ago < 90 ? "\u2212" + ago + " s"
+                    : "\u2212" + Math.round(ago / 60) + " min";
+}
+
+function drawGraphWatch()
+{
+    const w = graphWatch;
+
+    if (!w)
+        return;
+
+    const n = w.samples.length;
+    const gaps = w.samples.filter(x => !x.s[6]).length;
+
+    // The tooltip's values first, while the ring still holds sample 0
+    const points = (w.seed && w.first === 0 ? [w.seed] : []).concat(w.samples);
+
+    let head;
+
+    if (w.error)
+        head = "Not recorded: " + escapeHTML(w.error);
+    else if (!w.next)
+        head = "Recording, the first step ends after " + w.step + " s" +
+               (w.seed ? "; so far what the tooltip says" : "");
+    else
+        head = (w.epoch ? "Recording since " + graphTimeText(w, w.first)
+                        : "Recording for " +
+                          uptimeText((w.next - w.first) * w.step)) +
+               " \u00b7 " + w.step + " s steps \u00b7 " + n + " point" +
+               (n === 1 ? "" : "s") +
+               (w.restarts ? "<br><span class='dim'>Started anew: " +
+                             (w.restartedSensor
+                                 ? "the sensor restarted"
+                                 : "the sensor had dropped the recording, " +
+                                   "no poll came for 3 min") +
+                             "</span>" : "") +
+               (gaps ? "<br><span class='dim'>" + gaps + " without a " +
+                       "beacon: the sweep was elsewhere; for whole curves " +
+                       "scan only its channel, with the button in its tooltip in the graph" +
+                       "</span>" : "");
+
+    if (!w.box.querySelector("canvas"))
+    {
+        w.box.innerHTML =
+            "<div class='graphHead'></div>" +
+            "<div class='graphCtl'><label><input type='checkbox' " +
+            "class='graphKeep'> keep recording without this tab</label>" +
+            "<button class='small graphCsv'>CSV</button></div>" +
+            ["RSSI (dBm): average, the band from lowest to highest",
+             "BSS Load (% of the channel)",
+             "Stations: <span style='color:#c8a050'>per the AP</span>, " +
+             "<span style='color:#8fbf8f'>seen by the sensor</span>"].map(t =>
+                "<div class='tipSec'>" + t + "</div>" +
+                "<div class='tipGraph'><canvas></canvas></div>").join("");
+
+        w.box.querySelector(".graphKeep").addEventListener("change", ev =>
+            setGraphKeep(ev.target.checked));
+        w.box.querySelector(".graphCsv").addEventListener("click", () =>
+            apiDownload("/api/watch?bssid=" + w.bssid + "&csv=1"));
+    }
+
+    w.box.querySelector(".graphHead").innerHTML = head;
+
+    const keepBox = w.box.querySelector(".graphKeep");
+
+    keepBox.checked = !!w.keep;
+    keepBox.disabled = !w.answered;
+    w.box.querySelector(".graphCsv").disabled = !w.answered;
+
+    const canvases = w.box.querySelectorAll("canvas");
+    const xs = points.map(x => x.k);
+
+    drawGraphSeries(canvases[0], w, points, xs, {
+        band: x => x.s[6] ? [x.s[0], x.s[2]] : null,
+        lines: [{ value: x => x.s[6] ? x.s[1] : null, color: "#4ea3d8" }],
+        unit: " dBm"
+    });
+
+    drawGraphSeries(canvases[1], w, points, xs, {
+        lines: [{ value: x => x.s[3] !== 255 ? x.s[3] : null,
+                  color: "#c8a050" }],
+        min: 0, max: 100, unit: " %",
+        empty: "no BSS Load element"
+    });
+
+    drawGraphSeries(canvases[2], w, points, xs, {
+        lines: [{ value: x => x.s[4] !== 65535 ? x.s[4] : null,
+                  color: "#c8a050" },
+                { value: x => x.s[5], color: "#8fbf8f" }],
+        min: 0, unit: "", integer: true
+    });
+}
+
+/*
+ * One small graph: lines broken where a value is missing, an optional
+ * band behind the first, the newest value and the range at the right
+ */
+function drawGraphSeries(canvas, w, samples, xs, o)
+{
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth || 380;
+    const height = canvas.clientHeight || 72;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const values = [];
+
+    samples.forEach(x =>
+    {
+        o.lines.forEach(l => { const v = l.value(x); if (v !== null) values.push(v); });
+
+        const b = o.band && o.band(x);
+
+        if (b)
+            values.push(b[0], b[1]);
+    });
+
+    ctx.font = "10px Arial";
+    ctx.fillStyle = "#777";
+
+    if (!values.length)
+    {
+        ctx.fillText(samples.length && o.empty ? o.empty : "no data yet",
+                     4, height / 2);
+        return;
+    }
+
+    let lo = o.min !== undefined ? o.min : Math.min(...values) - 3;
+    let hi = o.max !== undefined ? o.max : Math.max(...values) + 3;
+
+    if (hi - lo < (o.integer ? 2 : 6))
+        hi = lo + (o.integer ? 2 : 6);
+
+    const left = 4, right = width - 46, top = 4, bottom = height - 14;
+    const k0 = xs[0], k1 = Math.max(xs[xs.length - 1], k0 + 1);
+
+    const X = k => left + (right - left) * (k - k0) / (k1 - k0);
+    const Y = v => bottom - (bottom - top) * (v - lo) / (hi - lo);
+
+    // Frame and time labels
+    ctx.strokeStyle = "#333";
+    ctx.strokeRect(left, top, right - left, bottom - top);
+    ctx.fillText(graphTimeText(w, k0), left, height - 2);
+
+    const endText = graphTimeText(w, xs[xs.length - 1]);
+
+    ctx.fillText(endText, right - ctx.measureText(endText).width, height - 2);
+    ctx.fillText(Math.round(hi) + o.unit, right + 4, top + 8);
+    ctx.fillText(Math.round(lo) + o.unit, right + 4, bottom);
+
+    // The band as one area per run of samples that have it
+    if (o.band)
+    {
+        ctx.fillStyle = "rgba(78,163,216,0.22)";
+
+        let run = [];
+
+        const fillRun = () =>
+        {
+            if (!run.length)
+                return;
+
+            ctx.beginPath();
+            run.forEach((p, i) => i ? ctx.lineTo(p.x, p.hi) : ctx.moveTo(p.x, p.hi));
+
+            if (run.length === 1)
+                ctx.lineTo(run[0].x + 1, run[0].hi);
+
+            [...run].reverse().forEach(p => ctx.lineTo(p.x + (run.length === 1 ? 1 : 0), p.lo));
+            ctx.closePath();
+            ctx.fill();
+            run = [];
+        };
+
+        samples.forEach(x =>
+        {
+            const b = o.band(x);
+
+            if (b)
+                run.push({ x: X(x.k), lo: Y(b[0]), hi: Y(b[1]) });
+            else
+                fillRun();
+        });
+
+        fillRun();
+    }
+
+    o.lines.forEach(l =>
+    {
+        ctx.strokeStyle = l.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+
+        let open = false;
+
+        samples.forEach(x =>
+        {
+            const v = l.value(x);
+
+            if (v === null)
+            {
+                open = false;
+                return;
+            }
+
+            if (open)
+                ctx.lineTo(X(x.k), Y(v));
+            else
+            {
+                ctx.moveTo(X(x.k), Y(v));
+
+                // A lone point still shows
+                ctx.lineTo(X(x.k) + 0.5, Y(v));
+            }
+
+            open = true;
+        });
+
+        ctx.stroke();
+    });
+
+    // The newest value of each line, at the right
+    let ty = top + 20;
+
+    o.lines.forEach(l =>
+    {
+        const last = [...samples].reverse().map(l.value).find(v => v !== null);
+
+        if (last === undefined)
+            return;
+
+        ctx.fillStyle = l.color;
+        ctx.fillText(String(last) + o.unit, right + 4, ty);
+        ty += 11;
+    });
 }
 
 
@@ -5195,7 +6246,9 @@ function ehtCapText(x)
             phy & 0x02 ? "320 MHz (6 GHz)" : "",
             mac & 0x10 ? "restricted TWT" : "",
             mac & 0x01 ? "EPCS priority access" : "",
-            mac & 0x20 ? "SCS traffic description" : ""]
+            // Said once, in the QoS Mgmt row, when the WFA element has it
+            mac & 0x20 && !((x.wfacapa || 0) & 4)
+                ? "SCS traffic description" : ""]
         .filter(t => t).join(", ");
 }
 
@@ -5635,7 +6688,7 @@ function axisChannels(b, s)
 }
 
 
-function drawAxis(ctx, bands, top, bottom, withFreqRange)
+function drawAxis(ctx, bands, top, bottom, withFreqRange, noLabels)
 {
     bands.forEach(b =>
     {
@@ -5643,7 +6696,8 @@ function drawAxis(ctx, bands, top, bottom, withFreqRange)
         ctx.font = "13px Arial";
         ctx.textAlign = "left";
 
-        ctx.fillText(b.label, b.x0, 16);
+        if (!noLabels)
+            ctx.fillText(b.label, b.x0, 16);
 
         b.segments.forEach((s, si) =>
         {
@@ -6143,6 +7197,9 @@ const FILTER_KEYS = {
     ch:   (n, v) => String(n.channel) === v,
     dtim: (n, v) => !!n.dtim && String(n.dtim[0]) === v,
     pmf:  (n, v) => v === (n.mfpr ? "required" : n.mfpc ? "capable" : "off"),
+    // In Mbit/s as the tooltip lists them, or none when none is marked
+    basic: (n, v) => (n.basicrates || []).length
+        ? n.basicrates.map(r => String(r / 2)).includes(v) : v === "none",
     // As Wireshark shows it or as hostapd's mobility_domain has it
     mdid: (n, v) => !!n.mdid &&
         [n.mdid[0].toString(16).padStart(4, "0"), mdidHostapd(n.mdid[0])]
@@ -6181,6 +7238,7 @@ function matchesFilter(n)
         // FTM frames seen, not the capability ("ftm responder")
         n.ftm ? "ranging" : "",
         n.vendor,
+        vendorBlockText(n.bssid, n.vblk),
         n.channel,
         bandwidthText(n.bandwidth).replace(" ", ""),
         n.sec,
@@ -6242,6 +7300,7 @@ function matchesFilter(n)
         colourTwins(n).length ? "colour collision" : "",
         n.ovr ? "override " + overrideText(n) : "",
         n.p2p || n.wfd !== undefined ? "wi-fi direct p2p " + p2pText(n) : "",
+        deviceTypeText(n) ? "device " + deviceTypeText(n) : "",
         n.mbo ? mboText(n) : "",
         n.hp ? "printer " + printerText(n) : "",
         n.wpsname ? "wps device " + n.wpsname : "",
@@ -6922,6 +7981,121 @@ function loadBadge(ctx, x0, x1, top, red, colour)
 // Network graph
 // ==========================================================
 
+/*
+ * The band headings of the BSSID graph are buttons: one shows only
+ * that band across the whole width, which a phone held upright needs,
+ * the lit one again shows both. The sweep stays as it is. The browser
+ * keeps the choice.
+ */
+let graphBand = (() =>
+{
+    try { return localStorage.getItem("wlanscout.graphBand") || ""; }
+    catch (e) { return ""; }
+})();
+
+let graphBandButtons = [];
+
+function setGraphBand(band)
+{
+    graphBand = band;
+
+    try { localStorage.setItem("wlanscout.graphBand", band); } catch (e) { }
+
+    drawNetworkGraph();
+    updateNetworkTable();
+}
+
+// The band chosen, while the sweep covers both, else "" for all
+function shownGraphBand()
+{
+    const swept = activeChannels();
+
+    return swept.some(isBand24) && swept.some(c => !isBand24(c))
+        ? graphBand : "";
+}
+
+// In the band the graph and the network table show
+function inShownBand(n)
+{
+    const band = shownGraphBand();
+
+    return !band || (band === "24") === isBand24(n.channel);
+}
+
+function bandButtonTip(band)
+{
+    const name = band === "24" ? "2.4 GHz" : "5 GHz";
+
+    return graphBand === band
+        ? "<b>Show both bands again</b><br><span class='dim'>Graph and " +
+          "network table back to 2.4 and 5 GHz.</span>"
+        : "<b>Show only " + name + "</b><br><span class='dim'>Graph across " +
+          "the whole width and the network table limited to " + name +
+          ". The sweep stays as it is.</span>";
+}
+
+function bandButtonAt(x, y)
+{
+    const b = graphBandButtons.find(r => x >= r.x0 && x <= r.x1 &&
+                                         y >= r.y0 && y <= r.y1);
+
+    return b ? b.band : null;
+}
+
+// Over each band shown its heading as a button, beside a lone band
+// the button of the other one
+function drawBandButtons(ctx, bands, both)
+{
+    graphBandButtons = [];
+
+    // A sweep over one band only: the heading as before, nothing to switch
+    if (!both)
+    {
+        ctx.font = "13px Arial";
+        ctx.fillStyle = "#aaa";
+        ctx.textAlign = "left";
+        bands.forEach(b => ctx.fillText(b.label, b.x0, 16));
+        return;
+    }
+
+    const draw = (label, band, x) =>
+    {
+        ctx.font = "13px Arial";
+
+        const w = ctx.measureText(label).width + 14;
+        const lit = graphBand === band;
+
+        ctx.fillStyle = lit ? "#1d3a50" : "#1b1b1b";
+        ctx.strokeStyle = lit ? "#4ea3d8" : "#555";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.rect(x + 0.5, 3.5, w, 19);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = lit ? "#fff" : "#aaa";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(label, x + 7, 17);
+
+        graphBandButtons.push({ x0: x, x1: x + w + 1, y0: 2, y1: 24,
+                                band: band });
+
+        return x + w + 8;
+    };
+
+    if (!graphBand)
+    {
+        bands.forEach(b => draw(b.label, b.is24 ? "24" : "5", b.x0));
+        return;
+    }
+
+    let x = draw(bands[0].label, graphBand, bands[0].x0);
+
+    draw(graphBand === "24" ? "5 GHz" : "2.4 GHz",
+         graphBand === "24" ? "5" : "24", x);
+}
+
 function drawNetworkGraph()
 {
     const canvas =
@@ -6959,10 +8133,20 @@ function drawNetworkGraph()
         return bottom - v * graphHeight;
     }
 
-    const shown = filteredNetworks();
+    // One band only, by its button: the drawing, not the sweep
+    const swept = activeChannels();
+    const has24 = swept.some(isBand24);
+    const has5 = swept.some(c => !isBand24(c));
+
+    if (graphBand && !(has24 && has5))
+        graphBand = "";
+
+    const inBand = ch => !graphBand || (graphBand === "24") === isBand24(ch);
+
+    const shown = filteredNetworks().filter(inShownBand);
 
     const bands =
-        computeLayout(activeChannels(), left, right, shown);
+        computeLayout(swept.filter(inBand), left, right, shown);
 
     if (!bands.length)
         return;
@@ -6995,7 +8179,9 @@ function drawNetworkGraph()
         }
     }
 
-    drawAxis(ctx, bands, top, bottom, true);
+    drawAxis(ctx, bands, top, bottom, true, true);
+
+    drawBandButtons(ctx, bands, has24 && has5);
 
     const placed = [];
 
@@ -7714,6 +8900,21 @@ function ftmParamText(hex)
     ].filter(x => x).join(", ");
 }
 
+// External link: a box with an arrow leaving it, in the link's colour
+const EXT_ICON = "<svg viewBox='0 0 24 24' aria-hidden='true'>" +
+    "<path d='M14 4h6v6 M20 4l-9 9 M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1" +
+    "V7a1 1 0 0 1 1-1h5' fill='none' stroke='currentColor' " +
+    "stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/>" +
+    "</svg>";
+
+// [<icon>map] to OpenStreetMap in a new tab; href without quotes
+function mapLink(href, label)
+{
+    return "<a class='dl ext' target='_blank' rel='noopener' " +
+        "title='Open in OpenStreetMap' href='" + href + "'>[" + EXT_ICON +
+        (label || "map") + "]</a>";
+}
+
 /*
  * ftmlci: the LCI field of a Measurement Report, 16 octets, bits
  * from the least significant of the first octet (802.11-2020
@@ -7746,10 +8947,9 @@ function lciText(hex)
     // On OpenStreetMap, as the drone's position
     const y = lat.toFixed(6), x = lon.toFixed(6);
 
-    return "<a class='dl' target='_blank' rel='noopener' " +
-        "href='https://www.openstreetmap.org/?mlat=" + y + "&mlon=" + x +
-        "#map=18/" + y + "/" + x + "'>" +
-        deg(lat, "N", "S") + ", " + deg(lon, "E", "W") + "</a>" +
+    return mapLink("https://www.openstreetmap.org/?mlat=" + y + "&mlon=" +
+                   x + "#map=18/" + y + "/" + x) + " " +
+        deg(lat, "N", "S") + ", " + deg(lon, "E", "W") +
         (altType === 1 ? ", " + Math.round(alt) + " m"
          : altType === 2 ? ", floor " + Math.round(alt) : "");
 }
@@ -7787,15 +8987,25 @@ function civicText(hex)
     }
 
     const street = parts.road || parts.street;
-
-    return [
+    const place = [
         [street, parts.number].filter(x => x).join(" "),
         [parts.postcode, parts.city].filter(x => x).join(" "),
-        text(b.slice(0, 2)),
+        text(b.slice(0, 2))
+    ].filter(x => x);
+    const all = place.concat([
         parts.building ? "building " + parts.building : "",
         parts.floor ? "floor " + parts.floor : "",
         parts.room ? "room " + parts.room : ""
-    ].filter(x => x).map(escapeHTML).join(", ");
+    ].filter(x => x)).map(escapeHTML).join(", ");
+
+    // OpenStreetMap searches the street, the city and the country;
+    // building, floor and room it would not find
+    if (!street && !parts.city && !parts.postcode)
+        return all;
+
+    return mapLink("https://www.openstreetmap.org/search?query=" +
+                   encodeURIComponent(place.join(", "))
+                       .replace(/'/g, "%27")) + " " + all;
 }
 
 // ftm of a BSS: [requests to it, FTM frames from it, [stations]]
@@ -7890,6 +9100,48 @@ function ftText(n)
            (n.mdid[1] & 1 ? ", over the air and the DS" : ", over the air");
 }
 
+/*
+ * A channel switch announced (CSA, Extended CSA): the channel, the
+ * width after it from the Wide Bandwidth Channel Switch (csaw: [width,
+ * centre, second centre]) with a new country (csacc) if any, the
+ * beacons left, and the likely reason: mode 1 has the stations stop
+ * sending until the switch, as after radar; the same width and centre
+ * as now only move the primary channel, the AP's own choice.
+ */
+function csaText(n)
+{
+    const w = n.csaw;
+
+    const width = !w ? ""
+        : w[0] === 8080 ? ", 80+80 MHz (centres " + w[1] + " and " + w[2] + ")"
+        : ", " + w[0] + " MHz (centre " + w[1] + ")";
+
+    const sameBlock = w && w[0] === n.bandwidth && w[1] === n.center &&
+                      (w[0] !== 8080 || w[2] === n.center2);
+
+    const reason =
+        n.csamode === 1
+            ? "Its stations stop sending until then, as after a radar " +
+              "detection on a DFS channel"
+        : sameBlock
+            ? "The same " + (w[0] === 8080 ? "80+80" : w[0] + " MHz") +
+              " as now, only the primary channel moves: the AP's own " +
+              "channel selection, no radar"
+            : "Usually a radar detection on a DFS channel, or an automatic " +
+              "channel selection run";
+
+    // Max Channel Switch Time: off the air at most that long
+    const gap = n.csatime
+        ? ", off the air for at most " + n.csatime + " TU (" +
+          Math.round(n.csatime * 1.024) + " ms)"
+        : "";
+
+    return "Channel switch announced: moving to channel " + n.csach + width +
+           (n.csacc ? ", country " + escapeHTML(n.csacc) : "") +
+           " in " + n.csacnt + " beacon" + (n.csacnt === 1 ? "" : "s") +
+           gap + ". " + reason;
+}
+
 function ssidOutlierNotes(n)
 {
     const amber = "#c8a050";
@@ -7959,6 +9211,19 @@ function ssidOutlierNotes(n)
     return notes;
 }
 
+// Recognised as beaconing without being an AP, or ""
+function notApText(n)
+{
+    if (n.xbox)
+        return "an Xbox's link to its controllers";
+
+    if (n.sec === "Wi-Fi Direct")
+        return "a Wi-Fi Direct device waiting to be found, no group yet";
+
+    return "";
+}
+
+
 function networkNotes(n)
 {
     const notes = [];
@@ -7972,6 +9237,13 @@ function networkNotes(n)
 
     (n.unk || []).forEach((code, i) =>
         notes.push([pink, unknownElementText(n, i)]));
+
+    // A device that beacons but is no AP: what is said of an AP's
+    // SSID, rates, country and age does not apply to it
+    const notAp = notApText(n);
+
+    if (notAp)
+        notes.push([blue, "Not an access point: " + notAp]);
 
     // ---- state of the air -------------------------------
 
@@ -8032,14 +9304,7 @@ function networkNotes(n)
             "on the AP: see FTM above"]);
 
     if (n.csacnt > 0 || n.csach > 0)
-    {
-        notes.push([blue,
-            "Channel switch announced: moving to channel " +
-            n.csach + " in " + n.csacnt + " beacon" +
-            (n.csacnt === 1 ? "" : "s") +
-            ". Usually a radar detection on a DFS channel, or " +
-            "an automatic channel selection run"]);
-    }
+        notes.push([blue, csaText(n)]);
 
     if (n.channel >= 52 && n.channel <= 144)
     {
@@ -8135,7 +9400,7 @@ function networkNotes(n)
      * cluster, or the OWE half of a transition pair, which is hidden
      * by design.
      */
-    if (!isNan(n) && !n.mesh && !n.owename &&
+    if (!isNan(n) && !n.mesh && !n.owename && !notAp &&
         (n.ssid === "<hidden>" || n.resolved))
     {
         notes.push([amber,
@@ -8247,7 +9512,8 @@ function networkNotes(n)
      * rate itself. It works, but it is not what the standard expects
      * of an AP, and nobody can tell from the beacon what it needs.
      */
-    if (Array.isArray(n.basicrates) && !n.basicrates.length && !n.basic)
+    if (Array.isArray(n.basicrates) && !n.basicrates.length && !n.basic &&
+        !notAp)
     {
         notes.push([amber,
             "No basic rate marked: the BSS requires no rate of its " +
@@ -8328,7 +9594,7 @@ function networkNotes(n)
             "discovery and power-save wakeups"]);
     }
 
-    if (!n.cc)
+    if (!n.cc && !notAp)
     {
         notes.push([amber,
             "No Country element: clients cannot learn the " +
@@ -8423,7 +9689,9 @@ function networkNotes(n)
             "WEP: the Privacy bit is set but there is neither an " +
             "RSN nor a WPA element, so the only thing left is " +
             "WEP. Broken since 2001 and withdrawn from the " +
-            "standard in 802.11-2012"]);
+            "standard in 802.11-2012" +
+            (!n.ssid || n.ssid === "<hidden>" ? "; or, with no SSID, the " +
+             "proprietary link of a device that is no AP" : "")]);
     }
 
     const cipher = ((n.pair || "") + " " + (n.group || "")).toUpperCase();
@@ -8513,7 +9781,7 @@ function networkNotes(n)
      * 2.4 GHz, protection for every OFDM station around. An old
      * device; nothing to configure, it has to go.
      */
-    if (n.std > 0 && n.std <= 3)
+    if (n.std > 0 && n.std <= 3 && !notAp)
     {
         notes.push([amber,
             "No 802.11n: a " + ["802.11b", "802.11a", "802.11g"][n.std - 1] +
@@ -8935,14 +10203,50 @@ function ouiColons(hex)
     return hex.match(/../g).join(":");
 }
 
+/*
+ * A car brand as the model of the Apple Device IE, where the head
+ * unit's supplier gives itself as manufacturer: "HARMAN", "PORSCHE";
+ * or as its first word, "Marelli", "Fiat CARLINE_11"
+ */
+const CAR_BRANDS = { "AUDI": "Audi", "PORSCHE": "Porsche",
+    "VW": "Volkswagen", "VOLKSWAGEN": "Volkswagen", "SEAT": "SEAT",
+    "CUPRA": "Cupra", "SKODA": "\u0160koda", "\u0160KODA": "\u0160koda",
+    "BMW": "BMW", "MINI": "MINI", "MERCEDES": "Mercedes-Benz",
+    "MERCEDES-BENZ": "Mercedes-Benz", "FORD": "Ford", "FIAT": "Fiat" };
+
+/*
+ * BSSID OUIs of modules made for cars only, named on a vehicle:
+ * AUMOVIO, Continental's former automotive branch, for a car's
+ * hotspot ("Hotspot67B0")
+ */
+const CAR_MODULE_OUIS = { "00:54:AF": "AUMOVIO (telematics)" };
+
+// SoC makers giving themselves as manufacturer in the Apple Device
+// IE, a CarPlay dongle's "arkmicro" / "Linux"
+const ACC_CHIP_MAKERS = { "arkmicro": "Arkmicro" };
+
 // Chip and device makers from the vendor elements, each once
 function apMakers(n)
 {
     const chips  = [];
     const makers = [];
+    const accChip = n.acc && ACC_CHIP_MAKERS[(n.acc[1] || "").toLowerCase()];
 
-    // Manufacturer from the Apple Device IE, given by the device
-    if (n.acc && n.acc[1])
+    if (accChip)
+        chips.push(accChip);
+
+    // The car brand in the model field, before the supplier
+    const model = n.acc ? (n.acc[2] || "").toUpperCase() : "";
+    const brand = CAR_BRANDS[model] || CAR_BRANDS[model.split(" ")[0]];
+
+    if (brand)
+        makers.push(brand);
+
+    // Manufacturer from the Apple Device IE, given by the device;
+    // "Apple" there is a placeholder, Apple makes no accessories
+    // sending it ("ZJ", "Apple", "Device1,1")
+    if (n.acc && n.acc[1] && n.acc[1] !== "Apple" && !accChip &&
+        (!brand || CAR_BRANDS[n.acc[1].toUpperCase()] !== brand))
         makers.push(n.acc[1]);
 
     for (const [oui, type, name] of (n.voui || []))
@@ -9186,6 +10490,141 @@ function wpsDeviceText(n)
     return parts.filter(p => p).join(" ");
 }
 
+/*
+ * What the device is, from the WSC Primary Device Type of its WPS
+ * element or P2P Device Info (pdt: [category, subcategory], 0 for a
+ * subcategory of another OUI). Without one, a Miracast sink is a
+ * display of some kind. Network devices (category 6) are left out:
+ * every router says it is one.
+ */
+const DEVICE_CATEGORIES = { 1: "computer", 2: "input device",
+    3: "printer or scanner", 4: "camera", 5: "storage", 6: "network device",
+    7: "display", 8: "media device", 9: "game console", 10: "phone",
+    11: "audio device", 12: "docking station", 255: "other device" };
+
+const DEVICE_TYPES = {
+    "1/1": "PC", "1/2": "server", "1/3": "media centre", "1/4": "ultra-mobile PC",
+    "1/5": "notebook", "1/6": "desktop", "1/7": "mobile internet device",
+    "1/8": "netbook", "1/9": "tablet", "1/10": "ultrabook",
+    "3/1": "printer", "3/2": "scanner", "3/3": "fax", "3/4": "copier",
+    "3/5": "printer, scanner, fax and copier",
+    "4/1": "digital still camera", "4/2": "video camera", "4/3": "webcam",
+    "4/4": "security camera",
+    "5/1": "NAS",
+    "6/1": "access point", "6/2": "router", "6/3": "switch", "6/4": "gateway",
+    "6/5": "bridge",
+    "7/1": "TV", "7/2": "picture frame", "7/3": "projector", "7/4": "monitor",
+    "8/1": "digital audio recorder", "8/2": "video recorder",
+    "8/3": "media centre extender", "8/4": "set-top box",
+    "8/5": "media server or streamer", "8/6": "portable video player",
+    "9/1": "Xbox", "9/2": "Xbox 360", "9/3": "PlayStation", "9/4": "game console",
+    "9/5": "portable game console",
+    "10/1": "phone", "10/2": "phone", "10/3": "phone", "10/4": "smartphone",
+    "10/5": "smartphone",
+    "11/1": "audio receiver", "11/2": "speakers", "11/3": "portable music player",
+    "11/4": "headset", "11/5": "headphones", "11/6": "microphone",
+    "11/7": "home theatre system",
+    "12/1": "docking station", "12/2": "media kiosk" };
+
+/*
+ * Head units by their WPS or P2P device name, or the SSID after
+ * "DIRECT-": "MBUX 93321", "BMW 90527", "BMW51589 CarPlay",
+ * "Audi_MMI_2527", "My Skoda 9610", "My VW 9305", "My SEAT 2945",
+ * "My Fiat SJ806696",
+ * Ford's "SYNC_XU614B6V" only from Ford's OUI. Only
+ * names seen in the field; they send a phone's or a computer's device
+ * type, if any. The head unit, its car maker, the OUI it needs.
+ */
+const CAR_HEAD_UNITS = [
+    [/^MBUX\b/, "Mercedes MBUX", "Mercedes-Benz"],
+    [/^BMW(?![A-Za-z])/, "BMW", "BMW"],
+    [/^Audi_MMI_/, "Audi MMI", "Audi"],
+    [/^My Skoda\b/, "\u0160koda", "\u0160koda"],
+    [/^My VW\b/, "VW", "Volkswagen"],
+    [/^My SEAT\b/, "SEAT", "SEAT"],
+    [/^My Fiat\b/, "Fiat", "Fiat"],
+    [/^SYNC_/, "Ford SYNC", "Ford", "00:26:B4"]
+];
+
+// The head unit and its car maker, or null
+function carHeadUnitOf(n)
+{
+    const names = [n.wpsname, n.p2p && n.p2p[2],
+                   (n.ssid || "").replace(/^DIRECT-(\w\w-)?/, "")];
+    const oui = (n.bssid || "").slice(0, 8).toUpperCase();
+
+    for (const [re, text, maker, from] of CAR_HEAD_UNITS)
+        if ((!from || from === oui) && names.some(x => x && re.test(x)))
+            return {text, maker};
+
+    return null;
+}
+
+function carHeadUnit(n)
+{
+    const car = carHeadUnitOf(n);
+
+    return car ? car.text : "";
+}
+
+// Apple's Device IE on a car: wireless CarPlay
+function carPlay(n, car)
+{
+    return !!n.acc && (car || !!n.p2p || /^DIRECT-/.test(n.ssid || ""));
+}
+
+function deviceTypeText(n)
+{
+    // Consoles that send no type: an Xbox's link to its controllers,
+    // Nintendo's own suites in the RSN element
+    if (n.xbox)
+        return "game console (Xbox, the link to its controllers)";
+
+    if (/Nintendo/.test([n.akm, n.pair, n.group].join(" ")))
+        return "game console (Nintendo, probably a Switch's local play)";
+
+    // A car's head unit: by the name it gives itself, or Wi-Fi Direct
+    // with Apple's Device IE, for wireless CarPlay
+    const car = carHeadUnit(n);
+    const carplay = carPlay(n, car);
+
+    if (car || carplay)
+        return "car (head unit" + (car ? ", " + car : "") +
+               (carplay ? ", wireless CarPlay" : "") + ")";
+
+    // An AP calling itself an access point or router says nothing new
+    if (n.pdt && n.pdt[0] === 6)
+        return "";
+
+    const wfd = n.wfd === undefined ? -1 : n.wfd & 3;
+    const sink = wfd === 1 || wfd === 2;
+
+    // "Computer, unknown" is no more than a default: a Miracast sink
+    // sending it is taken for a display
+    if (n.pdt && !(sink && n.pdt[0] === 1 && n.pdt[1] === 0))
+    {
+        const [cat, sub] = n.pdt;
+
+        return DEVICE_TYPES[cat + "/" + sub] || DEVICE_CATEGORIES[cat] ||
+               "device category " + cat;
+    }
+
+    return sink ? "display (Miracast sink)" : "";
+}
+
+/*
+ * A Wi-Fi Direct device in its Listen state answers probes with the
+ * SSID "DIRECT-" and the Privacy bit but no RSN element; it is no
+ * group yet, and one uses WPA2. Firmware before 2.7.18 called it WEP.
+ */
+function fixP2pListen(n)
+{
+    if (n.sec === "WEP" && n.ssid === "DIRECT-" && n.p2p && !(n.p2p[1] & 1))
+        n.sec = "Wi-Fi Direct";
+
+    return n;
+}
+
 // HP printers name their model in HP's element; not the serial
 function printerText(n)
 {
@@ -9361,9 +10800,8 @@ function ridMapLink(lat, lon, label)
 
     const y = (lat / 1e7).toFixed(6), x = (lon / 1e7).toFixed(6);
 
-    return "<a class='dl' target='_blank' rel='noopener' " +
-        "href='https://www.openstreetmap.org/?mlat=" + y + "&mlon=" + x +
-        "#map=17/" + y + "/" + x + "'>" + label + "</a> " + y + ", " + x;
+    return mapLink("https://www.openstreetmap.org/?mlat=" + y + "&mlon=" +
+                   x + "#map=17/" + y + "/" + x, label) + " " + y + ", " + x;
 }
 
 function ridMaker(r)
@@ -9442,12 +10880,29 @@ function apMakerHeader(n)
     if (n.rid && ridMaker(n.rid) && !makers.includes(ridMaker(n.rid)))
         makers.push(ridMaker(n.rid));
 
+    // A console that only says so through its own elements
+    if (n.xbox && !makers.includes("Microsoft"))
+        makers.push("Microsoft");
+
+    // A car by its head unit's name, when nothing else names a maker
+    const car = carHeadUnitOf(n);
+
+    if (car && !makers.length)
+        makers.push(car.maker);
+
     if (makers.length)
         rows.push(["Manufacturer",
                    makers.map(escapeHTML).join(" \u00b7 ")]);
 
     if (m.chips.length)
         rows.push(["Chip", m.chips.map(escapeHTML).join(" / ")]);
+
+    // A module made for cars, by the BSSID, on a vehicle only
+    const module = CAR_MODULE_OUIS[(n.bssid || "").slice(0, 8).toUpperCase()];
+    const iwCar = interworking(n);
+
+    if (module && ((iwCar && iwCar.group === 10) || carHeadUnitOf(n)))
+        rows.push(["Module", escapeHTML(module)]);
 
     // Venue group 10 from Interworking; the venue type is in the
     // SECURITY rows, it is not always set or not always right
@@ -9457,18 +10912,27 @@ function apMakerHeader(n)
     {
         // What a drone says about itself, by law; details below
         rows.push(["Device", ridDeviceText(n.rid)]);
-
-        if (ridHeightText(n.rid))
-            rows.push(["Height", ridHeightText(n.rid)]);
-
-        if (n.rid.olat || n.rid.olon)
-            rows.push(["Pilot", ridMapLink(n.rid.olat, n.rid.olon, "map")
-                                    .replace(/<\/a>.*/, "</a>")]);
     }
     else if (iw && iw.group === 10)
-        rows.push(["Device", "Vehicle"]);
+    {
+        // Retrofitted Android head units call themselves a bus:
+        // "AndroidAP_5138", "AndroidAP_8126", vehicular type 3
+        const retro = iw.vtype === 3 && /^AndroidAP_/.test(n.ssid || "");
+        const extra = [retro ? "aftermarket head unit" : "",
+                       carPlay(n, true) ? "wireless CarPlay" : ""]
+            .filter(Boolean);
+
+        rows.push(["Device", "Vehicle" +
+                   (extra.length ? " (" + extra.join(", ") + ")" : "")]);
+    }
     else if (n.hp)
         rows.push(["Device", "Printer"]);
+    else if (deviceTypeText(n))
+    {
+        const t = deviceTypeText(n);
+
+        rows.push(["Device", escapeHTML(t[0].toUpperCase() + t.slice(1))]);
+    }
 
     // Only a guess from what the AP sends, so it says so on top
     return rows.length
@@ -9477,6 +10941,32 @@ function apMakerHeader(n)
                                ":</span> " + v + "</div>").join("") +
           "</div>"
         : "";
+}
+
+/*
+ * The IEEE block a vendor came from, when it is no plain OUI: the
+ * firmware sends vblk 28 (MA-M) or 36 (MA-S, IAB). "MA-M F8:2B:E6:2",
+ * the prefix with a BSSID's local bit cleared, as it was looked up.
+ */
+function vendorBlockText(mac, vblk)
+{
+    if ((vblk !== 28 && vblk !== 36) || !mac)
+        return "";
+
+    const hex = mac.replace(/:/g, "").toUpperCase();
+    const base = (parseInt(hex.slice(0, 2), 16) & ~2)
+        .toString(16).toUpperCase().padStart(2, "0") + hex.slice(2);
+
+    return (vblk === 28 ? "MA-M " : "MA-S ") +
+           base.slice(0, vblk / 4).match(/.{1,2}/g).join(":");
+}
+
+// The vendor and, from a small block, the block after it
+function vendorWithBlock(name, mac, vblk)
+{
+    const block = vendorBlockText(mac, vblk);
+
+    return escapeHTML(name) + (block ? " \u00b7 " + block : "");
 }
 
 // "8C:FD:F0 type 1, 4 Qualcomm (chip)", one line per OUI and meaning
@@ -9537,7 +11027,8 @@ function networkTooltip(n)
         (n.apname ? "<br>AP name: " + escapeHTML(n.apname) : "") +
         (n.vfw ? "<br>Firmware: " + escapeHTML(n.vfw) : "") +
         "<br>" + n.bssid +
-        (n.vendor ? " (" + escapeHTML(n.vendor) + ")" : "") +
+        (n.vendor ? " (" + vendorWithBlock(n.vendor, n.bssid, n.vblk) + ")"
+                  : "") +
         "<br>RSSI " + n.rssi + " dBm \u00b7 last seen " + n.age + " s ago";
 
     // ---- drone ------------------------------------------
@@ -9578,6 +11069,7 @@ function networkTooltip(n)
         ["Camera kit", n.camkit ? escapeHTML(camKitText(n.camkit)) : ""],
         ["Apple accessory", escapeHTML(appleAccText(n))],
         ["Operating mode", omnText(n)],
+        ["6 GHz", sixAnnouncedText(n)],
         ["Wi-Fi Direct", escapeHTML(p2pText(n))],
         ["Printer", escapeHTML(printerText(n))]
     ]);
@@ -9740,7 +11232,9 @@ function networkTooltip(n)
                            (n.pcapf === 1 ? "" : "s") : "")])]
     ]);
 
-    return html + tipNotes(networkNotes(n));
+    // The details, beside which a pinned tooltip offers its graphs
+    return "<div class='tipDetails' data-bssid='" + n.bssid + "'>" + html +
+           tipNotes(networkNotes(n)) + "</div>";
 }
 
 
@@ -10052,6 +11546,31 @@ function nstrText(links)
 function bandOfChannel(ch)
 {
     return isBand24(ch) ? "2.4 GHz" : "5 GHz";
+}
+
+/*
+ * The 6 GHz BSSs this AP announces in its Reduced Neighbor Report,
+ * one line each; the sensor cannot tune there, so they are only
+ * announced, never heard.
+ */
+function sixAnnouncedText(n)
+{
+    return sixGhzList
+        .filter(e => e.reporter === n.bssid)
+        .sort((a, b) => a.ch - b.ch)
+        .map(e => [
+            "ch " + e.ch,
+            e.width ? e.width + " MHz" : "",
+            e.bssid,
+            e.colocated ? "co-located" : "",
+            e.same ? "same SSID"
+            : e.ssid ? "SSID \u201c" + escapeHTML(e.ssid) + "\u201d"
+            : "other SSID" + (e.shortssid
+                ? " (short SSID 0x" + (e.shortssid >>> 0).toString(16)
+                      .toUpperCase().padStart(8, "0") + ", unknown)" : ""),
+            "announced only"
+        ].filter(x => x).join(" \u00b7 "))
+        .join("<br>");
 }
 
 /*
@@ -10402,6 +11921,8 @@ function wfaCapaText(capa)
 
     if (capa & 1) parts.push("DSCP policy");
     if (capa & 2) parts.push("unsolicited DSCP policy");
+    // SCS: a client describes one of its flows (a call, a game) by
+    // addresses, ports or DSCP and asks the AP to give it priority
     if (capa & 4) parts.push("SCS traffic description");
 
     return parts.length ? parts.join(", ") : "element without capabilities";
@@ -10439,7 +11960,8 @@ function clientTooltip(c, snapshot = false)
     // station's requests: often all there is behind a random MAC
     let html = apMakerHeader(c) +
                "<b>" + c.mac + "</b>" +
-               (c.vendor ? " " + escapeHTML(c.vendor) : "") + "<br>";
+               (c.vendor ? " " + vendorWithBlock(c.vendor, c.mac, c.vblk)
+                         : "") + "<br>";
 
     html +=
         (c.assoc ? "associated with " : "seen at ") +
@@ -10840,6 +12362,16 @@ function loadTooltip(r)
 }
 
 
+// What the BSSID graph shows for a network under the pointer
+function graphTooltip(n, ev)
+{
+    const rect = document.getElementById("networkGraph").getBoundingClientRect();
+
+    return puncturedAt(ev.clientX - rect.left, ev.clientY - rect.top)
+        ? puncturedTooltip(n) : networkTooltip(n);
+}
+
+
 function setupNetworkGraphEvents()
 {
     const canvas =
@@ -10848,6 +12380,17 @@ function setupNetworkGraphEvents()
     canvas.addEventListener("mousemove", ev =>
     {
         const rect = canvas.getBoundingClientRect();
+
+        // Over a band button: what a click does, and a hand
+        const button = bandButtonAt(ev.clientX - rect.left, ev.clientY - rect.top);
+
+        canvas.style.cursor = button ? "pointer" : "";
+
+        if (button)
+        {
+            showTip(bandButtonTip(button), ev.clientX, ev.clientY);
+            return;
+        }
 
         const n = networkAt(
             ev.clientX - rect.left,
@@ -10879,24 +12422,31 @@ function setupNetworkGraphEvents()
             return;
         }
 
-        const x = ev.clientX - rect.left;
-        const y = ev.clientY - rect.top;
-
-        showTip(puncturedAt(x, y) ? puncturedTooltip(n) : networkTooltip(n),
-                ev.clientX, ev.clientY);
+        showTip(withScanButton(graphTooltip(n, ev), n.channel, false),
+                ev.clientX, ev.clientY, "click");
     });
 
     canvas.addEventListener("click", ev =>
     {
         const rect = canvas.getBoundingClientRect();
 
+        // A band button: only that band shown, or both again
+        const button = bandButtonAt(ev.clientX - rect.left, ev.clientY - rect.top);
+
+        if (button)
+        {
+            setGraphBand(graphBand === button ? "" : button);
+            return;
+        }
+
         const n = networkAt(
             ev.clientX - rect.left,
             ev.clientY - rect.top
         );
 
-        if (n)
-            focusChannel(n.channel);
+        if (n && lastPointerType === "mouse")
+            pinTip(withScanButton(graphTooltip(n, ev), n.channel, true),
+                   ev.clientX, ev.clientY);
     });
 
     canvas.addEventListener("mouseleave", () =>
@@ -11219,42 +12769,17 @@ function setupClientGraphEvents()
             return;
         }
 
-        if (hit.kind === "sta")
+        if (hit.kind !== "sta" && hit.obj.probeOnly)
         {
-            showTip(clientTooltip(hit.obj), ev.clientX, ev.clientY);
+            showTip("<b>Unassociated stations</b><br>" +
+                    hit.obj.clients.length +
+                    " devices, seen through probe requests only",
+                    ev.clientX, ev.clientY);
             return;
         }
 
-        const g = hit.obj;
-
-        let html;
-
-        if (g.probeOnly)
-        {
-            html =
-                "<b>Unassociated stations</b><br>" +
-                g.clients.length +
-                " devices, seen through probe requests only";
-        }
-        else if (g.ap)
-        {
-            html =
-                networkTooltip(g.ap) +
-                "<br><i>Click to restrict the sweep to channel " +
-                g.ap.channel + "</i>";
-        }
-        else
-        {
-            const name = apNameFor(g.bssid);
-
-            html =
-                "<b>" + escapeHTML(name) + "</b><br>" +
-                (name === g.bssid ? "" : g.bssid + "<br>") +
-                "No beacon from this AP right now<br>" +
-                g.clients.length + " stations observed";
-        }
-
-        showTip(html, ev.clientX, ev.clientY);
+        showTip(withScanButton(clientGraphTooltip(hit), clientGraphChannel(hit), false),
+                ev.clientX, ev.clientY, "click");
     });
 
     canvas.addEventListener("click", ev =>
@@ -11266,20 +12791,42 @@ function setupClientGraphEvents()
             ev.clientY - rect.top
         );
 
-        if (!hit)
+        if (!hit || lastPointerType !== "mouse" ||
+            (hit.kind !== "sta" && hit.obj.probeOnly))
             return;
 
-        if (hit.kind === "ap" && hit.obj.ap)
-        {
-            focusChannel(hit.obj.ap.channel);
-            return;
-        }
-
-        if (hit.kind === "sta" && hit.obj.ch)
-            focusChannel(hit.obj.ch);
+        pinTip(withScanButton(clientGraphTooltip(hit), clientGraphChannel(hit), true),
+               ev.clientX, ev.clientY);
     });
 
     canvas.addEventListener("mouseleave", hideTip);
+}
+
+// The channel of an AP or station in the client graph, if known
+function clientGraphChannel(hit)
+{
+    if (hit.kind === "sta")
+        return hit.obj.ch;
+
+    return hit.obj.ap ? hit.obj.ap.channel : 0;
+}
+
+function clientGraphTooltip(hit)
+{
+    if (hit.kind === "sta")
+        return clientTooltip(hit.obj);
+
+    const g = hit.obj;
+
+    if (g.ap)
+        return networkTooltip(g.ap);
+
+    const name = apNameFor(g.bssid);
+
+    return "<b>" + escapeHTML(name) + "</b><br>" +
+        (name === g.bssid ? "" : g.bssid + "<br>") +
+        "No beacon from this AP right now<br>" +
+        g.clients.length + " stations observed";
 }
 
 
@@ -12650,6 +14197,22 @@ function setSort(key)
  */
 function noteBadges(n)
 {
+    // Its graphs recorded on the sensor without a viewer
+    const kept = n.wk
+        ? " <span class='wkBadge' title='graphs recorded on the sensor " +
+          "(Settings, Capture)'>" + GRAPH_ICON + "</span>" : "";
+
+    return noteBadgesBase(n) + kept;
+}
+
+// A small line chart, in the colour of the text around it
+const GRAPH_ICON = "<svg viewBox='0 0 24 24' aria-hidden='true'>" +
+    "<path d='M3 19h18 M4 15l5-6 4 4 7-8' fill='none' " +
+    "stroke='currentColor' stroke-width='2.5' stroke-linecap='round' " +
+    "stroke-linejoin='round'/></svg>";
+
+function noteBadgesBase(n)
+{
     const badges = noteBadgesOf(networkNotes(n));
 
     if (!n.cfgn)
@@ -12998,7 +14561,8 @@ function updateNetworkTable()
             ? { key: "notes", type: "num" }
             : columns.find(c => c.key === sortKey);
 
-    const list = filteredNetworks().slice();
+    // The table follows the graph's band button as well
+    const list = filteredNetworks().filter(inShownBand);
 
     list.sort((a, b) =>
     {
@@ -13069,11 +14633,14 @@ function updateNetworkTable()
         tbody.appendChild(tr);
     });
 
+    const band = shownGraphBand();
+
     document.getElementById("filterInfo").innerText =
         (list.length === networks.length
             ? networks.length + " networks"
-            : list.length + " of " + networks.length +
-              " networks match") +
+            : list.length + " of " + networks.length + " networks " +
+              (band ? "shown, " + (band === "24" ? "2.4" : "5") +
+                      " GHz only" : "match")) +
         (liveData && liveData.netcap
             ? ", " + liveData.netcap + " slots"
             : "");
@@ -13381,6 +14948,7 @@ function stationMatches(c)
     const haystack = [
         c.mac,
         c.vendor,
+        vendorBlockText(c.mac, c.vblk),
         c.bssid !== "00:00:00:00:00:00" ? c.bssid : "",
         c.bssid ? apNameFor(c.bssid) : "",
         c.apssid,
@@ -13728,7 +15296,7 @@ async function updateNetworks()
 
         const result = await response.json();
 
-        networks = result.networks;
+        networks = result.networks.map(fixP2pListen);
         sixGhzList = result.sixghz || [];
 
         rememberApNames();
@@ -13922,7 +15490,7 @@ const VENDOR_IE_MAKERS = {
     "C83A6B": "Roku", "F832E4": "ASUS", "AC853D": "HUAWEI",
     "000B82": "Grandstream", "04DF69": "Car Connectivity Consortium",
     "30FF83": "Xiongmai/AltoBeam (unregistered OUI)",
-    "506F9A": "Wi-Fi Alliance"
+    "506F9A": "Wi-Fi Alliance", "08863B": "Belkin (Linksys)"
 };
 
 // "00-00-00-00" for the misplaced suite of a network
@@ -14231,7 +15799,8 @@ function catalogReadsHTML(r)
         ["Cipher suites with a name", r.cipher.map(suite)]
     ];
 
-    return groups.map(([title, items]) =>
+    // No heading for a group the firmware leaves empty
+    return groups.filter(([, items]) => items.length).map(([title, items]) =>
         "<div class='readsGroup'>" + title + " (" + items.length + ")</div>" +
         items.map(t => "<span class='readsItem'>" + escapeHTML(t) +
                        "</span>").join("")).join("") +
@@ -14632,9 +16201,11 @@ function waitForFirmware(version, since)
         });
 }
 
-function uploadFirmware()
+function uploadFirmware(given)
 {
-    const file = document.getElementById("otaFile").files[0];
+    // A firmware fetched from GitHub, else the chosen file
+    const file = given instanceof Blob ? given
+                                       : document.getElementById("otaFile").files[0];
 
     if (!file)
     {
@@ -14694,6 +16265,175 @@ function uploadFirmware()
 
     xhr.open("POST", "/api/ota");
     xhr.send(form);
+}
+
+/*
+ * New firmware from GitHub Pages: firmware/version.json of the public
+ * repository names the newest release with size and SHA-256, the
+ * browser asks for it (the sensor itself often has no internet and no
+ * TLS), once a session when Settings opens and with the button. The
+ * image is fetched on a click and written on another, the same way
+ * as a chosen file. A browser without internet gets no answer and
+ * shows nothing.
+ */
+const UPDATE_URL = "https://oposum01.github.io/wlanscout/firmware/";
+
+let sensorFirmware = "";   // the version the sensor reports
+let updateLatest = null;   // version.json, once asked
+let updateFile = null;     // the image fetched for it
+
+// a newer than b, "2.10.0" after "2.9.3"
+function versionNewer(a, b)
+{
+    const x = String(a).split(".").map(Number);
+    const y = String(b).split(".").map(Number);
+
+    for (let i = 0; i < Math.max(x.length, y.length); i++)
+        if ((x[i] || 0) !== (y[i] || 0))
+            return (x[i] || 0) > (y[i] || 0);
+
+    return false;
+}
+
+function updateText(text)
+{
+    document.getElementById("otaUpdate").innerText = text;
+}
+
+function showUpdateButtons()
+{
+    const newer = !!updateLatest && !!sensorFirmware &&
+        versionNewer(updateLatest.version, sensorFirmware);
+
+    const fetchBtn = document.getElementById("otaFetch");
+    const install = document.getElementById("otaInstall");
+
+    fetchBtn.style.display = newer && !updateFile ? "" : "none";
+    install.style.display = newer && updateFile ? "" : "none";
+
+    if (updateLatest)
+    {
+        fetchBtn.innerText = "Download v" + updateLatest.version;
+        install.innerText = "Install v" + updateLatest.version;
+    }
+}
+
+function updateAskedThisSession()
+{
+    try { return sessionStorage.getItem("wlanscout.updateAsked") === "1"; }
+    catch (e) { return false; }
+}
+
+async function checkFirmwareUpdate(manual)
+{
+    if (snapshotView)
+    {
+        if (manual)
+            updateText("not while a snapshot is shown");
+        return;
+    }
+
+    try { sessionStorage.setItem("wlanscout.updateAsked", "1"); } catch (e) { }
+
+    if (manual)
+        updateText("asking GitHub \u2026");
+
+    try
+    {
+        const response = await fetch(UPDATE_URL + "version.json",
+            { cache: "no-store", signal: timeoutSignal(8000) });
+
+        if (!response.ok)
+            throw new Error("HTTP " + response.status);
+
+        const info = await response.json();
+
+        if (!info.version)
+            throw new Error("no version");
+
+        if (!updateLatest || updateLatest.version !== info.version)
+            updateFile = null;
+
+        updateLatest = info;
+
+        updateText(versionNewer(info.version, sensorFirmware)
+            ? "v" + info.version + " available, this sensor runs v" +
+              sensorFirmware
+            : (manual ? "v" + sensorFirmware + " is the newest release" : ""));
+    }
+    catch (e)
+    {
+        updateLatest = null;
+        updateFile = null;
+
+        if (manual)
+            updateText("GitHub not reachable from this browser (" +
+                       e.message + ")");
+    }
+
+    showUpdateButtons();
+}
+
+async function fetchFirmwareUpdate()
+{
+    const info = updateLatest;
+
+    if (!info)
+        return;
+
+    updateText("downloading v" + info.version + " \u2026");
+
+    try
+    {
+        const response = await fetch(UPDATE_URL + "wlanscout.ino.bin?v=" +
+                                     encodeURIComponent(info.version),
+                                     { cache: "no-store" });
+
+        if (!response.ok)
+            throw new Error("HTTP " + response.status);
+
+        const blob = await response.blob();
+
+        // Pages can be a moment behind with one of the two files
+        if (info.size && blob.size !== info.size)
+            throw new Error(blob.size + " bytes instead of " + info.size +
+                            ", try again in a minute");
+
+        // Only in a secure context: the sensor's own page is plain http
+        let checked = false;
+
+        if (info.sha256 && window.crypto && crypto.subtle)
+        {
+            const digest = await crypto.subtle.digest("SHA-256",
+                await blob.arrayBuffer());
+            const hex = [...new Uint8Array(digest)]
+                .map(b => b.toString(16).padStart(2, "0")).join("");
+
+            if (hex !== info.sha256)
+                throw new Error("SHA-256 differs from version.json");
+
+            checked = true;
+        }
+
+        updateFile = new File([blob], "wlanscout.ino.bin");
+
+        updateText("v" + info.version + " downloaded, " +
+                   Math.round(blob.size / 1024) + " kB" +
+                   (checked ? ", SHA-256 checked" : ""));
+    }
+    catch (e)
+    {
+        updateFile = null;
+        updateText("download failed: " + e.message);
+    }
+
+    showUpdateButtons();
+}
+
+function installFirmwareUpdate()
+{
+    if (updateFile)
+        uploadFirmware(updateFile);
 }
 
 /*
@@ -14776,6 +16516,14 @@ async function updateSystem()
 
         const sys = await response.json();
 
+        sensorFirmware = sys.version || "";
+
+        // Once a session, when Settings shows
+        if (!updateLatest && !updateAskedThisSession())
+            checkFirmwareUpdate(false);
+        else
+            showUpdateButtons();
+
         const modeName =
             sys.counters.mode === 1 ? "BLE"
                 : (sys.counters.mode === 2 ? "802.15.4" : "Wi-Fi");
@@ -14820,20 +16568,27 @@ async function updateSystem()
             "Time (" + (sys.tzlabel || "UTC") + ")";
 
         fillRows("sysTable", [
-            ["Firmware", "v" + sys.version],
+            ["Sensor id", sys.sensor && sys.sensorid
+                ? sys.sensorid : "-"],
+            ["Sensor name", sys.sensor || "not set"],
+            ["Scanner mode", modeName],
+            ["Uptime", uptimeText(sys.uptime)],
+            ["Boot", sys.boot ? "#" + sys.boot + " since the first start" : ""],
             ["Source", "github.com/Oposum01/wlanscout",
                 "https://github.com/Oposum01/wlanscout"],
             ["Author", "jf [at] simonwunderlich . de",
-                "https://www.simonwunderlich.de/"],
-            ["Uptime", uptimeText(sys.uptime)],
-            ["Boot", sys.boot ? "#" + sys.boot + " since the first start" : ""],
-            ["Scanner mode", modeName],
-            ["Clock source", clockName],
+                "https://www.simonwunderlich.de/"]
+        ]);
+
+        fillRows("fwTable", [["Firmware", "v" + sys.version]]);
+
+        fillRows("timeTable", [
             ["Device time", sys.utc + " " + (sys.tzlabel || "UTC")],
-            ["Last clock sync", syncText],
+            ["Clock source", clockName],
             ["NTP server", sys.ntpserver +
                 ", asked every " +
                 Math.round(sys.ntpinterval / 60) + " min"],
+            ["Last clock sync", syncText],
             ["Clock corrections", sys.ntpcount +
                 " above 50 ms since start" +
                 (sys.uptime > 3600
@@ -14841,9 +16596,10 @@ async function updateSystem()
                       (sys.ntpcount
                           ? (sys.uptime / 3600 / sys.ntpcount).toFixed(1)
                           : "-") + " h"
-                    : "")],
-            ["OUI entries", sys.oui]
+                    : "")]
         ]);
+
+        setHint("hintSensor", "v" + sys.version);
 
         showOta(sys.ota);
 
@@ -14875,10 +16631,15 @@ async function updateSystem()
             ["Link", net.link
                 ? (net.speed + " Mbps, " +
                    (net.duplex ? "full duplex" : "half duplex"))
-                : "down"],
-            ["Failed DHCP attempts", net.dhcptries],
+                : "down"]
+        ]);
+
+        fillRows("dhcpTable", [
             ["DHCP client", net.dhcpstate]
-        ].concat(net.lease ? [["DHCP lease", leaseText(net.lease)]] : []));
+        ].concat(net.lease ? [["DHCP lease", leaseText(net.lease)]] : [],
+                 [["Failed DHCP attempts", net.dhcptries]]));
+
+        setHint("hintNetwork", net.link ? net.ip : "link down");
 
         fillCpu(sys);
 
@@ -14892,15 +16653,15 @@ async function updateSystem()
             ["Internal heap minimum since boot", kB(mem.heapmin)],
             ["Largest free internal block", kB(mem.block)],
             ["PSRAM free", kB(mem.psramfree) +
-                " of " + kB(mem.psramtotal)]
+                " of " + kB(mem.psramtotal)],
+            ["OUI entries", sys.oui]
         ]);
 
         // Allocations
         const head = document.getElementById("allocHead");
 
         head.innerHTML =
-            "<tr><th>Buffer</th><th>Size</th><th>Located in</th>" +
-            "<th></th></tr>";
+            "<tr><th>Buffer</th><th>Size</th><th>Located in</th></tr>";
 
         const tbody = document.getElementById("allocTable");
 
@@ -14909,8 +16670,13 @@ async function updateSystem()
         let sumPsram = 0;
         let sumInternal = 0;
 
-        sys.alloc.forEach(a =>
+        // The capture stores with their buttons are in the Capture tab
+        const stores = {};
+
+        sys.alloc.slice().sort((x, y) => y.bytes - x.bytes).forEach(a =>
         {
+            stores[a.name] = a;
+
             if (a.psram)
                 sumPsram += a.bytes;
             else
@@ -14918,41 +16684,10 @@ async function updateSystem()
 
             const tr = document.createElement("tr");
 
-            /*
-             * Only the buffers that hold captured data can be
-             * emptied; the rest of the list is just inventory.
-             */
-            const clears = {
-                "pcap ring":     "ring",
-                "beacon slots":  "beacons",
-                "assoc ring":    "assoc",
-                "assoc history": "history"
-            };
-
-            const what = clears[a.name];
-
-            /*
-             * The history holds station records, not frames,
-             * so there is nothing to export as pcap from it.
-             */
-            const canDownload = (what && what !== "history");
-
             tr.innerHTML =
                 "<td>" + escapeHTML(a.name) + "</td>" +
                 "<td>" + kB(a.bytes) + "</td>" +
-                "<td>" + (a.psram ? "PSRAM" : "internal") + "</td>" +
-                "<td>" +
-                (canDownload
-                    ? "<button class='small' onclick=\"" +
-                      "apiDownload('/api/pcap?src=" + what +
-                      "')\">download all</button> "
-                    : "") +
-                (what
-                    ? "<button class='small' onclick=\"uiAction(" +
-                      "window.clearBuffer, '" + what + "')\">" +
-                      "clear</button>"
-                    : "") +
-                "</td>";
+                "<td>" + (a.psram ? "PSRAM" : "internal") + "</td>";
 
             tbody.appendChild(tr);
         });
@@ -14963,8 +16698,7 @@ async function updateSystem()
             "<td><b>Total</b></td>" +
             "<td><b>" + kB(sumPsram + sumInternal) + "</b></td>" +
             "<td>" + kB(sumPsram) + " PSRAM, " +
-            kB(sumInternal) + " internal</td>" +
-            "<td></td>";
+            kB(sumInternal) + " internal</td>";
 
         tbody.appendChild(trSum);
 
@@ -14979,9 +16713,6 @@ async function updateSystem()
         if (p.mask & 8) maskText.push("action, auth and deauth");
 
         fillRows("idTable", [
-            ["Sensor id", sys.sensor && sys.sensorid
-                ? sys.sensorid : "-"],
-            ["Sensor name", sys.sensor || "not set"],
             ["Export schema", "/api/export, schema 1"]
         ]);
 
@@ -14992,25 +16723,26 @@ async function updateSystem()
                 (c.fast ? " (fast sweep)" : " (standard sweep)")],
             ["Management frames dropped", c.mgmtdrops],
             ["Data frames dropped", c.datadrops],
-            ["Frames with a bad FCS", c.fcs],
+            ["Frames with a bad FCS", c.fcs]
+        ]);
+
+        fillRows("capTable", [
             ["Capture", p.enabled ? "on" : "off"],
             ["Captured frame types",
                 (maskText.length ? maskText.join(", ") : "none") +
                 " (0x" +
                 Number(p.mask).toString(16).toUpperCase() + ")"],
-            ["Frames in the ring", p.count + " of " + p.cap +
-                " (" + kB(p.bytes) + " of frame data)"],
-            ["Beacons held, newest per AP",
-                p.beacons + " of " + p.beaconslots +
-                " slots (" + p.beacontotal + " seen in total)"],
-            ["Association requests in their own ring",
-                p.assoc + " of " + p.assoccap +
-                " (" + p.assoctotal + " captured in total)"],
             ["Frames captured in total", p.total],
             ["Buffer reserved", kB(p.slot * p.cap) +
                 ", " + p.slot + " bytes per slot"],
             ["IE catalog", catalogSystemText(sys.catalog)]
         ]);
+
+        fillStores(p, stores);
+
+        fillWatchList(sys.watch);
+
+        setHint("hintCapture", p.total + " frames");
     }
     catch (e)
     {
@@ -15018,6 +16750,117 @@ async function updateSystem()
     }
 
     await updateLog();
+}
+
+
+/*
+ * Settings, Capture, Graphs recorded: from /api/system's watch,
+ * [bssid, kept, epoch, up, samples] each.
+ */
+function fillWatchList(list)
+{
+    const tbody = document.getElementById("watchTable");
+
+    list = list || [];
+
+    document.getElementById("watchInfo").innerText =
+        "(" + list.length + " of 4)";
+
+    if (!list.length)
+    {
+        tbody.innerHTML = "<tr><td class='dim'>none; the Graphs tab of a " +
+            "pinned tooltip records one</td></tr>";
+        return;
+    }
+
+    tbody.innerHTML = list.map(([bssid, kept, epoch, up, count]) =>
+    {
+        const n = networks.find(x => x.bssid === bssid);
+        const since = epoch
+            ? new Date(epoch * 1000).toLocaleString([], {
+                  day: "2-digit", month: "2-digit", hour: "2-digit",
+                  minute: "2-digit" })
+            : uptimeText(up) + " after the start";
+
+        return "<tr><td>" + (n && n.ssid ? escapeHTML(n.ssid) + " "
+                                         : "") +
+            "<span class='dim'>" + bssid + "</span></td>" +
+            "<td>" + (kept ? "kept, also without a viewer"
+                           : "while its tab is open") + "</td>" +
+            "<td>since " + since + ", " + count + " points</td>" +
+            "<td style='text-align:right'>" +
+            "<button class='small' onclick=\"apiDownload('/api/watch?bssid=" +
+            bssid + "&csv=1')\">CSV</button> " +
+            "<button class='small' onclick=\"uiAction(window.stopWatch, '" +
+            bssid + "')\">stop</button></td></tr>";
+    }).join("");
+}
+
+// Ends a recording, a kept one as well
+async function stopWatch(bssid)
+{
+    await api("/api/watch?bssid=" + bssid + "&keep=0&stop=1",
+              { cache: "no-store" });
+
+    if (graphWatch && graphWatch.bssid === bssid)
+        graphWatch.keep = false;
+
+    updateSystem();
+}
+
+window.stopWatch = stopWatch;
+
+
+/*
+ * The capture stores of Settings, Capture: how full, how big, and
+ * the buttons to download or empty them. Only these hold captured
+ * data; the history has station records, no frames to download.
+ */
+function fillStores(p, stores)
+{
+    const rows = [
+        ["Frames in the ring", "pcap ring", "ring", p.count, p.cap,
+            " (" + kB(p.bytes) + " of frame data)"],
+        ["Beacons held, newest per AP", "beacon slots", "beacons",
+            p.beacons, p.beaconslots,
+            " slots (" + p.beacontotal + " seen in total)"],
+        ["Association requests in their own ring", "assoc ring", "assoc",
+            p.assoc, p.assoccap, " (" + p.assoctotal + " captured in total)"],
+        ["Association history", "assoc history", "history", -1, 0, ""]
+    ];
+
+    const tbody = document.getElementById("storeTable");
+
+    tbody.innerHTML = "";
+
+    rows.forEach(([label, buffer, what, count, cap, extra]) =>
+    {
+        const a = stores[buffer];
+        const tr = document.createElement("tr");
+
+        tr.innerHTML =
+            "<td>" + label + "</td>" +
+            "<td style='white-space:normal'>" +
+            (count >= 0
+                ? count + " of " + cap + extra +
+                  "<div class='fillBar'><i style='width:" +
+                  (cap ? Math.min(100, Math.round(count * 100 / cap)) : 0) +
+                  "%'></i></div>"
+                : "") +
+            "</td>" +
+            "<td>" + (a ? kB(a.bytes) : "") + "</td>" +
+            "<td style='text-align:right'>" +
+            (what !== "history"
+                ? "<button class='small' onclick=\"" +
+                  "apiDownload('/api/pcap?src=" + what +
+                  "')\">download all</button> "
+                : "") +
+            "<button class='small' onclick=\"uiAction(" +
+            "window.clearBuffer, '" + what + "')\">clear</button>" +
+            "</td>";
+
+        tbody.appendChild(tr);
+    });
 }
 
 
@@ -15063,6 +16906,10 @@ function leaseText(l)
     if (l.renew !== undefined)
         text += ", next renewal in " + min(l.renew);
 
+    // Right after a start nothing was renewed yet
+    if (!l.renewals)
+        return text + ", not renewed since start";
+
     return text + ", renewed " +
            (l.renewals === 1 ? "once" : l.renewals + " times") +
            " since start";
@@ -15073,10 +16920,32 @@ function leaseText(l)
  * deleted. It is decoded on a PC with esp-coredump and the .elf
  * of the firmware that crashed.
  */
+// A core dump waits: the Event log tab says so in red, it may be hidden
+let crashWaiting = false;
+
+function logHint(total)
+{
+    const el = document.getElementById("hintLog");
+
+    if (!el)
+        return;
+
+    if (total !== undefined)
+        el.dataset.total = total;
+
+    el.innerText = crashWaiting ? "crash"
+        : el.dataset.total !== undefined
+            ? el.dataset.total + " since start" : "";
+    el.classList.toggle("setAlert", crashWaiting);
+}
+
 function fillCrash(sys)
 {
     const box = document.getElementById("crashBox");
     const c   = sys.crash;
+
+    crashWaiting = !!c;
+    logHint();
 
     if (!c)
     {
@@ -15142,6 +17011,9 @@ function fillCpu(sys)
 
     document.getElementById("cpuInfo").innerText =
         sys.cpu ? "last " + sys.cpu.win + " s" : "";
+
+    setHint("hintDiag", sys.cpu
+        ? "CPU " + Math.round(sys.cpu.load / 10) + " %" : "");
 
     fillRows("cpuTable", !l ? [["CPU", "not reported by this firmware"]] : [
         ["Load", sys.cpu ? (sys.cpu.load / 10).toFixed(1) + " %"
@@ -15259,6 +17131,8 @@ async function updateLog()
         document.getElementById("logInfo").innerText =
             log.entries.length + " shown, kept across restarts; " +
             log.total + " since the last start";
+
+        logHint(log.total);
     }
     catch (e)
     {

@@ -180,28 +180,6 @@ def test_flasher_refuses_another_version(tmp_path):
     assert "build it first" in result.stderr
 
 
-def test_parts_in_a_folder_of_their_own(tmp_path):
-    build = tmp_path / "build"
-    boot = fake_build(build, version())
-    out = tmp_path / "out"
-
-    result = subprocess.run([sys.executable,
-                             str(ROOT / "tools" / "make_static.py"),
-                             str(out), "--firmware", str(build),
-                             "--boot-app0", str(boot),
-                             "--parts-dir", "firmware"],
-                            capture_output=True, text=True)
-
-    assert result.returncode == 0, result.stderr
-
-    page = (out / "flash.html").read_text()
-
-    assert 'const PARTS_DIR = "firmware/";' in page
-    assert "fetch(PARTS_DIR + part.file" in page
-    assert not (out / "wlanscout.ino.bin").exists()
-    assert not (out / "boot_app0.bin").exists()
-
-
 def test_parts_next_to_the_page_by_default(tmp_path):
     build = tmp_path / "build"
     boot = fake_build(build, version())

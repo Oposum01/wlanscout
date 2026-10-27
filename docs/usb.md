@@ -49,8 +49,8 @@ While released, the board has no `/dev/ttyACM…`: no serial console and
 no upload from the Arduino IDE over that port until it is plugged in
 anew.
 
-A W5500 is not needed. Cases for the bare board, one of them for a
-MagSafe phone back, are listed under [Enclosure](hardware.md#enclosure).
+A W5500 is not needed. A MagSafe case for the bare board on the back
+of a phone is in `3d-printed-housing/`, see [Enclosure](hardware.md#enclosure).
 
 Without a W5500 the start-up log says
 `ETH.begin(): FAILED, no W5500? Running on USB only` and the sensor
@@ -145,7 +145,7 @@ other: the sensor keeps running, and the time the page hands over
 dates them.
 
 The pcap links and *download all* save the file through the page
-instead of a plain link. *Settings → Firmware update* works over USB
+instead of a plain link. *Settings → Sensor → Firmware* works over USB
 as well: choose `wlanscout.ino.bin` on the phone and *Upload and
 restart*. The sensor restarts and comes back on the USB port; the page
 takes the link up again by itself and waits for the new version, whose
