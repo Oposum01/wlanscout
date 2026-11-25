@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 import pytest
+from sketch import sketch_text
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKETCH = ROOT / "source" / "wlanscout" / "wlanscout.ino"
@@ -80,7 +81,7 @@ def ftmelements(tmp_path_factory):
     if not shutil.which("g++"):
         pytest.skip("no g++")
 
-    src = SKETCH.read_text(encoding="utf-8")
+    src = sketch_text()
     a = src.index("struct FtmInfo\n{")
     struct = src[a:src.index("\n};", a) + 3]
     a = src.index("void ftmElementsOf(")

@@ -746,6 +746,63 @@ tbody tr.assocSeen.highlight {
 }
 
 /* Details | Graphs in a pinned network tooltip, see addGraphTab() */
+/* The edge of a column head, dragged for its width, see initColumnResize() */
+th {
+    position: relative;
+}
+
+.colResize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 7px;
+    height: 100%;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.colResize:hover,
+.colResize.dragging {
+    background: #555;
+}
+
+/* Columns ▾ above a table and its list, see initColumnChoosers() */
+.colChooser {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    margin: 2px 0;
+}
+
+.colPanel {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 40;
+    background: #1b1b1b;
+    border: 1px solid #444;
+    border-radius: 3px;
+    padding: 6px 10px;
+    font-size: 12px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.colPanel.open {
+    display: block;
+}
+
+.colPanel label {
+    display: block;
+    white-space: nowrap;
+    margin: 2px 0;
+}
+
+.colPanel .colDefault {
+    margin-top: 6px;
+}
+
 #tip .tipTabs {
     display: flex;
     gap: 4px;
@@ -939,6 +996,12 @@ button.pending {
 .snapBtn.bad {
     color: #d08080;
     border-color: #8f5a5a;
+}
+
+/* The network count once the sensor's table is full */
+.atCap {
+    color: #e05050;
+    font-weight: bold;
 }
 
 /* The bell: configuration changes of the BSSs */
@@ -1135,6 +1198,14 @@ Settings
 USB
 </button>
 
+<button id="serialBtn"
+        class="modeBtn"
+        style="display:none"
+        title="Connect through the computer's serial port for the board (Web Serial), e.g. /dev/ttyACM0 on Linux, where the serial driver keeps WebUSB out"
+        onclick="window.toggleSerial()">
+Serial
+</button>
+
 <!-- Last, with its symbol: the one to find without reading -->
 <button id="pauseBtn"
         onclick="window.togglePause()">
@@ -1325,7 +1396,7 @@ Fast sweep
      style="margin-top:10px">
 
 <label class="small"
-       title="Every management frame that is parsed is also kept in a ring buffer in PSRAM, exactly as it came off the air. Downloading it gives a libpcap file with a radiotap header per frame, so Wireshark shows channel and signal strength and dissects every element, including the ones this tool does not evaluate.">
+       title="Every management frame that is parsed is also kept in a ring buffer in PSRAM, exactly as it came off the air. Downloading it gives a libpcap file with a radiotap header per frame, so Wireshark shows channel, signal strength, noise floor and rate and dissects every element, including the ones this tool does not evaluate.">
 <input type="checkbox"
        autocomplete="off"
        id="captureOn"
@@ -1947,6 +2018,16 @@ Start BLE mode
 Active scan (sends scan requests)
 </label>
 
+<label class="small"
+       title="Names for the Bluetooth company identifiers: this browser fetches the Bluetooth SIG's list from bitbucket.org and keeps it for a week. Nothing about the devices is sent.">
+<input type="checkbox"
+       autocomplete="off"
+       id="btCompanies"
+       onchange="window.setBtCompanies(this.checked)">
+Company names from the internet
+<span class="dim" id="btCompanyInfo"></span>
+</label>
+
 <input type="text"
        id="bleFilter"
        placeholder="Filter: address, name, Apple, random"
@@ -1976,15 +2057,66 @@ Active scan (sends scan requests)
 </table>
 
 
+<div id="bleHitsBox"
+     style="display:none; margin-top:18px">
+
+<div class="title">
+Seen most
+<span class="small dim" id="bleHitsInfo"></span>
+</div>
+
+<div class="networkControls">
+
+<button class="small"
+        onclick="apiDownload('/api/pcap?src=ble')">
+Download advertisements (pcap)
+</button>
+
+<button class="small"
+        onclick="uiAction(window.clearBleHits)">
+Clear counts
+</button>
+
+</div>
+
+<table>
+
+<thead>
+<tr>
+<th>Address</th>
+<th>Type</th>
+<th>Name, maker</th>
+<th>Hits</th>
+<th>Adverts</th>
+<th>First seen</th>
+<th>Last seen</th>
+<th title="Hits per hour of the day, sensor time, 0 to 23 h">Hours</th>
+<th>pcap</th>
+</tr>
+</thead>
+
+<tbody id="bleHitsTable">
+</tbody>
+
+</table>
+
+</div>
+
+
 <div class="small"
      style="margin-top:8px">
 Advertising channels 37/38/39 only. Data channels of
 established connections cannot be sniffed with this
 controller. A passive scan transmits nothing, an active
 scan also collects scan responses (more names, but the
-analyzer becomes visible itself). The address type comes
-from the top two bits: resolvable private addresses rotate
-and are therefore useless for tracking.
+analyzer becomes visible itself). The advertisement says
+whether an address is public or random, the top two bits
+of a random one its kind: resolvable private addresses
+rotate and are therefore useless for tracking. <i>Seen
+most</i> counts only addresses that stay, public and
+random static ones: a hit is a device heard again after
+five minutes of silence, kept on the sensor across
+restarts.
 </div>
 
 
@@ -2035,7 +2167,7 @@ Sensor
 </div>
 
 <div class="small setHelp">
-The sensor id is the board's MAC and stays; the name is free and goes into the export, the snapshots and the DHCP hostname. The settings page does not change the radio mode, the scanner keeps running in whatever mode it was in.
+The sensor id identifies the sensor in the export and the snapshots: the MAC of the W5500, or without one the same address derived from the chip, so it stays either way; the name is free and goes into the export, the snapshots and the DHCP hostname. The settings page does not change the radio mode, the scanner keeps running in whatever mode it was in.
 </div>
 
 <div class="controls">
@@ -2053,6 +2185,17 @@ Save name
 </button>
 
 </div>
+
+<label class="small"
+       id="keepModeBox"
+       style="display:none"
+       title="Off: every start scans Wi-Fi. On: the sensor starts in the mode picked last, Wi-Fi, BLE or 802.15.4, e.g. a BLE sensor on a power bank. 802.15.4 then stays on until a page switches it, also without anyone asking.">
+<input type="checkbox"
+       autocomplete="off"
+       id="keepMode"
+       onchange="uiAction(window.setKeepMode, this.checked)">
+Remember capture mode after a restart
+</label>
 
 <table class="kv">
 <tbody id="sysTable">
@@ -2077,6 +2220,7 @@ Firmware
 </table>
 
 <div class="networkControls"
+     id="otaControls"
      style="margin-top:10px">
 
 <input type="file"
@@ -2091,6 +2235,11 @@ Upload and restart
         style="display:none"
         onclick="uiAction(window.rollbackFirmware)">
 Back to previous firmware
+</button>
+
+<button id="rebootBtn"
+        onclick="uiAction(window.rebootSensor)">
+Reboot
 </button>
 
 <span class="small"
@@ -2117,6 +2266,12 @@ Download
 Install
 </button>
 
+<button id="otaFlasher"
+        style="display:none"
+        onclick="uiAction(window.openFlasher)">
+Update in download mode
+</button>
+
 <span class="small"
       id="otaUpdate">
 </span>
@@ -2141,8 +2296,12 @@ Time
 The timezone shifts displayed times only. Inside the device
 everything stays on UTC &mdash; the capture timestamps, the
 export and the clock arithmetic &mdash; so a capture taken
-here still lines up with one taken anywhere else. There is no
-daylight saving rule on board; pick the offset that applies.
+here still lines up with one taken anywhere else. Pick the
+standard offset, the one of winter, and the daylight saving
+rule of your region; the sensor then adds the summer hour
+itself, also to times recorded before a switch. Until you pick
+one, the sensor takes both from the country code most APs in
+range send, if that country has a single timezone.
 </div>
 
 <div class="controls">
@@ -2153,6 +2312,7 @@ daylight saving rule on board; pick the offset that applies.
         onchange="uiAction(window.setTimezone, this.value)"
         style="background:#1a1a1a;color:#ddd;border:1px solid #3a3a3a;
                border-radius:3px;padding:4px 8px;font-size:13px">
+<option value="auto">auto, from the country codes</option>
 <option value="-720">UTC-12:00</option>
 <option value="-660">UTC-11:00</option>
 <option value="-600">UTC-10:00</option>
@@ -2192,6 +2352,19 @@ daylight saving rule on board; pick the offset that applies.
 <option value="780">UTC+13:00</option>
 <option value="825">UTC+13:45</option>
 <option value="840">UTC+14:00</option>
+</select>
+
+<span class="small">Auto daylight saving</span>
+
+<select id="dstSelect"
+        onchange="uiAction(window.setDst, this.value)"
+        style="background:#1a1a1a;color:#ddd;border:1px solid #3a3a3a;
+               border-radius:3px;padding:4px 8px;font-size:13px">
+<option value="0">off</option>
+<option value="1">Europe</option>
+<option value="2">North America</option>
+<option value="3">Australia, south-east</option>
+<option value="4">New Zealand</option>
 </select>
 
 </div>
@@ -3665,6 +3838,15 @@ function setMode(mode)
 }
 
 
+// Remember capture mode, stored on the sensor
+function setKeepMode(on)
+{
+    queueCommand("/api/mode?keepmode=" + (on ? 1 : 0));
+}
+
+window.setKeepMode = setKeepMode;
+
+
 function setActiveScan(on)
 {
     queueCommand("/api/mode?active=" + (on ? 1 : 0));
@@ -3922,9 +4104,15 @@ function timeoutSignal(ms)
 // and the body in chunks of a two-byte length, ended by length 0.
 
 // The sensor never serves https, so this copy came from elsewhere
+/*
+ * The static copy: published over https, or served from this computer
+ * for a try (http://localhost is a secure context as well, so WebUSB
+ * works there). The sensor's own page is plain http from its address.
+ */
 function isStaticPage()
 {
-    return location.protocol === "https:";
+    return location.protocol === "https:" ||
+           ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
 }
 
 // The open USB link, null without one
@@ -4091,19 +4279,31 @@ class UsbLink
 
         await device.open();
 
-        if (!device.configuration)
-            await device.selectConfiguration(1);
+        let ctrl, data;
 
-        const ifaces = device.configuration.interfaces;
+        try
+        {
+            if (!device.configuration)
+                await device.selectConfiguration(1);
 
-        const ctrl = ifaces.find(i => i.alternates[0].interfaceClass === 2);
-        const data = ifaces.find(i => i.alternates[0].interfaceClass === 10);
+            const ifaces = device.configuration.interfaces;
 
-        if (!ctrl || !data)
-            throw new Error("no serial interface on this device");
+            ctrl = ifaces.find(i => i.alternates[0].interfaceClass === 2);
+            data = ifaces.find(i => i.alternates[0].interfaceClass === 10);
 
-        await device.claimInterface(ctrl.interfaceNumber);
-        await device.claimInterface(data.interfaceNumber);
+            if (!ctrl || !data)
+                throw new Error("no serial interface on this device");
+
+            await device.claimInterface(ctrl.interfaceNumber);
+            await device.claimInterface(data.interfaceNumber);
+        }
+        catch (e)
+        {
+            // Claimed by the system's serial driver, on Linux: let
+            // go, so that Web Serial can have it
+            await device.close().catch(() => { });
+            throw e;
+        }
 
         const eps = data.alternates[0].endpoints;
 
@@ -4193,7 +4393,7 @@ class UsbLink
 
         if (!c.body)
         {
-            this.device.transferOut(this.epOut.endpointNumber,
+            this.write(
                 new TextEncoder().encode("GET " + c.url + "\n"))
                 .catch(e => this.fail(e));
             return;
@@ -4209,7 +4409,7 @@ class UsbLink
      */
     async sendBody(c)
     {
-        await this.device.transferOut(this.epOut.endpointNumber,
+        await this.write(
             new TextEncoder().encode("PUT " + c.url + "\n"));
 
         for (let at = 0; at < c.body.length && !this.closed;
@@ -4218,7 +4418,7 @@ class UsbLink
             const end = Math.min(at + USB_PUT_PIECE, c.body.length);
             const ack = end < c.body.length ? this.nextAck() : null;
 
-            await this.device.transferOut(this.epOut.endpointNumber,
+            await this.write(
                 c.body.subarray(at, end));
 
             if (c.progress)
@@ -4297,19 +4497,99 @@ class UsbLink
         }
     }
 
+    write(bytes)
+    {
+        return this.device.transferOut(this.epOut.endpointNumber, bytes);
+    }
+
+    async closeDevice()
+    {
+        await this.device.close();
+    }
+
     async close()
     {
         this.fail(new Error("closed"));
 
         try
         {
-            await this.device.close();
+            await this.closeDevice();
         }
         catch (e)
         {
         }
     }
 }
+
+/*
+ * The same link through Web Serial, for a desktop where the system's
+ * serial driver holds the board (Linux: cdc_acm, /dev/ttyACM0) and
+ * WebUSB cannot claim it. The bytes are the same; only the port is
+ * opened differently, with DTR on and RTS off as above.
+ */
+class SerialLink extends UsbLink
+{
+    static async open(known = null)
+    {
+        const port = known || await navigator.serial.requestPort(
+            { filters: [{ usbVendorId: USB_VENDOR_ESPRESSIF }] });
+
+        await port.open({ baudRate: 115200, bufferSize: 65536 });
+        await port.setSignals({ dataTerminalReady: true,
+                                requestToSend: false });
+
+        const link = new SerialLink(null, null, null);
+
+        link.port = port;
+        link.writer = port.writable.getWriter();
+        link.readLoop();
+
+        return link;
+    }
+
+    async readLoop()
+    {
+        try
+        {
+            this.reader = this.port.readable.getReader();
+
+            while (!this.closed)
+            {
+                const { value, done } = await this.reader.read();
+
+                if (done)
+                    throw new Error("serial port closed");
+
+                if (value && value.length)
+                    this.parser.feed(value);
+            }
+        }
+        catch (e)
+        {
+            this.fail(e);
+        }
+    }
+
+    write(bytes)
+    {
+        return this.writer.write(bytes);
+    }
+
+    async closeDevice()
+    {
+        await this.reader?.cancel().catch(() => { });
+        this.reader?.releaseLock();
+        this.writer?.releaseLock();
+        await this.port.close();
+    }
+}
+
+/*
+ * How the link was made last, "usb" (WebUSB) or "serial" (Web
+ * Serial): a sensor coming back after a firmware update is taken up
+ * the same way.
+ */
+let lastLinkKind = null;
 
 /*
  * fetch() for the API: HTTP when the sensor served the page, USB
@@ -4320,6 +4600,10 @@ function api(url, options = {})
 {
     if (snapshotView && snapshotServes(url))
         return Promise.resolve(snapshotAnswer(url));
+
+    if (snapshotView && snapshotView.catalogframes &&
+        snapshotPath(url) === "/api/catalog.pcap")
+        return Promise.resolve(snapshotCatalogPcap(url));
 
     if (usbLink)
         return withSignal(usbLink.request(url), options.signal);
@@ -4360,6 +4644,12 @@ const SNAPSHOT_PCAP_NOTE =
     "that moment may have been overwritten since, and for a snapshot " +
     "from another sensor they were never there.";
 
+// The same for the IE catalog of a snapshot without its frames
+const SNAPSHOT_CATALOG_NOTE =
+    "This snapshot keeps no catalog frames (taken before 2.8.21 or " +
+    "without the catalog): the link asks the connected sensor, and " +
+    "for a snapshot from another sensor they are not there.";
+
 // Over HTTP outside a snapshot a plain link; otherwise fetched here
 async function apiDownload(url)
 {
@@ -4369,8 +4659,10 @@ async function apiDownload(url)
         return;
     }
 
-    const note = snapshotView && url.startsWith("/api/pcap")
-        ? "\n\n" + SNAPSHOT_PCAP_NOTE : "";
+    const note = !snapshotView ? ""
+        : url.startsWith("/api/pcap") ? "\n\n" + SNAPSHOT_PCAP_NOTE
+        : url.startsWith("/api/catalog.pcap") && !snapshotView.catalogframes
+            ? "\n\n" + SNAPSHOT_CATALOG_NOTE : "";
 
     try
     {
@@ -4497,11 +4789,52 @@ function snapshotPath(url)
 const SNAPSHOT_PATHS = ["/api/status", "/api/plan", "/api/live",
     "/api/networks", "/api/changes", "/api/clients", "/api/assochistory",
     "/api/catalog",
-    "/api/history", "/api/ble", "/api/zb", "/api/zbwaterfall"];
+    "/api/history", "/api/ble", "/api/blehits", "/api/zb",
+    "/api/zbwaterfall"];
 
 function snapshotServes(url)
 {
     return SNAPSHOT_PATHS.includes(snapshotPath(url));
+}
+
+/*
+ * The IE catalog's frames out of a snapshot that keeps them (see
+ * writeSnapshotFrames() in the firmware): all of them, or with k and
+ * id those carrying that row, as the sensor's /api/catalog.pcap.
+ */
+function snapshotCatalogPcap(url)
+{
+    const kept = snapshotView.catalogframes;
+    const args = new URLSearchParams(url.split("?")[1] || "");
+    const one  = args.has("k") && args.has("id");
+    const k    = Number(args.get("k"));
+    const id   = Number(args.get("id"));
+
+    // Each frame lists its rows as kind, key, kind, key, ...
+    const frames = kept.frames.filter(([, rows]) => !one ||
+        rows.some((v, i) => i % 2 === 0 && v === k && rows[i + 1] === id));
+
+    if (!frames.length)
+        return new Response(one ? "No frames for this entry in this snapshot."
+                                : "No frames in this snapshot's catalog.",
+                            { status: 404 });
+
+    const bytes = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
+
+    let name = "element-catalog.pcap";
+
+    const catalog = snapshotView.answers["/api/catalog"];
+    const entry   = one && catalog && (catalog.entries || [])
+        .find(e => e.k === k && e.id === id);
+
+    if (entry)
+        name = catalogFileName(entry, catalogName(entry)[1]);
+
+    return new Response(
+        new Blob([bytes(kept.hdr), ...frames.map(f => bytes(f[0]))],
+                 { type: "application/vnd.tcpdump.pcap" }),
+        { status: 200,
+          headers: { "Content-Disposition": "attachment; filename=" + name } });
 }
 
 // The exact URL, else any answer of the same endpoint
@@ -5367,34 +5700,59 @@ function clearOfflineText()
 
 function showUsbState(text)
 {
-    const button = document.getElementById("usbBtn");
+    const serial = usbLink instanceof SerialLink;
 
-    button.classList.toggle("active", !!usbLink);
-    button.title = text;
-    button.innerText = usbLink ? "USB ✓" : "USB";
+    [["usbBtn", "USB", usbLink && !serial],
+     ["serialBtn", "Serial", serial]].forEach(([id, name, on]) =>
+    {
+        const button = document.getElementById(id);
+
+        button.classList.toggle("active", !!on);
+        button.title = text;
+        button.innerText = on ? name + " \u2713" : name;
+    });
 
     if (!usbLink && isStaticPage())
         document.getElementById("status").innerText = text;
 }
 
-async function toggleUsb()
+function toggleUsb()
+{
+    return toggleLink("usb");
+}
+
+function toggleSerial()
+{
+    return toggleLink("serial");
+}
+
+/*
+ * The button of the link that is up closes it; the other one closes
+ * it and opens its own.
+ */
+async function toggleLink(kind)
 {
     if (usbLink)
     {
         const link = usbLink;
+        const same = (link instanceof SerialLink) === (kind === "serial");
 
         usbLink = null;
         await link.close();
         showUsbState("disconnected");
 
-        return;
+        if (same)
+            return;
     }
 
     try
     {
-        usbLink = await UsbLink.open();
+        usbLink = kind === "serial" ? await SerialLink.open()
+                                    : await UsbLink.open();
+        lastLinkKind = kind;
 
-        showUsbState("connected over USB");
+        showUsbState(kind === "serial" ? "connected over Web Serial"
+                                       : "connected over USB");
         clearOfflineText();
 
         // The one at page load went nowhere, there was no sensor
@@ -5408,8 +5766,45 @@ async function toggleUsb()
     catch (e)
     {
         usbLink = null;
-        showUsbState("USB: " + (e.message || e));
+
+        // Linux: cdc_acm has the board, Web Serial goes through it
+        if (kind === "usb" && navigator.serial &&
+            /claim|access denied/i.test(e.message || ""))
+        {
+            showUsbState("USB: the system's serial driver holds the " +
+                         "board, use Serial instead");
+            return;
+        }
+
+        showUsbState((kind === "serial" ? "Serial: " : "USB: ") +
+                     (e.message || e));
     }
+}
+
+if (navigator.serial)
+{
+    navigator.serial.addEventListener("disconnect", e =>
+    {
+        if (usbLink && usbLink.port && e.target === usbLink.port)
+            usbLink.fail(new Error("sensor unplugged"));
+    });
+
+    // Back after a firmware update, as for WebUSB below
+    navigator.serial.addEventListener("connect", async e =>
+    {
+        if (!usbReconnect || usbLink || lastLinkKind !== "serial")
+            return;
+
+        try
+        {
+            usbLink = await SerialLink.open(e.target);
+            showUsbState("connected over Web Serial");
+        }
+        catch (err)
+        {
+            usbLink = null;
+        }
+    });
 }
 
 if (navigator.usb)
@@ -5425,7 +5820,7 @@ if (navigator.usb)
     // link is taken up again without asking
     navigator.usb.addEventListener("connect", async e =>
     {
-        if (!usbReconnect || usbLink ||
+        if (!usbReconnect || usbLink || lastLinkKind === "serial" ||
             e.device.vendorId !== USB_VENDOR_ESPRESSIF)
             return;
 
@@ -5708,11 +6103,18 @@ function addGraphTab(tip, preview = false)
 
     // preview: the tooltip that follows the mouse, it takes no clicks
     tabs.className = "tipTabs" + (preview ? " preview" : "");
+    // Beacons: firmware that keeps beacon versions says how many
+    const beacons = details && details.dataset.bvn
+        ? "<button class='tipTab' data-tab='beacons'" +
+          (preview ? " title='Click to keep the tooltip open'" : "") +
+          ">Beacons</button>"
+        : "";
+
     tabs.innerHTML =
         "<button class='tipTab active' data-tab='details'>Details</button>" +
         "<button class='tipTab' data-tab='graphs'" +
         (preview ? " title='Click to keep the tooltip open'" : "") +
-        ">Graphs</button>";
+        ">Graphs</button>" + beacons;
 
     if (preview)
     {
@@ -5725,8 +6127,14 @@ function addGraphTab(tip, preview = false)
     graphs.className = "tipGraphs";
     graphs.style.display = "none";
 
+    const versions = document.createElement("div");
+
+    versions.className = "tipBeacons";
+    versions.style.display = "none";
+
     details.before(tabs);
     details.after(graphs);
+    graphs.after(versions);
 
     tabs.addEventListener("click", ev =>
     {
@@ -5735,19 +6143,273 @@ function addGraphTab(tip, preview = false)
         if (!b)
             return;
 
-        const toGraphs = b.dataset.tab === "graphs";
+        const tab = b.dataset.tab;
 
         tabs.querySelectorAll(".tipTab").forEach(t =>
             t.classList.toggle("active", t === b));
 
-        details.style.display = toGraphs ? "none" : "";
-        graphs.style.display = toGraphs ? "" : "none";
+        details.style.display = tab === "details" ? "" : "none";
+        graphs.style.display = tab === "graphs" ? "" : "none";
+        versions.style.display = tab === "beacons" ? "" : "none";
 
-        if (toGraphs)
+        if (tab === "graphs")
             startGraphWatch(details.dataset.bssid, graphs);
         else
             stopGraphWatch();
+
+        if (tab === "beacons")
+            showBeaconVersions(details.dataset.bssid, versions);
     });
+}
+
+
+// ==========================================================
+// Beacon versions of one BSS, in its pinned tooltip
+// ==========================================================
+
+/*
+ * The sensor keeps the first beacon of a BSS and each one whose
+ * content changed for good (see "Beacon versions" in the firmware).
+ * Here they are listed with what changed from one to the next,
+ * element by element. The parts that change with every beacon are
+ * set aside the same way as on the sensor, so they show no change.
+ */
+
+// The sensor's kind of an element, see bvKeyOf()
+function bvKeyOf(id, body)
+{
+    if (id === 255 && body.length >= 1)
+        return 0x100 | body[0];
+
+    if (id === 221 && body.length >= 4)
+    {
+        const x = ((body[0] << 16) | (body[1] << 8) | body[2]) * 31 + body[3];
+
+        return 0x8000 | ((x ^ (x >>> 15)) & 0x7FFF);
+    }
+
+    return id;
+}
+
+// Not content: changes with every beacon, as bvElemSkipped()
+const BV_SKIPPED = [5, 11, 63, 68, 193, 216];
+
+// The octets that count by themselves set to 0, as bvElemHash()
+function bvNormalized(id, body)
+{
+    const b = Uint8Array.from(body);
+
+    if (id === 12 && b.length >= 1)
+        b[0] &= 0xF0;
+    else if (id === 37 && b.length >= 3)
+        b[2] = 0;
+    else if (id === 40 && b.length >= 1)
+        b[0] = 0;
+    else if (id === 60 && b.length >= 4)
+        b[3] = 0;
+    else if (id === 85 && b.length >= 3)
+        b[2] = 0;
+    else if (id === 221 && b.length >= 7 && b[0] === 0x00 &&
+             b[1] === 0x50 && b[2] === 0xF2 && b[3] === 2)
+        b[6] &= 0xF0;
+    else if (id === 255 && b.length >= 2 && b[0] === 42)
+        b[1] = 0;
+    else if (id === 71)
+    {
+        // The DTIM count of each nontransmitted profile
+        for (let pos = 1; pos + 2 <= b.length; )
+        {
+            const sid = b[pos], slen = b[pos + 1];
+
+            if (pos + 2 + slen > b.length)
+                break;
+
+            for (let q = pos + 2; sid === 0 && q + 2 <= pos + 2 + slen; )
+            {
+                if (b[q] === 85 && b[q + 1] >= 3)
+                    b[q + 4] = 0;
+
+                q += 2 + b[q + 1];
+            }
+
+            pos += 2 + slen;
+        }
+    }
+
+    return b;
+}
+
+function bvElementName(id, body)
+{
+    if (id === 255 && body.length)
+        return elementName(256 + body[0]);
+
+    if (id === 221 && body.length >= 4)
+        return "221 vendor " + hexOf(body.slice(0, 3)) + " type " + body[3];
+
+    return elementName(id);
+}
+
+function hexOf(bytes)
+{
+    return Array.from(bytes, x => x.toString(16).toUpperCase()
+        .padStart(2, "0")).join("");
+}
+
+/*
+ * A beacon's content: the fixed fields and each element, as
+ * [label, key, normalized octets]; a second element of the same
+ * kind gets "#2". Beacon interval and capabilities are listed apart,
+ * so a change names the one that changed; both share key 0xFFFF,
+ * which the firmware gives the two together for volatile.
+ */
+function bvContent(frame)
+{
+    const out = [["beacon interval", 0xFFFF, frame.slice(32, 34)],
+                 ["capabilities", 0xFFFF, frame.slice(34, 36)]];
+    const seen = {};
+
+    for (let pos = 36; pos + 2 <= frame.length; )
+    {
+        const id = frame[pos], len = frame[pos + 1];
+
+        if (pos + 2 + len > frame.length)
+            break;
+
+        const body = frame.slice(pos + 2, pos + 2 + len);
+
+        pos += 2 + len;
+
+        if (BV_SKIPPED.includes(id))
+            continue;
+
+        const key = bvKeyOf(id, body);
+
+        seen[key] = (seen[key] || 0) + 1;
+
+        out.push([bvElementName(id, body) +
+                      (seen[key] > 1 ? " #" + seen[key] : ""),
+                  key, bvNormalized(id, body)]);
+    }
+
+    return out;
+}
+
+// What differs between two beacons, the volatile kinds left out
+function bvDiff(older, newer, volatile)
+{
+    const a = new Map(bvContent(older).filter(e => !volatile.includes(e[1]))
+                      .map(e => [e[0], e[2]]));
+    const b = new Map(bvContent(newer).filter(e => !volatile.includes(e[1]))
+                      .map(e => [e[0], e[2]]));
+    const lines = [];
+    const hex = x => {
+        const h = hexOf(x);
+        return h.length > 96 ? h.slice(0, 96) + "\u2026" : h;
+    };
+
+    b.forEach((v, k) =>
+    {
+        if (!a.has(k))
+            lines.push("<span style='color:#7c7'>+ " + escapeHTML(k) +
+                       "</span>");
+        else if (hexOf(a.get(k)) !== hexOf(v))
+            lines.push("<details><summary>~ " + escapeHTML(k) +
+                       "</summary><code>" + hex(a.get(k)) + "<br>" +
+                       hex(v) + "</code></details>");
+    });
+
+    a.forEach((v, k) =>
+    {
+        if (!b.has(k))
+            lines.push("<span style='color:#d08080'>\u2212 " +
+                       escapeHTML(k) + "</span>");
+    });
+
+    return lines.length ? lines.join("<br>")
+                        : "<span class='dim'>no difference in the " +
+                          "octets kept (the beacon was cut off, or " +
+                          "the change was in an element now left out)" +
+                          "</span>";
+}
+
+function bvFrame(text)
+{
+    return text ? Uint8Array.from(atob(text), c => c.charCodeAt(0)) : null;
+}
+
+async function showBeaconVersions(bssid, box)
+{
+    if (snapshotView)
+    {
+        box.innerHTML = "<span class='dim'>Beacon versions are kept " +
+                        "live, there are none in a snapshot.</span>";
+        return;
+    }
+
+    box.innerHTML = "<span class='dim'>loading\u2026</span>";
+
+    let d;
+
+    try
+    {
+        const r = await api("/api/beaconversions?bssid=" + bssid,
+                            { cache: "no-store" });
+
+        d = await r.json();
+    }
+    catch (e)
+    {
+        box.innerHTML = "<span class='dim'>Beacon versions could not be " +
+                        "read: " + escapeHTML(e.message || e) + "</span>";
+        return;
+    }
+
+    const volatile = d.volatile || [];
+    const frames = d.versions.map(v => bvFrame(v.frame));
+    const names = {};
+
+    frames.forEach(f => f && bvContent(f).forEach(e =>
+        names[e[1]] = e[0].replace(/ #\d+$/, "")));
+
+    const rows = d.versions.map((v, i) =>
+    {
+        const head = "v" + v.seq +
+            (v.seq === d.current ? " (current)" : "") + ", " +
+            agoSpan("first " + secondsText(v.ago) + " ago", v.ago,
+                    Date.now()) +
+            (v.times > 1 ? ", current again " + secondsText(v.since) +
+                           " ago, " + v.times + " times" : "") +
+            ", " + v.len + " octets";
+
+        let body;
+
+        if (!frames[i])
+            body = "<span class='dim'>its frame is no longer kept</span>";
+        else if (i === 0)
+            body = "<span class='dim'>the first beacon seen</span>";
+        else if (!frames[i - 1])
+            body = "<span class='dim'>the one before is no longer kept" +
+                   "</span>";
+        else
+            body = bvDiff(frames[i - 1], frames[i], volatile);
+
+        return "<div style='margin-bottom:6px'><b>" + head + "</b><br>" +
+               body + "</div>";
+    });
+
+    box.innerHTML =
+        "<div class='tipSec'>BEACON VERSIONS</div>" +
+        "<div class='dim' style='margin-bottom:6px'>" +
+        d.versions.length + " kept, " + d.changes + " change" +
+        (d.changes === 1 ? "" : "s") + " since the sensor started" +
+        (volatile.length ? "; left out as changing by themselves: " +
+            volatile.map(k => escapeHTML(names[k] || "key " + k))
+                .join(", ") : "") +
+        " \u00b7 <a class='dl' target='_blank' " +
+        "onclick='return apiLink(event, this)' " +
+        "href='/api/pcap?src=versions&ta=" + d.bssid + "'>pcap</a></div>" +
+        rows.reverse().join("");
 }
 
 function startGraphWatch(bssid, box)
@@ -5885,12 +6547,16 @@ async function fetchGraphWatch(extra = "")
     }
 }
 
-// The time a sample's step began, as text
+// The time a sample's step began, as text, in the sensor's timezone
 function graphTimeText(w, k)
 {
     if (w.epoch)
-        return new Date((w.epoch + k * w.step) * 1000)
-            .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    {
+        const at = w.epoch + k * w.step;
+
+        return new Date((at + tzOffsetSeconds(at)) * 1000).toISOString()
+            .slice(11, 16);
+    }
 
     const ago = (w.next - k) * w.step;
 
@@ -6196,11 +6862,12 @@ function heCapText(x)
 /*
  * Other devices' BSSs on the same channel with the same BSS colour:
  * the colour is what lets a station tell its own BSS's frames from
- * a neighbour's, for spatial reuse among others.
+ * a neighbour's, for spatial reuse among others. Colour 0 is no
+ * colour, so two BSSs with it do not collide.
  */
 function colourTwins(n)
 {
-    if (!n.color || n.color[1])
+    if (!n.color || n.color[1] || !n.color[0])
         return [];
 
     return networks.filter(o => o !== n && o.channel === n.channel &&
@@ -7290,6 +7957,7 @@ function matchesFilter(n)
         n.adv ? advText(n) : "",
         n.bprot ? "beacon protection" : "",
         n.apname ? "ap name " + n.apname : "",
+        n.uuid ? "uuid " + n.uuid : "",
         n.vfw ? "firmware " + n.vfw : "",
         n.camkit ? "camera kit " + n.camkit : "",
         puncturedChannels(n).length ? "punctured" : "",
@@ -7479,12 +8147,8 @@ function changeStamp(secondsBefore, liveBase)
     else
         at = liveBase - secondsBefore * 1000;
 
-    const d   = new Date(at);
-    const two = x => String(x).padStart(2, "0");
-
-    return d.getHours() + ":" + two(d.getMinutes()) + ":" +
-           two(d.getSeconds()) + " " + two(d.getDate()) + "." +
-           two(d.getMonth() + 1) + "." + d.getFullYear();
+    // In the sensor's timezone, as every other time on the page
+    return deviceTimeText(Math.round(at / 1000));
 }
 
 // "… ago" with the time itself on hover
@@ -7779,6 +8443,77 @@ function clearFilter()
  * bin: the question the picture answers is "can I still send
  * here", and for that the pessimist is the honest one.
  */
+/*
+ * Where a BSS reports load, as [from MHz, to MHz, %]. BSS Load is
+ * about the primary 20 MHz channel only; an AP that also fills in
+ * the Extended BSS Load element (193) says how busy its secondary
+ * 20, 40 and 80 MHz were, and each of those gets its own value.
+ * Without it, or with values that do not fit together, the primary
+ * value stands for the whole width.
+ */
+function loadSpans(n)
+{
+    const f = networkCenterFreq(n);
+    const w = networkWidthMHz(n);
+    const p = channelToFreq(n.channel);
+
+    let lo = f - w / 2;
+    let hi = f + w / 2;
+
+    if (!xloadPlausible(n) || p < lo || p > hi)
+        return [[lo, hi, n.util]];
+
+    const x = n.xload;
+
+    const busy  = { 20: x[2], 40: x[3], 80: x[4] };
+    const spans = [];
+
+    // Halve towards the primary channel, the other half each time
+    // is the secondary of that size
+    while (hi - lo > 20)
+    {
+        const mid = (lo + hi) / 2;
+        const pct = Math.round(busy[mid - lo] * 100 / 255);
+
+        if (p < mid)
+        {
+            spans.push([mid, hi, pct]);
+            hi = mid;
+        }
+        else
+        {
+            spans.push([lo, mid, pct]);
+            lo = mid;
+        }
+    }
+
+    spans.push([lo, hi, n.util]);
+
+    return spans.sort((a, b) => a[0] - b[0]);
+}
+
+
+/*
+ * Whether the secondary values of Extended BSS Load can be taken:
+ * a BSS wider than 20 MHz, and every secondary its width has
+ * filled in once one is. A FRITZ!Box sends 96 % on the secondary
+ * 20 MHz of an 80 MHz BSS and 0 on the secondary 40, and numbers
+ * for a secondary channel its 20 MHz BSS on 2.4 GHz does not have.
+ */
+function xloadPlausible(n)
+{
+    const x = n.xload;
+    const w = networkWidthMHz(n);
+
+    if (!x || w <= 20)
+        return false;
+
+    const own = [x[2], x[3], x[4]].slice(0, Math.log2(w / 20));
+
+    return own.some(v => v) && own.every(v => v);
+}
+
+
 function drawLoadHatch(ctx, bands, nets, top, bottom)
 {
     const BIN   = 2;    // MHz
@@ -7795,29 +8530,31 @@ function drawLoadHatch(ctx, bands, nets, top, bottom)
 
             nets.forEach(n =>
             {
-                if (!(n.util >= FLOOR))
-                    return;
-
                 if ((n._seg || segForFreq(b, networkCenterFreq(n))) !== seg)
                     return;
 
-                const f = networkCenterFreq(n);
-                const w = networkWidthMHz(n);
-
-                let i0 = Math.floor((f - w / 2 - seg.fMin) / BIN);
-                let i1 = Math.ceil((f + w / 2 - seg.fMin) / BIN);
-
-                i0 = Math.max(0, i0);
-                i1 = Math.min(count, i1);
-
-                for (let i = i0; i < i1; i++)
+                loadSpans(n).forEach(([lo, hi, util]) =>
                 {
-                    if (n.util > load[i])
-                        load[i] = n.util;
-                }
+                    if (!(util >= FLOOR))
+                        return;
+
+                    const i0 = Math.max(0, Math.floor((lo - seg.fMin) / BIN));
+                    const i1 = Math.min(count, Math.ceil((hi - seg.fMin) / BIN));
+
+                    for (let i = i0; i < i1; i++)
+                    {
+                        if (util > load[i])
+                            load[i] = util;
+                    }
+                });
             });
 
-            // Runs of equal load become one rectangle
+            /*
+             * Runs of equal load become one rectangle each, and the
+             * runs that touch one block with a single badge at its
+             * end: a 160 MHz BSS with a busier 80 MHz one on its
+             * upper half is still one stretch, not two.
+             */
             let i = 0;
 
             while (i < count)
@@ -7828,42 +8565,46 @@ function drawLoadHatch(ctx, bands, nets, top, bottom)
                     continue;
                 }
 
-                let j = i;
+                const parts = [];
 
-                while (j < count && load[j] === load[i])
-                    j++;
+                while (i < count && load[i])
+                {
+                    let j = i;
 
-                const x0 = xForFreq(seg, seg.fMin + i * BIN);
-                const x1 = xForFreq(seg, seg.fMin + j * BIN);
+                    while (j < count && load[j] === load[i])
+                        j++;
 
-                hatchRect(ctx, x0, x1, top, bottom, load[i]);
+                    const x0 = xForFreq(seg, seg.fMin + i * BIN);
+                    const x1 = xForFreq(seg, seg.fMin + j * BIN);
+
+                    hatchRect(ctx, x0, x1, top, bottom, load[i]);
+
+                    parts.push({ x0: x0, x1: x1, f0: seg.fMin + i * BIN,
+                                 f1: seg.fMin + j * BIN, util: load[i] });
+
+                    i = j;
+                }
+
+                const first = parts[0];
+                const last  = parts[parts.length - 1];
+                const util  = Math.max(...parts.map(r => r.util));
+
+                loadBadge(ctx, first.x0, last.x1, top, util >= 70);
 
                 /*
-                 * Keep who contributed to this run so the
-                 * hover can name them. The run is the busiest
-                 * reporter, but the others overlapping it are
-                 * what makes the picture make sense.
+                 * Keep who contributed to this block so the hover
+                 * can name them. Its load is the busiest reporter,
+                 * but the others overlapping it are what makes the
+                 * picture make sense.
                  */
-                const f0 = seg.fMin + i * BIN;
-                const f1 = seg.fMin + j * BIN;
-
                 graphLoad.push({
-                    x0: x0, x1: x1,
-                    f0: f0, f1: f1,
-                    util: load[i],
-                    nets: nets.filter(n =>
-                    {
-                        if (!(n.util >= FLOOR))
-                            return false;
-
-                        const f = networkCenterFreq(n);
-                        const w = networkWidthMHz(n);
-
-                        return (f - w / 2) < f1 && (f + w / 2) > f0;
-                    })
+                    x0: first.x0, x1: last.x1,
+                    f0: first.f0, f1: last.f1,
+                    util: util,
+                    parts: parts.length > 1 ? parts : null,
+                    nets: nets.filter(n => loadSpans(n).some(([lo, hi, u]) =>
+                        u >= FLOOR && lo < last.f1 && hi > first.f0))
                 });
-
-                i = j;
             }
         });
     });
@@ -7915,8 +8656,6 @@ function hatchRect(ctx, x0, x1, top, bottom, util)
     }
 
     ctx.restore();
-
-    loadBadge(ctx, x0, x1, top, red);
 }
 
 
@@ -9260,6 +9999,12 @@ function networkNotes(n)
             "spatial reuse suffers; the APs should pick another colour"]);
     }
 
+    if (n.color && !n.color[1] && n.color[0] === 0)
+        notes.push([blue,
+            "BSS colour 0: the AP uses no colour, so stations cannot " +
+            "tell its frames from others' by colour and spatial reuse " +
+            "stays off"]);
+
     if (wifi7SecurityGaps(n).length)
         notes.push([amber,
             "Wi-Fi 7 without " + wifi7SecurityGaps(n).join(", ") +
@@ -10089,17 +10834,32 @@ function xloadText(n)
         return "";
 
     const pct = v => Math.round(v * 100 / 255) + " %";
-    const w = networkWidthMHz(n);
 
-    const busy = [[20, x[2]], [40, x[3]], [80, x[4]]]
-        .filter(([mhz]) => w > mhz)
-        .map(([mhz, v]) => mhz + " MHz " + pct(v));
+    const busy = secondaryBusyText(n);
 
     return [
         x[0] + " MU-MIMO station" + (x[0] === 1 ? "" : "s"),
         "streams idle " + pct(x[1]),
-        busy.length ? "secondary busy " + busy.join(" / ") : ""
+        busy,
+        busy && !xloadPlausible(n) ? "Note: implausible load" : ""
     ].filter(v => v).join(" \u00b7 ");
+}
+
+// "secondary busy 20 MHz 5 % / 40 MHz 12 %", as far as the BSS is wide
+function secondaryBusyText(n)
+{
+    const x = n.xload;
+
+    if (!x || !x.some(v => v))
+        return "";
+
+    const w = networkWidthMHz(n);
+
+    const busy = [[20, x[2]], [40, x[3]], [80, x[4]]]
+        .filter(([mhz]) => w > mhz)
+        .map(([mhz, v]) => mhz + " MHz " + Math.round(v * 100 / 255) + " %");
+
+    return busy.length ? "secondary busy " + busy.join(" / ") : "";
 }
 
 
@@ -10177,7 +10937,7 @@ const MAKER_NAMES = {
     "1422DB": "eero (Amazon)",
     "000C42": "MikroTik",
     "00090F": "Fortinet",
-    "001D0F": "TP-Link",
+    "001D0F": "TP-Link", "000AEB": "TP-Link",
     "009D85": "SigmaStar",
     "000E58": "Sonos",
     "00E0FC": "HUAWEI",
@@ -10198,6 +10958,9 @@ const MAKER_NAMES = {
  */
 const NO_MAKER_OUIS = ["00000F", "0002BC", "001374", "000000"];
 
+// The registry's capitals where the maker writes itself otherwise
+const MAKER_SPELLING = { "TP-LINK": "TP-Link" };
+
 function ouiColons(hex)
 {
     return hex.match(/../g).join(":");
@@ -10216,10 +10979,15 @@ const CAR_BRANDS = { "AUDI": "Audi", "PORSCHE": "Porsche",
 
 /*
  * BSSID OUIs of modules made for cars only, named on a vehicle:
- * AUMOVIO, Continental's former automotive branch, for a car's
- * hotspot ("Hotspot67B0")
+ * AUMOVIO, Continental's former automotive branch, and Visteon, for
+ * a car's hotspot ("Hotspot67B0", "HotspotU667"); Panasonic
+ * Automotive for a Toyota's head unit ("Smartphone_connect_849ee2")
  */
-const CAR_MODULE_OUIS = { "00:54:AF": "AUMOVIO (telematics)" };
+const CAR_MODULE_OUIS = { "00:54:AF": "AUMOVIO (telematics)",
+                          "F8:55:CD": "Visteon (telematics)",
+                          "B0:D8:88": "Panasonic Automotive (head unit)",
+                          "CC:57:63": "Panasonic Automotive (head unit)",
+                          "00:14:09": "Magneti Marelli (head unit)" };
 
 // SoC makers giving themselves as manufacturer in the Apple Device
 // IE, a CarPlay dongle's "arkmicro" / "Linux"
@@ -10266,8 +11034,10 @@ function apMakers(n)
         if (!chip && !name && !MAKER_NAMES[oui])
             continue;
 
+        // The short names the catalog uses, then the registry's
         const list = chip ? chips : makers;
-        const text = chip || MAKER_NAMES[oui] || name;
+        const text = chip || MAKER_NAMES[oui] || VENDOR_IE_MAKERS[oui] ||
+                     MAKER_SPELLING[name] || name;
 
         if (!list.includes(text))
             list.push(text);
@@ -10531,9 +11301,12 @@ const DEVICE_TYPES = {
  * "DIRECT-": "MBUX 93321", "BMW 90527", "BMW51589 CarPlay",
  * "Audi_MMI_2527", "My Skoda 9610", "My VW 9305", "My SEAT 2945",
  * "My Fiat SJ806696",
- * Ford's "SYNC_XU614B6V" only from Ford's OUI. Only
- * names seen in the field; they send a phone's or a computer's device
- * type, if any. The head unit, its car maker, the OUI it needs.
+ * Ford's "SYNC_XU614B6V" only from Ford's OUI, a Toyota's
+ * "Smartphone_connect_849ee2" only from Panasonic Automotive's, a
+ * Mazda's "Mazda_c5e263c6cc57_SPL" only with its own BSSID in it.
+ * Only names seen in the field; they send a phone's or a computer's
+ * device type, if any. The head unit, its car maker, the OUI it
+ * needs, a check of the network besides.
  */
 const CAR_HEAD_UNITS = [
     [/^MBUX\b/, "Mercedes MBUX", "Mercedes-Benz"],
@@ -10543,8 +11316,24 @@ const CAR_HEAD_UNITS = [
     [/^My VW\b/, "VW", "Volkswagen"],
     [/^My SEAT\b/, "SEAT", "SEAT"],
     [/^My Fiat\b/, "Fiat", "Fiat"],
-    [/^SYNC_/, "Ford SYNC", "Ford", "00:26:B4"]
+    [/^SYNC_/, "Ford SYNC", "Ford", "00:26:B4"],
+    [/^Smartphone_connect_/, "Toyota", "Toyota", "B0:D8:88"],
+    [/^Mazda_[0-9a-f]{12}_SPL$/i, "Mazda", "Mazda", null, mazdaSplName],
+    // Uconnect and others, under whatever name the owner gave it:
+    // the OUI alone, Magneti Marelli builds for cars only
+    [/(?:)/, "Magneti Marelli", "", "00:14:09"]
 ];
+
+// "Mazda_c5e263c6cc57_SPL": the BSSID CC:57:63:C6:C5:E2 with its
+// three 16-bit words the other way round
+function mazdaSplName(n)
+{
+    const words = (n.bssid || "").replace(/:/g, "").toLowerCase()
+        .match(/..../g) || [];
+    const hex = (n.ssid || "").slice(6, 18).toLowerCase();
+
+    return words.length === 3 && words.reverse().join("") === hex;
+}
 
 // The head unit and its car maker, or null
 function carHeadUnitOf(n)
@@ -10553,8 +11342,9 @@ function carHeadUnitOf(n)
                    (n.ssid || "").replace(/^DIRECT-(\w\w-)?/, "")];
     const oui = (n.bssid || "").slice(0, 8).toUpperCase();
 
-    for (const [re, text, maker, from] of CAR_HEAD_UNITS)
-        if ((!from || from === oui) && names.some(x => x && re.test(x)))
+    for (const [re, text, maker, from, check] of CAR_HEAD_UNITS)
+        if ((!from || from === oui) && (!check || check(n)) &&
+            names.some(x => x && re.test(x)))
             return {text, maker};
 
     return null;
@@ -10567,10 +11357,39 @@ function carHeadUnit(n)
     return car ? car.text : "";
 }
 
+/*
+ * A box retrofitted for wireless CarPlay, by the model in Apple's
+ * Device IE: "CAR" / "Magic" / "AutoBox", named after the car it
+ * sits in ("VOLVO S9082"), no Wi-Fi Direct. "Magic AutoBox", or ""
+ */
+const CARPLAY_ADAPTER_MODELS = [/^AutoBox$/i];
+
+function carPlayAdapter(n)
+{
+    if (!n.acc || !CARPLAY_ADAPTER_MODELS.some(re => re.test(n.acc[2] || "")))
+        return "";
+
+    return [n.acc[1], n.acc[2]].filter(Boolean).join(" ");
+}
+
 // Apple's Device IE on a car: wireless CarPlay
 function carPlay(n, car)
 {
-    return !!n.acc && (car || !!n.p2p || /^DIRECT-/.test(n.ssid || ""));
+    return !!n.acc && (car || !!n.p2p || /^DIRECT-/.test(n.ssid || "") ||
+                       !!carPlayAdapter(n));
+}
+
+/*
+ * A head unit for wireless Android Auto, by its name on a vehicle or
+ * from Alps Alpine's OUI: "AndroidAuto_aaa2"
+ */
+function androidAuto(n)
+{
+    const iw = interworking(n);
+
+    return /^AndroidAuto_/.test(n.ssid || "") &&
+           ((iw && iw.group === 10) ||
+            (n.bssid || "").slice(0, 8).toUpperCase() === "30:DF:17");
 }
 
 function deviceTypeText(n)
@@ -10587,6 +11406,13 @@ function deviceTypeText(n)
     // with Apple's Device IE, for wireless CarPlay
     const car = carHeadUnit(n);
     const carplay = carPlay(n, car);
+    const adapter = carPlayAdapter(n);
+
+    if (adapter && !car)
+        return "car (wireless CarPlay adapter, " + adapter + ")";
+
+    if (androidAuto(n) && !car)
+        return "car (head unit, wireless Android Auto)";
 
     if (car || carplay)
         return "car (head unit" + (car ? ", " + car : "") +
@@ -10887,7 +11713,7 @@ function apMakerHeader(n)
     // A car by its head unit's name, when nothing else names a maker
     const car = carHeadUnitOf(n);
 
-    if (car && !makers.length)
+    if (car && car.maker && !makers.length)
         makers.push(car.maker);
 
     if (makers.length)
@@ -10918,8 +11744,11 @@ function apMakerHeader(n)
         // Retrofitted Android head units call themselves a bus:
         // "AndroidAP_5138", "AndroidAP_8126", vehicular type 3
         const retro = iw.vtype === 3 && /^AndroidAP_/.test(n.ssid || "");
+        const adapter = carPlayAdapter(n);
         const extra = [retro ? "aftermarket head unit" : "",
-                       carPlay(n, true) ? "wireless CarPlay" : ""]
+                       adapter ? "wireless CarPlay adapter, " + adapter
+                       : carPlay(n, true) ? "wireless CarPlay" : "",
+                       androidAuto(n) ? "wireless Android Auto" : ""]
             .filter(Boolean);
 
         rows.push(["Device", "Vehicle" +
@@ -11024,12 +11853,13 @@ function networkTooltip(n)
                   : "learned from a probe or association request") +
               ")</span>"
             : "") +
-        (n.apname ? "<br>AP name: " + escapeHTML(n.apname) : "") +
-        (n.vfw ? "<br>Firmware: " + escapeHTML(n.vfw) : "") +
         "<br>" + n.bssid +
         (n.vendor ? " (" + vendorWithBlock(n.vendor, n.bssid, n.vblk) + ")"
                   : "") +
-        "<br>RSSI " + n.rssi + " dBm \u00b7 last seen " + n.age + " s ago";
+        "<br>RSSI " + n.rssi + " dBm \u00b7 last seen " + n.age + " s ago" +
+        (n.apname ? "<br>AP name: " + escapeHTML(n.apname) : "") +
+        (n.uuid ? "<br>UUID: " + escapeHTML(n.uuid) : "") +
+        (n.vfw ? "<br>Firmware: " + escapeHTML(n.vfw) : "");
 
     // ---- drone ------------------------------------------
 
@@ -11233,7 +12063,8 @@ function networkTooltip(n)
     ]);
 
     // The details, beside which a pinned tooltip offers its graphs
-    return "<div class='tipDetails' data-bssid='" + n.bssid + "'>" + html +
+    return "<div class='tipDetails' data-bssid='" + n.bssid + "'" +
+           (n.bvn ? " data-bvn='" + n.bvn + "'" : "") + ">" + html +
            tipNotes(networkNotes(n)) + "</div>";
 }
 
@@ -12336,9 +13167,16 @@ function loadTooltip(r)
         : "";
 
     let html =
-        "<b>Reported airtime " + r.util + " %</b>" +
-        (where ? " on " + where : "") + "<br>" +
-        "Busiest reporter over this stretch of spectrum.<br><br>";
+        "<b>Reported airtime " + (r.parts ? "up to " : "") + r.util +
+        " %</b>" + (where ? " on " + where : "") + "<br>" +
+        "Busiest reporter over this stretch of spectrum.<br>";
+
+    // Parts with another busiest reporter, lowest frequency first
+    if (r.parts)
+        html += r.parts.map(p => stretchChannels(p.f0, p.f1) + ": " +
+                            p.util + " %").join(", ") + "<br>";
+
+    html += "<br>";
 
     r.nets
         .slice()
@@ -12348,7 +13186,9 @@ function loadTooltip(r)
             html +=
                 escapeHTML(n.ssid || "<hidden>") + " " +
                 escapeHTML(n.bssid) + ": " + n.util + " % (channel " +
-                n.channel + ", " + bandwidthText(n.bandwidth) + ")<br>";
+                n.channel + ", " + bandwidthText(n.bandwidth) +
+                (xloadPlausible(n) ? "; " + secondaryBusyText(n) : "") +
+                ")<br>";
         });
 
     html +=
@@ -12844,7 +13684,7 @@ function bleMatches(d)
 
     const haystack = [
         d.addr, d.name, d.type, d.svc,
-        d.vendor, d.companyName
+        d.vendor, bleCompanyText(d.company, d.companyName)
     ].join(" ").toLowerCase();
 
     return terms.every(t => haystack.indexOf(t) >= 0);
@@ -12862,8 +13702,10 @@ function bleLabel(d)
     if (d.name)
         return d.name;
 
-    if (d.companyName)
-        return d.companyName;
+    const company = btCompanyName(d.company) || d.companyName;
+
+    if (company)
+        return company;
 
     return d.addr.substring(9);
 }
@@ -12894,8 +13736,10 @@ function bleTooltip(d)
         html += "Company ID: 0x" +
             d.company.toString(16).toUpperCase().padStart(4, "0");
 
-        if (d.companyName)
-            html += " (" + escapeHTML(d.companyName) + ")";
+        const company = btCompanyName(d.company) || d.companyName;
+
+        if (company)
+            html += " (" + escapeHTML(company) + ")";
 
         html += "<br>";
     }
@@ -13075,17 +13919,28 @@ const bleColumns = [
     { key: "type",        label: "Type",     type: "str" },
     { key: "name",        label: "Name",     type: "str" },
     { key: "companyName", label: "Company",  type: "str" },
+    { key: "vendor",      label: "Vendor (OUI)", type: "str", hidden: true },
+    { key: "svc",         label: "Service",  type: "str", hidden: true },
     { key: "rssi",        label: "RSSI",     type: "num" },
     { key: "peak",        label: "Peak",     type: "num" },
     { key: "tx",          label: "TX",       type: "num" },
     { key: "rate",        label: "Adv/s",    type: "num" },
     { key: "adv",         label: "Adverts",  type: "num" },
-    { key: "age",         label: "Age",      type: "num" }
+    { key: "age",         label: "Age",      type: "num" },
+    { key: "seen",        label: "Known for", type: "num", hidden: true }
 ];
 
 
 function bleCellText(d, key)
 {
+    // A random address carries no OUI
+    if (key === "vendor")
+        return d.type !== "public" ? "-"
+             : d.vendor || d.addr.substring(0, 8);
+
+    if (key === "seen")
+        return d.seen + " s";
+
     if (key === "rssi" || key === "peak")
         return d[key] + " dBm";
 
@@ -13093,18 +13948,10 @@ function bleCellText(d, key)
         return d.tx === 127 ? "-" : d.tx + " dBm";
 
     if (key === "age")
-        return d.age + " s";
+        return tableAge("ble|" + d.addr, d.age) + " s";
 
     if (key === "companyName")
-    {
-        if (d.companyName)
-            return d.companyName;
-
-        return d.company === 65535
-            ? "-"
-            : "0x" + d.company.toString(16).toUpperCase()
-                  .padStart(4, "0");
-    }
+        return bleCompanyText(d.company, d.companyName);
 
     return d[key] || "-";
 }
@@ -13136,7 +13983,7 @@ function buildBleHead()
 
     const tr = document.createElement("tr");
 
-    bleColumns.forEach(c =>
+    shownColumns("ble", bleColumns).forEach(c =>
     {
         const th = document.createElement("th");
 
@@ -13188,10 +14035,13 @@ function updateBleTable()
         const tr = document.createElement("tr");
 
         tr.innerHTML =
-            bleColumns.map(c =>
+            shownColumns("ble", bleColumns).map(c =>
                 "<td>" + escapeHTML(String(bleCellText(d, c.key))) +
                 "</td>"
             ).join("");
+
+        tickAgeCell(tr, shownColumns("ble", bleColumns),
+                    () => bleCellText(d, "age"));
 
         tr.addEventListener("mouseenter", ev =>
         {
@@ -13696,7 +14546,7 @@ function zbCellText(n, key)
         return n.rssi + " dBm";
 
     if (key === "age")
-        return n.age + " s";
+        return tableAge("zb|" + n.addr, n.age) + " s";
 
     if (key === "type")
         return zbTypeText(n.type);
@@ -13734,7 +14584,7 @@ function buildZbHead()
 
     const tr = document.createElement("tr");
 
-    zbColumns.forEach(c =>
+    shownColumns("zb", zbColumns).forEach(c =>
     {
         const th = document.createElement("th");
 
@@ -13789,10 +14639,13 @@ function updateZbTable()
         const tr = document.createElement("tr");
 
         tr.innerHTML =
-            zbColumns.map(c =>
+            shownColumns("zb", zbColumns).map(c =>
                 "<td>" + escapeHTML(String(zbCellText(n, c.key))) +
                 "</td>"
             ).join("");
+
+        tickAgeCell(tr, shownColumns("zb", zbColumns),
+                    () => zbCellText(n, "age"));
 
         tbody.appendChild(tr);
     });
@@ -13909,7 +14762,8 @@ function bssColorText(n)
     const parts = [];
 
     if (n.color)
-        parts.push(n.color[0] + (n.color[1] ? " (disabled)" : ""));
+        parts.push(n.color[0] + (n.color[1] ? " (disabled)" :
+                                 n.color[0] === 0 ? " (none)" : ""));
 
     if (n.bcc)
         parts.push("switch to " + n.bcc[0] + " announced " +
@@ -14149,7 +15003,7 @@ function cellText(n, key)
         return n.rssi + " dBm";
 
     if (key === "age")
-        return n.age + " s";
+        return tableAge("net|" + n.bssid, n.age) + " s";
 
     if (key === "clients")
         return n.sta >= 0 ? (n.clients + " (" + n.sta + ")") : n.clients;
@@ -14286,6 +15140,10 @@ function configChangeRows(n)
                                     { ago: ago }));
     });
 
+    if (n.bvn > 1)
+        rows.push([null, "<span class='dim'>" + n.bvn + " versions of " +
+            "the beacon kept: Beacons tab of the pinned tooltip</span>"]);
+
     const older = n.cfgn - list.length;
 
     if (older > 0)
@@ -14337,7 +15195,7 @@ function buildTableHead()
 
     const tr = document.createElement("tr");
 
-    columns.forEach(c =>
+    shownColumns("networks", columns).forEach(c =>
     {
         const th = document.createElement("th");
 
@@ -14410,6 +15268,11 @@ function buildTableHead()
 let sixGhzList = [];
 
 
+function sixAgeKey(e)
+{
+    return "six|" + e.bssid + "|" + e.ch + "|" + (e.ssid || "");
+}
+
 function updateSixTable()
 {
     const tbody = document.getElementById("sixTable");
@@ -14440,7 +15303,10 @@ function updateSixTable()
             "</td>" +
             "<td>" + sixReporterCell(e) + "</td>" +
             "<td>" + e.reports + "</td>" +
-            "<td>" + e.age + " s</td>";
+            "<td></td>";
+
+        tickCell(tr.cells[tr.cells.length - 1],
+                 () => tableAge(sixAgeKey(e), e.age) + " s");
 
         tr.addEventListener("mouseenter", ev =>
         {
@@ -14589,7 +15455,7 @@ function updateNetworkTable()
         tr.dataset.bssid = n.bssid;
 
         tr.innerHTML =
-            columns.map(c =>
+            shownColumns("networks", columns).map(c =>
                 "<td>" + escapeHTML(String(cellText(n, c.key))) + "</td>"
             ).join("") +
             "<td>" + noteBadges(n) + "</td>" +
@@ -14602,6 +15468,9 @@ function updateNetworkTable()
                   (n.pcapf ? " +" + n.pcapf : "") + "</a>"
                 : "<span class='dim'>none</span>") +
             "</td>";
+
+        tickAgeCell(tr, shownColumns("networks", columns),
+                    () => cellText(n, "age"));
 
         tr.addEventListener("mouseenter", ev =>
         {
@@ -14634,16 +15503,23 @@ function updateNetworkTable()
     });
 
     const band = shownGraphBand();
+    const cap  = liveData && liveData.netcap;
+    const info = document.getElementById("filterInfo");
 
-    document.getElementById("filterInfo").innerText =
+    // Red once every slot is taken: further networks are not kept
+    const total = cap && networks.length >= cap
+        ? "<span class='atCap' title='The sensor holds no more than " +
+          cap + " networks: further ones are not kept until an old " +
+          "one ages out'>" + networks.length + "</span>"
+        : String(networks.length);
+
+    info.innerHTML =
         (list.length === networks.length
-            ? networks.length + " networks"
-            : list.length + " of " + networks.length + " networks " +
+            ? total + " networks"
+            : list.length + " of " + total + " networks " +
               (band ? "shown, " + (band === "24" ? "2.4" : "5") +
                       " GHz only" : "match")) +
-        (liveData && liveData.netcap
-            ? ", " + liveData.netcap + " slots"
-            : "");
+        (cap ? ", " + cap + " slots" : "");
 }
 
 
@@ -14726,7 +15602,7 @@ function clientCellText(c, key)
         return c.rssi + " dBm";
 
     if (key === "age")
-        return c.age + " s";
+        return tableAge("sta|" + c.mac, c.age) + " s";
 
     if (key === "std")
         return c.std ? stdShort(c.std) : "-";
@@ -14796,7 +15672,8 @@ function buildClientHead()
         const [key, dir] =
             clientSortFor(columns, id === "clientHeadHist");
 
-        columns.forEach(c =>
+        shownColumns(columns === histColumns ? "history" : "stations",
+                     columns).forEach(c =>
         {
             const th = document.createElement("th");
 
@@ -14892,7 +15769,8 @@ function fillClientTable(tbodyId, list, columns = clientColumns,
             tr.classList.add("assocSeen");
 
         tr.innerHTML =
-            columns.map(col2 =>
+            shownColumns(columns === histColumns ? "history" : "stations",
+                         columns).map(col2 =>
                 "<td>" +
                 (col2.key === "notes"
                     ? noteBadgesOf(stationNotes(c, snapshot))
@@ -14908,6 +15786,10 @@ function fillClientTable(tbodyId, list, columns = clientColumns,
                   "</a>"
                 : "<span class='dim'>none</span>") +
             "</td>";
+
+        tickAgeCell(tr, shownColumns(columns === histColumns
+                                         ? "history" : "stations", columns),
+                    () => clientCellText(c, "age"));
 
         tr.addEventListener("mouseenter", ev =>
         {
@@ -15227,8 +16109,12 @@ async function updateLive()
             " | types 0x" +
             Number(liveData.capmask).toString(16).toUpperCase() +
             (liveData.capture ? "" : " (capture off)") + " | " +
-            liveData.pcapcount + " of " + liveData.pcapcap +
-            " frames + " + liveData.assoc + "/" + liveData.assoccap +
+            liveData.pcapcount +
+            (liveData.pcapcap !== undefined
+                ? " of " + liveData.pcapcap + " frames + " +
+                  liveData.assoc + "/" + liveData.assoccap
+                : " frames (" + kB(liveData.pcapbytes) + ") + " +
+                  liveData.assoc) +
             " assoc + " + liveData.beacons + " beacons, " +
             liveData.pcaptotal + " captured in total" +
             (lastStatus && lastStatus.utc
@@ -15299,6 +16185,9 @@ async function updateNetworks()
         networks = result.networks.map(fixP2pListen);
         sixGhzList = result.sixghz || [];
 
+        networks.forEach(n => tickAnchor("net|" + n.bssid, n.age));
+        sixGhzList.forEach(e => tickAnchor(sixAgeKey(e), e.age));
+
         rememberApNames();
 
         updateNetworkTable();
@@ -15330,6 +16219,8 @@ async function updateClients()
 
         stations = result.clients;
         awdlDevices = result.awdl || [];
+
+        stations.forEach(c => tickAnchor("sta|" + c.mac, c.age));
 
         rememberStationApNames();
 
@@ -15397,7 +16288,7 @@ function stampText(epoch, ago)
     {
         // Shift, then read back as UTC, so the device offset
         // applies rather than whatever the browser sits in
-        const d = new Date((epoch + tzOffsetSeconds()) * 1000);
+        const d = new Date((epoch + tzOffsetSeconds(epoch)) * 1000);
 
         return d.toISOString().slice(0, 16).replace("T", " ");
     }
@@ -15406,9 +16297,60 @@ function stampText(epoch, ago)
 }
 
 
-function tzOffsetSeconds()
+/*
+ * The daylight saving rules of the firmware, by the same index:
+ * [start month, week, minutes, end month, week, minutes, in UTC].
+ * Each switch falls on the nth Sunday of its month, 5 for the
+ * last; the minutes are UTC where the flag is set, local standard
+ * time otherwise.
+ */
+const DST_RULES = [
+    null,
+    [3, 5, 60, 10, 5, 60, true],
+    [3, 2, 120, 11, 1, 60, false],
+    [10, 1, 120, 4, 1, 120, false],
+    [9, 5, 120, 4, 1, 120, false],
+];
+
+// The UTC epoch of a switch in the given year
+function dstSwitch(year, month, week, minutes, utc, tz)
 {
-    return (lastStatus && lastStatus.tz ? lastStatus.tz : 0) * 60;
+    const first = Date.UTC(year, month - 1, 1) / 1000;
+    const sunday = 1 + (7 - new Date(first * 1000).getUTCDay()) % 7;
+    const length = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const day = week === 5
+        ? (sunday + 28 <= length ? sunday + 28 : sunday + 21)
+        : sunday + 7 * (week - 1);
+
+    return first + (day - 1) * 86400 + minutes * 60 - (utc ? 0 : tz * 60);
+}
+
+// The offset in force at an epoch, now without one, in seconds
+// "2026-10-29 12:04:41" in the sensor's timezone, as its utc field
+function deviceTimeText(epoch)
+{
+    return new Date((epoch + tzOffsetSeconds(epoch)) * 1000)
+        .toISOString().slice(0, 19).replace("T", " ");
+}
+
+function tzOffsetSeconds(epoch)
+{
+    const tz = (lastStatus && lastStatus.tz) || 0;
+    const r = DST_RULES[(lastStatus && lastStatus.dst) || 0];
+
+    if (epoch === undefined)
+        epoch = Date.now() / 1000;
+
+    if (!r || epoch < 1600000000)
+        return tz * 60;
+
+    const year = new Date((epoch + tz * 60) * 1000).getUTCFullYear();
+    const start = dstSwitch(year, r[0], r[1], r[2], r[6], tz);
+    const end = dstSwitch(year, r[3], r[4], r[5], r[6], tz);
+    const summer = r[0] < r[3] ? epoch >= start && epoch < end
+                               : epoch >= start || epoch < end;
+
+    return (tz + (summer ? 60 : 0)) * 60;
 }
 
 
@@ -15470,6 +16412,7 @@ const VENDOR_IE_NAMES = {
     0x00409603: "Cisco CCX version", 0x00409614: "Cisco CCX client MFP",
     0x0050F211: "Microsoft Network Cost",
     0x5C5B3501: "Mist AP name",
+    0x00A05704: "LANCOM device UUID", 0x00A05708: "LANCOM AP name",
     0x00301A01: "Firmware version"
 };
 
@@ -15490,7 +16433,8 @@ const VENDOR_IE_MAKERS = {
     "C83A6B": "Roku", "F832E4": "ASUS", "AC853D": "HUAWEI",
     "000B82": "Grandstream", "04DF69": "Car Connectivity Consortium",
     "30FF83": "Xiongmai/AltoBeam (unregistered OUI)",
-    "506F9A": "Wi-Fi Alliance", "08863B": "Belkin (Linksys)"
+    "506F9A": "Wi-Fi Alliance", "08863B": "Belkin (Linksys)",
+    "A41162": "Arlo"
 };
 
 // "00-00-00-00" for the misplaced suite of a network
@@ -15610,9 +16554,7 @@ function catalogTime(t)
         return "boot " + t[2] + ", +" +
                (t[0] < 60 ? t[0] + " s" : uptimeText(t[0]));
 
-    const tz = (lastStatus && lastStatus.tz) || 0;
-
-    return new Date((t[0] + tz * 60) * 1000).toISOString()
+    return new Date((t[0] + tzOffsetSeconds(t[0])) * 1000).toISOString()
         .replace("T", " ").substring(0, 19);
 }
 
@@ -15767,6 +16709,14 @@ function fillCatalog()
               Math.round(d.used / 1024) + " of " +
               Math.round(d.total / 1024) + " kB used"
             : "no file system, nothing is kept";
+
+    // A snapshot's own frames, and what did not fit into it
+    const kept = snapshotView && snapshotView.catalogframes;
+
+    if (kept)
+        document.getElementById("catalogStore").innerText +=
+            " \u00b7 this snapshot keeps " + kept.frames.length + " frames" +
+            (kept.cut ? ", " + kept.cut + " left out" : "");
 }
 
 
@@ -15905,6 +16855,106 @@ async function updateAssocHistory()
 }
 
 
+/*
+ * Seen most: /api/blehits, at most every BLE_HITS_POLL_MS. Firmware
+ * without it answers 404, and the box stays hidden.
+ */
+const BLE_HITS_POLL_MS = 10000;
+
+let bleHitsAt = 0;
+
+async function updateBleHits()
+{
+    if (Date.now() - bleHitsAt < BLE_HITS_POLL_MS)
+        return;
+
+    bleHitsAt = Date.now();
+
+    const box = document.getElementById("bleHitsBox");
+
+    let d;
+
+    try
+    {
+        const r = await api("/api/blehits",
+                            { cache: "no-store", signal: timeoutSignal(4000) });
+
+        d = r.ok ? await r.json() : null;
+    }
+    catch (e)
+    {
+        return;
+    }
+
+    if (!d || !Array.isArray(d.devices))
+    {
+        box.style.display = "none";
+        return;
+    }
+
+    box.style.display = "";
+    fillBleHits(d);
+}
+
+// Hits per hour as one block character each, the highest full
+function hoursSpark(hours)
+{
+    const top = Math.max(...hours);
+    const bars = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588";
+
+    return top
+        ? hours.map(h => h ? bars[Math.min(7, Math.floor(h * 8 / (top + 1)))]
+                           : "\u00b7").join("")
+        : "";
+}
+
+function fillBleHits(d)
+{
+    const list = d.devices.slice().sort((a, b) =>
+        b.hits - a.hits || b.adv - a.adv);
+
+    document.getElementById("bleHitsInfo").innerText =
+        " " + list.length + " of up to " + d.max + " devices, a hit " +
+        "after " + Math.round(d.gap / 60) + " min of silence";
+
+    const when = t => t ? escapeHTML(deviceTimeText(t)) : "-";
+
+    document.getElementById("bleHitsTable").innerHTML = list.map(x =>
+        "<tr>" +
+        "<td>" + escapeHTML(x.addr) + "</td>" +
+        "<td>" + escapeHTML(x.type) + "</td>" +
+        "<td>" + escapeHTML([x.name,
+                             btCompanyName(x.company) || x.companyName,
+                             x.vendor].filter(Boolean).join(", ") || "-") +
+            "</td>" +
+        "<td>" + x.hits + "</td>" +
+        "<td>" + x.adv + "</td>" +
+        "<td>" + when(x.first) + "</td>" +
+        "<td>" + (x.ago >= 0 && x.ago < 90 ? "now" : when(x.last)) + "</td>" +
+        "<td style='font-family:monospace' title='" +
+            x.hours.map((h, i) => i + " h: " + h).join(", ") + "'>" +
+            hoursSpark(x.hours) + "</td>" +
+        "<td><a class='dl' target='_blank' " +
+            "onclick='return apiLink(event, this)' " +
+            "href='/api/pcap?src=ble&ta=" + x.addr + "'>pcap</a></td>" +
+        "</tr>").join("");
+}
+
+function clearBleHits()
+{
+    if (!confirm("Clear the counts of every device seen?"))
+        return;
+
+    queueCommand("/api/blehitsclear", () =>
+    {
+        bleHitsAt = 0;
+        updateBleHits();
+    });
+}
+
+window.clearBleHits = clearBleHits;
+
+
 async function updateBle()
 {
     if (scanMode === "zb")
@@ -15919,6 +16969,8 @@ async function updateBle()
         const result = await response.json();
 
         bleDevices = result.devices;
+
+        bleDevices.forEach(d => tickAnchor("ble|" + d.addr, d.age));
 
         bleStats = {
             frames: result.frames,
@@ -15936,6 +16988,8 @@ async function updateBle()
         updateBleTable();
 
         drawBleGraph();
+
+        updateBleHits();
     }
     catch (e)
     {
@@ -16040,6 +17094,8 @@ async function updateZb()
 
         zbData = await response.json();
 
+        (zbData.nodes || []).forEach(n => tickAnchor("zb|" + n.addr, n.age));
+
         if (scanMode === "zb")
         {
             clearStatus();
@@ -16085,6 +17141,748 @@ function uptimeText(seconds)
 }
 
 
+/*
+ * Times that count on by themselves. The sensor's answers come one
+ * to five seconds apart, their seconds cut to whole ones, so ages
+ * and clocks shown as sent stood still or jumped by two and more.
+ * Each value keeps the moment it was 0 on this page's clock, in the
+ * middle of the second it was sent with, and moves it only when an
+ * answer is more than 2 s off (a reset, a clock set, a tab asleep).
+ * A cell given a text function is looked at five times a second and
+ * written when its text changed: each value turns at its own moment
+ * within the second, and a timer once a second running close to that
+ * moment showed it standing still, then jumping by two.
+ */
+const tickOrigins = new Map();
+const tickCells = new Map();
+let tickFrozenAt = null;
+let tickRounds = 0;
+
+function tickClock()
+{
+    return performance.now() / 1000;
+}
+
+function tickAnchor(key, value)
+{
+    const now = tickClock();
+    const o = tickOrigins.get(key);
+
+    if (o === undefined || Math.abs(now - o.origin - value - 0.5) > 2)
+        tickOrigins.set(key, { origin: now - value - 0.5, seen: now });
+    else
+        o.seen = now;
+}
+
+// The value counted on from its anchor, as sent without one
+function tickValue(key, value, at)
+{
+    const o = tickOrigins.get(key);
+
+    if (o === undefined)
+        return value;
+
+    return Math.max(0, Math.floor((at || tickClock()) - o.origin));
+}
+
+/*
+ * An age in a table: as sent in a snapshot, standing still while
+ * paused, as the tables do
+ */
+function tableAge(key, value)
+{
+    return snapshotView ? value : tickValue(key, value, tickFrozenAt);
+}
+
+function tickCell(td, text)
+{
+    td.textContent = text();
+    tickCells.set(td, text);
+}
+
+// The Age or Last seen column of a table row, if it is shown
+// ==========================================================
+// Columns of the tables, chosen per browser
+// ==========================================================
+
+/*
+ * Each table lists its columns once (bleColumns, columns, ...); the
+ * ones marked hidden are offered but not shown until picked. The
+ * pick is kept in this browser, keyed by the table, as the column
+ * keys in the order of the list; none kept: the defaults.
+ */
+const COLUMN_KEY = "wlanscout.columns.";
+
+const columnPicks = {};
+
+function shownColumns(table, all)
+{
+    if (!(table in columnPicks))
+    {
+        let pick = null;
+
+        try
+        {
+            pick = JSON.parse(localStorage.getItem(COLUMN_KEY + table));
+        }
+        catch (e)
+        {
+        }
+
+        columnPicks[table] = Array.isArray(pick) ? pick : null;
+    }
+
+    const pick = columnPicks[table];
+    const list = pick ? all.filter(c => pick.includes(c.key))
+                      : all.filter(c => !c.hidden);
+
+    return list.length ? list : all.filter(c => !c.hidden);
+}
+
+function setColumnPick(table, keys)
+{
+    columnPicks[table] = keys;
+
+    try
+    {
+        if (keys)
+            localStorage.setItem(COLUMN_KEY + table, JSON.stringify(keys));
+        else
+            localStorage.removeItem(COLUMN_KEY + table);
+    }
+    catch (e)
+    {
+    }
+}
+
+// What to redraw after a change, per table
+const COLUMN_TABLES = {
+    networks: { heads: ["networkHead"], all: () => columns,
+                redraw: () => { buildTableHead(); updateNetworkTable(); } },
+    stations: { heads: ["clientHead", "clientHeadProbe"],
+                all: () => clientColumns,
+                redraw: () => { buildClientHead(); updateClientTable(); } },
+    history:  { heads: ["clientHeadHist"], all: () => histColumns,
+                redraw: () => { buildClientHead(); fillAssocHistory(); } },
+    ble:      { heads: ["bleHead"], all: () => bleColumns,
+                redraw: () => { buildBleHead(); updateBleTable(); } },
+    zb:       { heads: ["zbHead"], all: () => zbColumns,
+                redraw: () => { buildZbHead(); updateZbTable(); } }
+};
+
+// A Columns button above each table, with a list to tick
+function initColumnChoosers()
+{
+    Object.entries(COLUMN_TABLES).forEach(([table, t]) =>
+        t.heads.forEach(id =>
+    {
+        const head = document.getElementById(id);
+        const tableEl = head && head.closest("table");
+
+        if (!tableEl)
+            return;
+
+        const box = document.createElement("div");
+
+        tableEl.dataset.colTable = table;
+        box.className = "colChooser";
+        box.dataset.table = table;
+        box.innerHTML =
+            "<button class='small colBtn' title='Choose the columns'>" +
+            "Columns \u25BE</button><div class='colPanel'></div>";
+
+        tableEl.before(box);
+
+        box.querySelector(".colBtn").onclick = ev =>
+        {
+            ev.stopPropagation();
+
+            const panel = box.querySelector(".colPanel");
+            const open = !panel.classList.contains("open");
+
+            document.querySelectorAll(".colPanel.open")
+                .forEach(p => p.classList.remove("open"));
+
+            if (open)
+            {
+                fillColumnPanel(table, panel);
+                panel.classList.add("open");
+            }
+        };
+    }));
+
+    Object.entries(STATIC_COLUMN_TABLES).forEach(([table, tbodyId]) =>
+    {
+        const tbody = document.getElementById(tbodyId);
+        const tableEl = tbody && tbody.closest("table");
+
+        if (!tableEl)
+            return;
+
+        tableEl.id = tableEl.id || "colTable-" + table;
+
+        const box = document.createElement("div");
+
+        tableEl.dataset.colTable = table;
+        box.className = "colChooser";
+        box.dataset.table = table;
+        box.innerHTML =
+            "<button class='small colBtn' title='Choose the columns'>" +
+            "Columns \u25BE</button><div class='colPanel'></div>";
+
+        tableEl.before(box);
+
+        box.querySelector(".colBtn").onclick = ev =>
+        {
+            ev.stopPropagation();
+
+            const panel = box.querySelector(".colPanel");
+            const open = !panel.classList.contains("open");
+
+            document.querySelectorAll(".colPanel.open")
+                .forEach(p => p.classList.remove("open"));
+
+            if (open)
+            {
+                fillStaticColumnPanel(table, tableEl, panel);
+                panel.classList.add("open");
+            }
+        };
+
+        applyHiddenColumns(table, tableEl);
+    });
+
+    document.addEventListener("click", ev =>
+    {
+        if (!ev.target.closest(".colPanel"))
+            document.querySelectorAll(".colPanel.open")
+                .forEach(p => p.classList.remove("open"));
+    });
+}
+
+function fillColumnPanel(table, panel)
+{
+    const t = COLUMN_TABLES[table];
+    const all = t.all();
+    const shown = shownColumns(table, all).map(c => c.key);
+
+    panel.innerHTML =
+        all.map(c =>
+            "<label><input type='checkbox' value='" + c.key + "'" +
+            (shown.includes(c.key) ? " checked" : "") + "> " +
+            escapeHTML(c.label) + "</label>").join("") +
+        "<button class='small colDefault'>Default</button> " +
+        "<button class='small colWidths'>Default widths</button>";
+
+    panel.querySelector(".colWidths").onclick = () =>
+        t.heads.forEach(id =>
+            resetColumnWidths(document.getElementById(id).closest("table")));
+
+    panel.onchange = () =>
+    {
+        const keys = [...panel.querySelectorAll("input:checked")]
+            .map(i => i.value);
+
+        // One column at least
+        setColumnPick(table, keys.length ? keys : null);
+        t.redraw();
+        fillColumnPanel(table, panel);
+    };
+
+    panel.querySelector(".colDefault").onclick = () =>
+    {
+        setColumnPick(table, null);
+        t.redraw();
+        fillColumnPanel(table, panel);
+    };
+}
+
+
+/*
+ * The tables whose head is in the markup, or built apart from the
+ * rows: a column is hidden by its position, through a style rule, so
+ * their code stays as it is. A row spanning the table (a group
+ * heading) is left alone. Kept per browser as the hidden positions.
+ */
+const STATIC_COLUMN_TABLES = {
+    sixghz:  "sixTable",
+    catalog: "catalogTable",
+    blehits: "bleHitsTable",
+    stores:  "storeTable",
+    log:     "logTable",
+    tasks:   "cpuTasks",
+    alloc:   "allocTable"
+};
+
+function hiddenColumns(table)
+{
+    try
+    {
+        const v = JSON.parse(localStorage.getItem(COLUMN_KEY + table));
+
+        return Array.isArray(v) ? v : [];
+    }
+    catch (e)
+    {
+        return [];
+    }
+}
+
+function applyHiddenColumns(table, tableEl)
+{
+    const id = "colHide-" + table;
+    let style = document.getElementById(id);
+
+    if (!style)
+    {
+        style = document.createElement("style");
+        style.id = id;
+        document.head.appendChild(style);
+    }
+
+    style.textContent = hiddenColumns(table).map(i =>
+        "#" + tableEl.id + " tr > :nth-child(" + (i + 1) + "):not([colspan])")
+        .join(",\n") + (hiddenColumns(table).length
+            ? " { display: none; }" : "");
+}
+
+function fillStaticColumnPanel(table, tableEl, panel)
+{
+    const heads = [...tableEl.querySelectorAll("thead tr:first-child th")];
+    const hidden = hiddenColumns(table);
+
+    panel.innerHTML =
+        heads.map((th, i) =>
+            "<label><input type='checkbox' value='" + i + "'" +
+            (hidden.includes(i) ? "" : " checked") + "> " +
+            escapeHTML(th.innerText.replace(/[\u25B2\u25BC]/g, "").trim() ||
+                       "(buttons)") +
+            "</label>").join("") +
+        "<button class='small colDefault'>Default</button> " +
+        "<button class='small colWidths'>Default widths</button>";
+
+    panel.querySelector(".colWidths").onclick = () =>
+        resetColumnWidths(tableEl);
+
+    const save = list =>
+    {
+        try
+        {
+            if (list.length)
+                localStorage.setItem(COLUMN_KEY + table, JSON.stringify(list));
+            else
+                localStorage.removeItem(COLUMN_KEY + table);
+        }
+        catch (e)
+        {
+        }
+
+        applyHiddenColumns(table, tableEl);
+        fillStaticColumnPanel(table, tableEl, panel);
+    };
+
+    panel.onchange = () =>
+    {
+        const off = [...panel.querySelectorAll("input:not(:checked)")]
+            .map(i => Number(i.value));
+
+        // One column at least
+        save(off.length < heads.length ? off : []);
+    };
+
+    panel.querySelector(".colDefault").onclick = () => save([]);
+}
+
+
+/*
+ * Column widths: the right edge of a column head is dragged, a
+ * double click there gives the column its own width back. Kept per
+ * browser and table, by the column's label, so a width stays with
+ * its column when others are hidden or the head is built anew. The
+ * widths are a style rule per table, which also cuts a cell that
+ * no longer fits with an ellipsis.
+ */
+const WIDTH_KEY = "wlanscout.widths.";
+
+function tableKey(tableEl)
+{
+    if (tableEl.dataset.colTable)
+        return tableEl.dataset.colTable;
+
+    const tbody = tableEl.querySelector("tbody[id]");
+
+    return tbody ? tbody.id : tableEl.id;
+}
+
+function columnWidths(key)
+{
+    try
+    {
+        const v = JSON.parse(localStorage.getItem(WIDTH_KEY + key));
+
+        return v && typeof v === "object" ? v : {};
+    }
+    catch (e)
+    {
+        return {};
+    }
+}
+
+function saveColumnWidths(key, widths)
+{
+    try
+    {
+        if (Object.keys(widths).length)
+            localStorage.setItem(WIDTH_KEY + key, JSON.stringify(widths));
+        else
+            localStorage.removeItem(WIDTH_KEY + key);
+    }
+    catch (e)
+    {
+    }
+}
+
+function headLabel(th)
+{
+    return th.innerText.replace(/[\u25B2\u25BC]/g, "").trim() ||
+           "#" + th.cellIndex;
+}
+
+function headCells(tableEl)
+{
+    const row = tableEl.querySelector("thead tr");
+
+    return row ? [...row.cells] : [];
+}
+
+function applyColumnWidths(tableEl)
+{
+    const key = tableKey(tableEl);
+    const widths = columnWidths(key);
+    const id = "colWidth-" + tableEl.id;
+    let style = document.getElementById(id);
+
+    if (!style)
+    {
+        style = document.createElement("style");
+        style.id = id;
+        document.head.appendChild(style);
+    }
+
+    style.textContent = headCells(tableEl).map((th, i) =>
+    {
+        const w = widths[headLabel(th)];
+
+        return w
+            ? "#" + tableEl.id + " tr > :nth-child(" + (i + 1) +
+              "):not([colspan]) { width: " + w + "px !important; " +
+              "min-width: " + w + "px; max-width: " + w + "px; " +
+              "overflow: hidden; text-overflow: ellipsis; }"
+            : "";
+    }).join("\n");
+}
+
+function addResizeHandles(tableEl)
+{
+    headCells(tableEl).forEach(th =>
+    {
+        if (th.querySelector(".colResize"))
+            return;
+
+        const grip = document.createElement("div");
+
+        grip.className = "colResize";
+        grip.title = "Drag for the width, double click for the default";
+        th.appendChild(grip);
+
+        // Not a click on the head: that sorts
+        grip.addEventListener("click", ev => ev.stopPropagation());
+
+        grip.addEventListener("dblclick", ev =>
+        {
+            ev.stopPropagation();
+
+            const key = tableKey(tableEl);
+            const widths = columnWidths(key);
+
+            delete widths[headLabel(th)];
+            saveColumnWidths(key, widths);
+            applyColumnWidths(tableEl);
+        });
+
+        grip.addEventListener("pointerdown", ev =>
+        {
+            ev.preventDefault();
+            ev.stopPropagation();
+
+            const key = tableKey(tableEl);
+            const label = headLabel(th);
+            const startX = ev.clientX;
+            const startW = th.offsetWidth;
+
+            grip.classList.add("dragging");
+            grip.setPointerCapture(ev.pointerId);
+
+            const move = e =>
+            {
+                const widths = columnWidths(key);
+
+                widths[label] = Math.max(30,
+                    Math.round(startW + e.clientX - startX));
+                saveColumnWidths(key, widths);
+                applyColumnWidths(tableEl);
+            };
+
+            const up = () =>
+            {
+                grip.classList.remove("dragging");
+                grip.removeEventListener("pointermove", move);
+                grip.removeEventListener("pointerup", up);
+                grip.removeEventListener("pointercancel", up);
+            };
+
+            grip.addEventListener("pointermove", move);
+            grip.addEventListener("pointerup", up);
+            grip.addEventListener("pointercancel", up);
+        });
+    });
+}
+
+// Every table with a head; heads built anew get their handles again
+function initColumnResize()
+{
+    document.querySelectorAll("table").forEach((tableEl, n) =>
+    {
+        const head = tableEl.querySelector("thead");
+
+        if (!head)
+            return;
+
+        tableEl.id = tableEl.id || "table-" + n;
+
+        const refresh = () =>
+        {
+            addResizeHandles(tableEl);
+            applyColumnWidths(tableEl);
+        };
+
+        refresh();
+
+        new MutationObserver(refresh).observe(head,
+            { childList: true, subtree: true, characterData: true });
+    });
+}
+
+function resetColumnWidths(tableEl)
+{
+    saveColumnWidths(tableKey(tableEl), {});
+    applyColumnWidths(tableEl);
+}
+
+
+// ==========================================================
+// Bluetooth company names, fetched by the browser on request
+// ==========================================================
+
+/*
+ * The sensor names 13 company identifiers; the Bluetooth SIG's list
+ * has about 4000. Only when ticked in the BLE view does this browser
+ * fetch it, from the SIG's public repository (a copy at Nordic
+ * Semiconductor as fallback), and keep it for a week, so it also
+ * works offline. Nothing about the devices is sent anywhere.
+ */
+const BT_COMPANY_SOURCES = [
+    ["https://bitbucket.org/bluetooth-SIG/public/raw/main/assigned_numbers/" +
+     "company_identifiers/company_identifiers.yaml", "yaml"],
+    ["https://raw.githubusercontent.com/NordicSemiconductor/" +
+     "bluetooth-numbers-database/master/v1/company_ids.json", "json"]
+];
+const BT_COMPANY_KEY   = "wlanscout.btCompanies";
+const BT_COMPANY_ON    = "wlanscout.btCompaniesOn";
+const BT_COMPANY_DAYS  = 7;
+
+let btCompanies = null;              // id → name, null without the list
+
+function btCompanyName(id)
+{
+    return btCompanies && id !== 65535 ? btCompanies[id] || "" : "";
+}
+
+// The company of a BLE device: the SIG's name, the sensor's, or hex
+function bleCompanyText(id, sensorName)
+{
+    if (id === undefined || id === 65535)
+        return "-";
+
+    return btCompanyName(id) || sensorName ||
+           "0x" + id.toString(16).toUpperCase().padStart(4, "0");
+}
+
+function parseBtCompanies(text, kind)
+{
+    const names = {};
+
+    if (kind === "json")
+        JSON.parse(text).forEach(e => names[e.code] = e.name);
+    else
+        for (const m of text.matchAll(
+                 /value:\s*0x([0-9A-Fa-f]+)\s*\n\s*name:\s*'((?:[^']|'')*)'/g))
+            names[parseInt(m[1], 16)] = m[2].replace(/''/g, "'");
+
+    if (Object.keys(names).length < 100)
+        throw new Error("not a company list");
+
+    return names;
+}
+
+function btCompaniesOn()
+{
+    try
+    {
+        return localStorage.getItem(BT_COMPANY_ON) === "1";
+    }
+    catch (e)
+    {
+        return false;
+    }
+}
+
+function btCompanyInfo(text)
+{
+    const el = document.getElementById("btCompanyInfo");
+
+    if (el)
+        el.innerText = text;
+}
+
+// The stored list now, a fresh one when it is older than a week
+async function loadBtCompanies(force = false)
+{
+    if (!btCompaniesOn())
+    {
+        btCompanies = null;
+        btCompanyInfo("");
+        return;
+    }
+
+    let stored = null;
+
+    try
+    {
+        stored = JSON.parse(localStorage.getItem(BT_COMPANY_KEY));
+    }
+    catch (e)
+    {
+    }
+
+    if (stored && stored.names)
+    {
+        btCompanies = stored.names;
+        btCompanyInfo(Object.keys(btCompanies).length + " names");
+    }
+
+    if (!force && stored &&
+        Date.now() - stored.at < BT_COMPANY_DAYS * 86400000)
+        return;
+
+    let lastError = null;
+
+    for (const [url, kind] of BT_COMPANY_SOURCES)
+    {
+        try
+        {
+            const r = await fetch(url, { cache: "no-store" });
+
+            if (!r.ok)
+                throw new Error("HTTP " + r.status);
+
+            btCompanies = parseBtCompanies(await r.text(), kind);
+
+            try
+            {
+                localStorage.setItem(BT_COMPANY_KEY, JSON.stringify(
+                    { at: Date.now(), names: btCompanies }));
+            }
+            catch (e)
+            {
+            }
+
+            btCompanyInfo(Object.keys(btCompanies).length + " names");
+            updateBleTable();
+            return;
+        }
+        catch (e)
+        {
+            lastError = e;
+        }
+    }
+
+    btCompanyInfo((btCompanies ? "kept the stored list; " : "") +
+                  "not fetched: " + (lastError.message || lastError));
+}
+
+function setBtCompanies(on)
+{
+    try
+    {
+        if (on)
+            localStorage.setItem(BT_COMPANY_ON, "1");
+        else
+        {
+            localStorage.removeItem(BT_COMPANY_ON);
+            localStorage.removeItem(BT_COMPANY_KEY);
+        }
+    }
+    catch (e)
+    {
+    }
+
+    loadBtCompanies(on).then(() => updateBleTable());
+}
+
+window.setBtCompanies = setBtCompanies;
+
+
+function tickAgeCell(tr, columns, text)
+{
+    const i = columns.findIndex(c => c.key === "age");
+
+    if (i >= 0 && tr.cells[i])
+        tickCell(tr.cells[i], text);
+}
+
+function tickAll()
+{
+    const now = tickClock();
+
+    tickFrozenAt = paused ? (tickFrozenAt || now) : null;
+
+    tickCells.forEach((text, td) =>
+    {
+        if (!td.isConnected)
+        {
+            tickCells.delete(td);
+            return;
+        }
+
+        const t = text();
+
+        if (td.textContent !== t)
+            td.textContent = t;
+    });
+
+    // Anchors of what went away, once a minute
+    if (++tickRounds % 300 === 0)
+        tickOrigins.forEach((o, key) =>
+        {
+            if (now - o.seen > 600)
+                tickOrigins.delete(key);
+        });
+}
+
+setInterval(tickAll, 200);
+
+
 function fillRows(tbodyId, rows)
 {
     const tbody = document.getElementById(tbodyId);
@@ -16095,8 +17893,10 @@ function fillRows(tbodyId, rows)
     {
         const tr = document.createElement("tr");
 
-        // An optional third entry turns the value into a link
-        const value = escapeHTML(String(r[1]));
+        // An optional third entry turns the value into a link; a
+        // function as value is a time counting on, see tickCell()
+        const value = escapeHTML(String(
+            typeof r[1] === "function" ? r[1]() : r[1]));
 
         tr.innerHTML =
             "<td>" + escapeHTML(r[0]) + "</td>" +
@@ -16106,6 +17906,9 @@ function fillRows(tbodyId, rows)
                   " target=\"_blank\" rel=\"noopener\">" + value + "</a>"
                 : value) +
             "</td>";
+
+        if (typeof r[1] === "function")
+            tickCell(tr.cells[1], () => String(r[1]()));
 
         tbody.appendChild(tr);
     });
@@ -16119,15 +17922,67 @@ function fillRows(tbodyId, rows)
  */
 let otaBusy = false;
 
+// Settings, Network; a build without Ethernet has no "net"
+function fillNetwork(sys)
+{
+    const net = sys.net;
+
+    if (!net)
+    {
+        fillRows("netTable", [["Ethernet", "not in this build, " +
+                               "the sensor answers on USB only"]]);
+        fillRows("dhcpTable", []);
+        setHint("hintNetwork", "USB only");
+        return;
+    }
+
+    // What the firmware would ask DHCP for now, see buildHostname()
+    const hostnameFor = (name, mac) =>
+    {
+        const part = (name || "").toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+            .substring(0, 32).replace(/-+$/, "");
+
+        return "wlanscout-" + (part ||
+            (mac || "").replace(/:/g, "").toLowerCase().slice(-6));
+    };
+
+    fillRows("netTable", [
+        ["Address", net.ip +
+            (net.static ? " (static fallback)" : " (DHCP)")],
+        ["Gateway", net.gw],
+        ["Subnet mask", net.mask],
+        ["DNS", net.dns],
+        ["MAC", net.eth === 0 ? "no W5500" : net.mac],
+        ["Hostname", net.hostname
+            ? net.hostname +
+              (net.hostname !== hostnameFor(sys.sensor, net.mac)
+                  ? " (the new name follows after a restart)" : "")
+            : ""],
+        ["Link", net.link
+            ? (net.speed + " Mbps, " +
+               (net.duplex ? "full duplex" : "half duplex"))
+            : "down"]
+    ]);
+
+    fillRows("dhcpTable", [
+        ["DHCP client", net.dhcpstate]
+    ].concat(net.lease ? [["DHCP lease", leaseText(net.lease)]] : [],
+             [["Failed DHCP attempts", net.dhcptries]]));
+
+    setHint("hintNetwork", net.link ? net.ip : "link down");
+}
+
 function otaInfoText(o)
 {
     if (!o)
-        return "";
+        return "not from the page in this build: new firmware goes in " +
+               "through the board's download mode";
 
     if (!o.other)
-        return "not possible yet: this sensor still has the old " +
-               "partition table without a second slot, flash it " +
-               "over USB once";
+        return "not possible: the partition table has one firmware " +
+               "slot (a sensor from before 1.53.0), a full install " +
+               "with the flasher or esptool brings the second";
 
     return "running from " + o.slot +
            (o.pending ? " (new, not confirmed yet)" : "") +
@@ -16141,6 +17996,9 @@ function showOta(o)
 {
     document.getElementById("otaInfo").innerText = otaInfoText(o);
 
+    // A build without OTA has no "ota" at all
+    document.getElementById("otaControls").style.display = o ? "" : "none";
+
     const back = document.getElementById("otaRollback");
 
     back.style.display = o && o.rollback && !otaBusy ? "" : "none";
@@ -16153,7 +18011,7 @@ function otaStatus(text)
 }
 
 // Polls until the sensor answers with the expected version
-function waitForFirmware(version, since)
+function waitForFirmware(version, since, lost)
 {
     api("/api/system", { cache: "no-store", signal: timeoutSignal(3000) })
         .then(r => r.json())
@@ -16190,14 +18048,15 @@ function waitForFirmware(version, since)
             {
                 otaBusy = false;
                 usbReconnect = false;
-                otaStatus("no answer with v" + version + " after 2 min; " +
+                otaStatus(lost ||
+                          "no answer with v" + version + " after 2 min; " +
                           "a firmware that does not start goes back " +
                           "to the previous one on its own");
                 return;
             }
 
             otaStatus("restarting, waiting " + secs + " s");
-            setTimeout(() => waitForFirmware(version, since), 2000);
+            setTimeout(() => waitForFirmware(version, since, lost), 2000);
         });
 }
 
@@ -16279,6 +18138,57 @@ function uploadFirmware(given)
 const UPDATE_URL = "https://oposum01.github.io/wlanscout/firmware/";
 
 let sensorFirmware = "";   // the version the sensor reports
+let sensorBoard = "";      // its BOARD_ID, "" before 2.8.19
+let sensorHasOta = true;   // updates from the page built in
+
+/*
+ * The releases of a board below UPDATE_URL, as tools/make_release.py
+ * puts them; the Waveshare kit's (and any firmware before 2.8.19 that
+ * names no board) at the top.
+ */
+const BOARD_DIRS = { "xiao": "xiao/" };
+
+function updateBase()
+{
+    return UPDATE_URL + (BOARD_DIRS[sensorBoard] || "");
+}
+
+/*
+ * The flasher (flash.html) with the sensor's board and version: it
+ * writes the firmware through the chip's download mode, for a build
+ * without updates from the page (the XIAO). Next to the static page,
+ * or the published one for the sensor's own page.
+ */
+function flasherUrl()
+{
+    const base = isStaticPage()
+        ? "flash.html"
+        : UPDATE_URL.replace(/firmware\/$/, "") + "flash.html";
+
+    return base + "?board=" + encodeURIComponent(sensorBoard || "kit") +
+           "&running=" + encodeURIComponent(sensorFirmware);
+}
+
+async function openFlasher()
+{
+    if (!confirm("Open the flasher? It writes the firmware through the " +
+                 "board's download mode; the board restarts afterwards. " +
+                 "This page lets go of USB, press USB again when done."))
+        return;
+
+    if (usbLink)
+    {
+        const link = usbLink;
+
+        usbLink = null;
+        await link.close();
+        showUsbState("handed to the flasher");
+    }
+
+    location.href = flasherUrl();
+}
+
+window.openFlasher = openFlasher;
 let updateLatest = null;   // version.json, once asked
 let updateFile = null;     // the image fetched for it
 
@@ -16308,8 +18218,20 @@ function showUpdateButtons()
     const fetchBtn = document.getElementById("otaFetch");
     const install = document.getElementById("otaInstall");
 
-    fetchBtn.style.display = newer && !updateFile ? "" : "none";
-    install.style.display = newer && updateFile ? "" : "none";
+    // Without updates from the page the flasher does it, which fetches
+    // the release itself
+    fetchBtn.style.display = newer && !updateFile && sensorHasOta
+                             ? "" : "none";
+    install.style.display = newer && updateFile && sensorHasOta
+                            ? "" : "none";
+
+    const flasher = document.getElementById("otaFlasher");
+
+    flasher.style.display = !sensorHasOta && sensorFirmware && !snapshotView
+                            ? "" : "none";
+    flasher.innerText = newer ? "Update to v" + updateLatest.version +
+                                " in download mode"
+                              : "Update in download mode";
 
     if (updateLatest)
     {
@@ -16340,7 +18262,7 @@ async function checkFirmwareUpdate(manual)
 
     try
     {
-        const response = await fetch(UPDATE_URL + "version.json",
+        const response = await fetch(updateBase() + "version.json",
             { cache: "no-store", signal: timeoutSignal(8000) });
 
         if (!response.ok)
@@ -16385,7 +18307,7 @@ async function fetchFirmwareUpdate()
 
     try
     {
-        const response = await fetch(UPDATE_URL + "wlanscout.ino.bin?v=" +
+        const response = await fetch(updateBase() + "wlanscout.ino.bin?v=" +
                                      encodeURIComponent(info.version),
                                      { cache: "no-store" });
 
@@ -16499,8 +18421,36 @@ function rollbackFirmware()
         });
 }
 
+// The same firmware started again
+function rebootSensor()
+{
+    if (otaBusy || !confirm("Reboot the sensor?"))
+        return;
+
+    otaBusy = true;
+    usbReconnect = !!usbLink;
+
+    api("/api/reboot", { cache: "no-store" })
+        .then(r => r.json())
+        .then(answer =>
+        {
+            if (!answer.ok)
+                throw new Error(answer.error);
+
+            otaStatus("restarting");
+            setTimeout(() => waitForFirmware("", Date.now(),
+                "no answer after 2 min"), 4000);
+        })
+        .catch(e =>
+        {
+            otaBusy = false;
+            otaStatus("reboot failed: " + e.message);
+        });
+}
+
 window.uploadFirmware   = uploadFirmware;
 window.rollbackFirmware = rollbackFirmware;
+window.rebootSensor      = rebootSensor;
 
 
 async function updateSystem()
@@ -16516,7 +18466,21 @@ async function updateSystem()
 
         const sys = await response.json();
 
+        // The times below count on between two answers
+        tickAnchor("sys|uptime", sys.uptime);
+
+        if (sys.now !== undefined)
+            tickAnchor("sys|now", sys.now);
+
+        if (sys.ntpago >= 0)
+            tickAnchor("sys|ntpago", sys.ntpago);
+
+        if (sys.clockapago !== undefined)
+            tickAnchor("sys|clockapago", sys.clockapago);
+
         sensorFirmware = sys.version || "";
+        sensorBoard = sys.boardid || "";
+        sensorHasOta = !!sys.ota;
 
         // Once a session, when Settings shows
         if (!updateLatest && !updateAskedThisSession())
@@ -16528,7 +18492,16 @@ async function updateSystem()
             sys.counters.mode === 1 ? "BLE"
                 : (sys.counters.mode === 2 ? "802.15.4" : "Wi-Fi");
 
-        const clockName =
+        // Firmware that can remember the mode says so
+        const keep = sys.counters.keepmode;
+
+        document.getElementById("keepModeBox").style.display =
+            keep === undefined ? "none" : "";
+
+        if (keep !== undefined)
+            document.getElementById("keepMode").checked = keep === 1;
+
+        const clockName = () =>
             sys.clock === 2 ? "NTP"
                 : sys.clock === 1 ? "browser"
                 : sys.clock === 3
@@ -16536,13 +18509,20 @@ async function updateSystem()
                       (sys.clockapn
                           ? "(median of " + sys.clockapn + " APs)"
                           : "of " + sys.clockap) +
-                      ", set " + uptimeText(sys.clockapago) + " ago"
+                      ", set " +
+                      uptimeText(tickValue("sys|clockapago",
+                                           sys.clockapago)) + " ago"
                 : "not set";
 
         const tzField = document.getElementById("tzSelect");
 
         if (tzField && document.activeElement !== tzField)
-            tzField.value = String(sys.tz || 0);
+            tzField.value = sys.tzauto ? "auto" : String(sys.tz || 0);
+
+        const dstField = document.getElementById("dstSelect");
+
+        if (dstField && document.activeElement !== dstField)
+            dstField.value = String(sys.dst || 0);
 
         const nameField = document.getElementById("sensorName");
 
@@ -16554,10 +18534,10 @@ async function updateSystem()
                 ? (sys.ntpadjust / 1000).toFixed(1) + " s"
                 : sys.ntpadjust + " ms";
 
-        const syncText =
+        const syncText = () =>
             sys.ntpsync
                 ? (sys.ntpsync + " " + (sys.tzlabel || "UTC") + ", " +
-                   uptimeText(sys.ntpago) + " ago" +
+                   uptimeText(tickValue("sys|ntpago", sys.ntpago)) + " ago" +
                    (sys.ntpadjust
                        ? ", corrected by " + adjustText
                        : ", first sync"))
@@ -16568,11 +18548,11 @@ async function updateSystem()
             "Time (" + (sys.tzlabel || "UTC") + ")";
 
         fillRows("sysTable", [
-            ["Sensor id", sys.sensor && sys.sensorid
-                ? sys.sensorid : "-"],
+            ["Sensor id", sensorIdText(sys)],
             ["Sensor name", sys.sensor || "not set"],
+            ...(sys.board ? [["Board", boardText(sys)]] : []),
             ["Scanner mode", modeName],
-            ["Uptime", uptimeText(sys.uptime)],
+            ["Uptime", () => uptimeText(tickValue("sys|uptime", sys.uptime))],
             ["Boot", sys.boot ? "#" + sys.boot + " since the first start" : ""],
             ["Source", "github.com/Oposum01/wlanscout",
                 "https://github.com/Oposum01/wlanscout"],
@@ -16583,9 +18563,15 @@ async function updateSystem()
         fillRows("fwTable", [["Firmware", "v" + sys.version]]);
 
         fillRows("timeTable", [
-            ["Device time", sys.utc + " " + (sys.tzlabel || "UTC")],
+            ["Device time", sys.now === undefined
+                ? sys.utc + " " + (sys.tzlabel || "UTC")
+                : () => deviceTimeText(tickValue("sys|now", sys.now)) + " " +
+                        (sys.tzlabel || "UTC")],
+            ...(sys.tzauto ? [["Timezone", tzAutoText(sys)]] : []),
             ["Clock source", clockName],
             ["NTP server", sys.ntpserver +
+                (sys.ntpdhcp ? " from DHCP (option 42), the public " +
+                               "servers as fallback" : "") +
                 ", asked every " +
                 Math.round(sys.ntpinterval / 60) + " min"],
             ["Last clock sync", syncText],
@@ -16603,43 +18589,7 @@ async function updateSystem()
 
         showOta(sys.ota);
 
-        const net = sys.net;
-
-        // What the firmware would ask DHCP for now, see buildHostname()
-        const hostnameFor = (name, mac) =>
-        {
-            const part = (name || "").toLowerCase()
-                .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-                .substring(0, 32).replace(/-+$/, "");
-
-            return "wlanscout-" + (part ||
-                (mac || "").replace(/:/g, "").toLowerCase().slice(-6));
-        };
-
-        fillRows("netTable", [
-            ["Address", net.ip +
-                (net.static ? " (static fallback)" : " (DHCP)")],
-            ["Gateway", net.gw],
-            ["Subnet mask", net.mask],
-            ["DNS", net.dns],
-            ["MAC", net.mac],
-            ["Hostname", net.hostname
-                ? net.hostname +
-                  (net.hostname !== hostnameFor(sys.sensor, net.mac)
-                      ? " (the new name follows after a restart)" : "")
-                : ""],
-            ["Link", net.link
-                ? (net.speed + " Mbps, " +
-                   (net.duplex ? "full duplex" : "half duplex"))
-                : "down"]
-        ]);
-
-        fillRows("dhcpTable", [
-            ["DHCP client", net.dhcpstate]
-        ].concat(net.lease ? [["DHCP lease", leaseText(net.lease)]] : [],
-                 [["Failed DHCP attempts", net.dhcptries]]));
-
-        setHint("hintNetwork", net.link ? net.ip : "link down");
+        fillNetwork(sys);
 
         fillCpu(sys);
 
@@ -16654,7 +18604,7 @@ async function updateSystem()
             ["Largest free internal block", kB(mem.block)],
             ["PSRAM free", kB(mem.psramfree) +
                 " of " + kB(mem.psramtotal)],
-            ["OUI entries", sys.oui]
+            ["OUI entries", ouiCountText(sys)]
         ]);
 
         // Allocations
@@ -16733,8 +18683,12 @@ async function updateSystem()
                 " (0x" +
                 Number(p.mask).toString(16).toUpperCase() + ")"],
             ["Frames captured in total", p.total],
-            ["Buffer reserved", kB(p.slot * p.cap) +
-                ", " + p.slot + " bytes per slot"],
+            p.cap !== undefined
+                ? ["Buffer reserved", kB(p.slot * p.cap) +
+                      ", " + p.slot + " bytes per slot"]
+                : ["Buffer reserved", kB(p.mem + p.assocmem) +
+                      " now, in chunks of " + kB(p.chunk) +
+                      ", growing while PSRAM allows"],
             ["IE catalog", catalogSystemText(sys.catalog)]
         ]);
 
@@ -16777,9 +18731,7 @@ function fillWatchList(list)
     {
         const n = networks.find(x => x.bssid === bssid);
         const since = epoch
-            ? new Date(epoch * 1000).toLocaleString([], {
-                  day: "2-digit", month: "2-digit", hour: "2-digit",
-                  minute: "2-digit" })
+            ? stampText(epoch)
             : uptimeText(up) + " after the start";
 
         return "<tr><td>" + (n && n.ssid ? escapeHTML(n.ssid) + " "
@@ -16812,6 +18764,25 @@ window.stopWatch = stopWatch;
 
 
 /*
+ * A frame log in Settings, Capture: [text, fill 0..1]. The logs grow
+ * in chunks, so the bar shows the memory taken of the most they may
+ * take. Firmware before them had a fixed number of slots, cap, and
+ * the page still talks to it over USB.
+ */
+function logFill(count, bytes, mem, max, dropped, cap, noun, extra,
+                 oldExtra)
+{
+    if (cap !== undefined)
+        return [count + " of " + cap + oldExtra, cap ? count / cap : 0];
+
+    return [count + noun + " (" + kB(bytes) + "), " + kB(mem) +
+                " taken of up to " + kB(max) + extra +
+                (dropped ? ", " + dropped + " older ones dropped" : ""),
+            max ? mem / max : 0];
+}
+
+
+/*
  * The capture stores of Settings, Capture: how full, how big, and
  * the buttons to download or empty them. Only these hold captured
  * data; the history has station records, no frames to download.
@@ -16819,21 +18790,40 @@ window.stopWatch = stopWatch;
 function fillStores(p, stores)
 {
     const rows = [
-        ["Frames in the ring", "pcap ring", "ring", p.count, p.cap,
-            " (" + kB(p.bytes) + " of frame data)"],
+        ["Frames in the ring", "pcap ring", "ring",
+            logFill(p.count, p.bytes, p.mem, p.max, p.dropped, p.cap,
+                    " frames", "", " (" + kB(p.bytes) + " of frame data)")],
         ["Beacons held, newest per AP", "beacon slots", "beacons",
-            p.beacons, p.beaconslots,
-            " slots (" + p.beacontotal + " seen in total)"],
+            [p.beacons + " of " + p.beaconslots +
+                 " slots (" + p.beacontotal + " seen in total)",
+             p.beaconslots ? p.beacons / p.beaconslots : 0]],
         ["Association requests in their own ring", "assoc ring", "assoc",
-            p.assoc, p.assoccap, " (" + p.assoctotal + " captured in total)"],
-        ["Association history", "assoc history", "history", -1, 0, ""]
+            logFill(p.assoc, p.assocbytes, p.assocmem, p.assocmax,
+                    p.assocdropped, p.assoccap, " requests",
+                    ", " + p.assoctotal + " captured in total",
+                    " (" + p.assoctotal + " captured in total)")],
+        ["Association history", "assoc history", "history", null]
     ];
+
+    // Firmware that keeps BLE advertisements
+    if (p.ble !== undefined)
+        rows.splice(rows.length - 1, 0, ["BLE advertisements", "BLE log",
+            "ble", logFill(p.ble, p.blebytes, p.blemem, p.blemax,
+                           p.bledropped, undefined, " advertisements",
+                           "", "")]);
+
+    // Firmware that keeps beacon versions
+    if (p.bv !== undefined)
+        rows.splice(2, 0, ["Beacon versions, each content kept",
+            "beacon versions", "versions",
+            logFill(p.bv, p.bvbytes, p.bvmem, p.bvmax, p.bvdropped,
+                    undefined, " beacons", "", "")]);
 
     const tbody = document.getElementById("storeTable");
 
     tbody.innerHTML = "";
 
-    rows.forEach(([label, buffer, what, count, cap, extra]) =>
+    rows.forEach(([label, buffer, what, fill]) =>
     {
         const a = stores[buffer];
         const tr = document.createElement("tr");
@@ -16841,10 +18831,10 @@ function fillStores(p, stores)
         tr.innerHTML =
             "<td>" + label + "</td>" +
             "<td style='white-space:normal'>" +
-            (count >= 0
-                ? count + " of " + cap + extra +
+            (fill
+                ? fill[0] +
                   "<div class='fillBar'><i style='width:" +
-                  (cap ? Math.min(100, Math.round(count * 100 / cap)) : 0) +
+                  Math.min(100, Math.round(fill[1] * 100)) +
                   "%'></i></div>"
                 : "") +
             "</td>" +
@@ -16864,6 +18854,65 @@ function fillStores(p, stores)
 }
 
 
+const DST_NAMES = ["", "Europe", "North America", "Australia, south-east",
+                   "New Zealand"];
+
+// Where the timezone came from in auto mode
+function tzAutoText(sys)
+{
+    if (!sys.tzcc)
+        return (sys.tzlabel || "UTC") + " as last set, until more " +
+               "than half of at least five APs send the same country code";
+
+    const from = sys.tzcc + ", the country code of " +
+                 sys.tzccn + " of " + sys.tzccof + " APs";
+
+    if (!sys.tzccok)
+        return from + ", has several timezones: pick one above";
+
+    return (sys.tzlabel || "UTC") +
+           (sys.dst ? ", daylight saving of " + DST_NAMES[sys.dst] : "") +
+           ", from " + from;
+}
+
+
+// The vendor table's size, the MA-M and MA-S/IAB blocks apart; before
+// 2.8.5 the firmware counted the 24-bit OUIs only and sent no split
+function ouiCountText(sys)
+{
+    if (sys.oui28 === undefined)
+        return String(sys.oui);
+
+    return sys.oui + " (MA-L " + (sys.oui - sys.oui28 - sys.oui36) +
+           ", MA-M " + sys.oui28 + ", MA-S/IAB " + sys.oui36 + ")";
+}
+
+
+// The id and where it comes from; older firmware does not say
+function sensorIdText(sys)
+{
+    if (!sys.sensorid)
+        return "-";
+
+    const eth = sys.net && sys.net.eth;
+
+    return sys.sensorid +
+        (eth === 1 ? " (MAC of the W5500)" :
+         eth === 0 ? ", derived from the chip, no W5500" : "");
+}
+
+// The board the firmware is built for, with its flash and PSRAM
+function boardText(sys)
+{
+    const mb = bytes => Math.round(bytes / 1048576) + " MB";
+    const psram = sys.mem && sys.mem.psramtotal;
+
+    return sys.board +
+        (sys.flash ? ", " + mb(sys.flash) + " flash" : "") +
+        (psram ? ", " + mb(psram) + " PSRAM" : ", no PSRAM");
+}
+
+
 async function setTimezone(minutes)
 {
     queueCommand("/api/mode?tz=" + encodeURIComponent(minutes));
@@ -16871,6 +18920,15 @@ async function setTimezone(minutes)
 
 
 window.setTimezone = setTimezone;
+
+
+async function setDst(rule)
+{
+    queueCommand("/api/mode?dst=" + encodeURIComponent(rule));
+}
+
+
+window.setDst = setDst;
 
 
 function saveSensorName()
@@ -17054,6 +19112,18 @@ const LOG_PAGE_SIZE = 20;
 
 let logEntries = [];
 
+// An entry's age counts on, see tickAnchor()
+function logAgeKey(e)
+{
+    return "log|" + e.boot + "|" + e.at + "|" + e.who + "|" + e.text;
+}
+
+function logAgeText(e)
+{
+    return e.ago >= 0
+        ? uptimeText(tickValue(logAgeKey(e), e.ago)) + " ago" : "";
+}
+
 function showLogPage(page)
 {
     const pages = Math.max(1, Math.ceil(logEntries.length / LOG_PAGE_SIZE));
@@ -17072,10 +19142,11 @@ function showLogPage(page)
         tr.innerHTML =
             "<td>" + escapeHTML(e.at) + "</td>" +
             // -1: an earlier boot whose time is not known
-            "<td>" + (e.ago >= 0 ? uptimeText(e.ago) + " ago" : "") +
-            "</td>" +
+            "<td>" + logAgeText(e) + "</td>" +
             "<td>" + escapeHTML(e.who) + "</td>" +
             "<td>" + escapeHTML(e.text) + "</td>";
+
+        tickCell(tr.cells[1], () => logAgeText(e));
 
         tbody.appendChild(tr);
     });
@@ -17126,6 +19197,12 @@ async function updateLog()
         // The page stays when new entries come in on top
         logEntries = log.entries;
 
+        logEntries.forEach(e =>
+        {
+            if (e.ago >= 0)
+                tickAnchor(logAgeKey(e), e.ago);
+        });
+
         showLogPage(logPage);
 
         document.getElementById("logInfo").innerText =
@@ -17155,6 +19232,11 @@ buildTableHead();
 buildClientHead();
 buildBleHead();
 buildZbHead();
+initColumnChoosers();
+initColumnResize();
+
+document.getElementById("btCompanies").checked = btCompaniesOn();
+loadBtCompanies();
 
 setupNetworkGraphEvents();
 setupClientGraphEvents();
@@ -17284,7 +19366,8 @@ const timeRanges = [
     [3600000,  "1 h"],
     [7200000,  "2 h"],
     [14400000, "4 h"],
-    [28800000, "8 h"]
+    [28800000, "8 h"],
+    [86400000, "24 h"]
 ];
 
 const rangeSelect = document.getElementById("historyTime");
@@ -17343,6 +19426,9 @@ catch (e)
 // is not: the button only shows on a static https copy
 if (navigator.usb && isStaticPage())
     document.getElementById("usbBtn").style.display = "";
+
+if (navigator.serial && isStaticPage())
+    document.getElementById("serialBtn").style.display = "";
 
 try
 {

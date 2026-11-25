@@ -9,7 +9,8 @@ static copy of the page and the phone flasher (tools/make_static.py),
 so that GitHub Pages can publish the repository as it is.
 
 Usage:
-    python3 tools/make_release.py BUILDDIR [--boot-app0 FILE] [--out DIR]
+    python3 tools/make_release.py BUILDDIR [--xiao BUILDDIR]
+                                  [--boot-app0 FILE] [--out DIR]
 
 BUILDDIR is the Arduino build directory, e.g. the one given to
 arduino-cli --build-path. Its firmware has to be the version in
@@ -25,6 +26,11 @@ the repository.
                 version.json                 version, size and SHA-256 of
                                              wlanscout.ino.bin, which the
                                              page asks for new firmware
+    firmware/xiao/                the same for the Seeed Studio XIAO ESP32-C5,
+                                  with --xiao: its build (BOARD_ID
+                                  "xiao", the 8 MB partition
+                                  table); the page of a XIAO asks
+                                  firmware/xiao/version.json
     index.html, manifest.webmanifest, sw.js, favicon.svg,
     icon-192.png, icon-512.png    the page, installable as an app
     flash.html                    the flasher, loading from firmware/
@@ -57,9 +63,36 @@ def empty(folder):
     folder.mkdir()
 
 
+def put_board(folder, build, boot, version, board):
+    folder.mkdir(parents=True, exist_ok=True)
+
+    for name in PARTS:
+        shutil.copyfile(build / name, folder / name)
+
+    shutil.copyfile(boot, folder / "boot_app0.bin")
+
+    template = "FLASH-xiao.txt" if board == "xiao" else "FLASH.txt"
+    text = (ROOT / "tools" / "static" / template).read_text(
+        encoding="utf-8")
+    (folder / "FLASH.txt").write_text(text.replace("@VERSION@", version),
+                                      encoding="utf-8")
+
+    # What the page compares with its sensor's version, from GitHub Pages
+    image = (folder / "wlanscout.ino.bin").read_bytes()
+    (folder / "version.json").write_text(json.dumps({
+        "version": version,
+        "size": len(image),
+        "sha256": hashlib.sha256(image).hexdigest(),
+        "board": board,
+    }) + "\n", encoding="utf-8")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("build", metavar="BUILDDIR")
+    parser.add_argument("--xiao", metavar="BUILDDIR",
+                        help="the build for the Seeed Studio XIAO ESP32-C5, "
+                             "into firmware/xiao/")
     parser.add_argument("--boot-app0", metavar="FILE",
                         help="boot_app0.bin (default: from the installed "
                              "esp32 core)")
@@ -70,15 +103,14 @@ def main():
     out = pathlib.Path(args.out)
 
     build = pathlib.Path(args.build)
+    xiao = pathlib.Path(args.xiao) if args.xiao else None
     version = make_static.firmware_version()
 
-    for name in PARTS:
-        if not (build / name).is_file():
-            sys.exit("%s missing in %s" % (name, build))
+    make_static.check_build(build, version, make_static.BOARDS[0][0], PARTS)
 
-    if version.encode() not in (build / "wlanscout.ino.bin").read_bytes():
-        sys.exit("wlanscout.ino.bin in %s is not v%s: build it first"
-                 % (build, version))
+    if xiao:
+        make_static.check_build(xiao, version, make_static.BOARDS[1][0],
+                                PARTS, need_marker=True)
 
     boot = (pathlib.Path(args.boot_app0) if args.boot_app0
             else make_static.boot_app0())
@@ -86,28 +118,19 @@ def main():
     firmware = out / "firmware"
     empty(firmware)
 
-    for name in PARTS:
-        shutil.copyfile(build / name, firmware / name)
+    for (board, folder), board_build in zip(make_static.BOARDS,
+                                            (build, xiao)):
+        if board_build:
+            put_board(firmware / folder, board_build, boot, version, board)
 
-    shutil.copyfile(boot, firmware / "boot_app0.bin")
+    command = [sys.executable, str(ROOT / "tools" / "make_static.py"),
+               str(out), "--page", "index.html", "--firmware", str(build),
+               "--boot-app0", str(boot), "--parts-dir", "firmware"]
 
-    text = (ROOT / "tools" / "static" / "FLASH.txt").read_text(
-        encoding="utf-8")
-    (firmware / "FLASH.txt").write_text(text.replace("@VERSION@", version),
-                                        encoding="utf-8")
+    if xiao:
+        command += ["--firmware-xiao", str(xiao)]
 
-    # What the page compares with its sensor's version, from GitHub Pages
-    image = (firmware / "wlanscout.ino.bin").read_bytes()
-    (firmware / "version.json").write_text(json.dumps({
-        "version": version,
-        "size": len(image),
-        "sha256": hashlib.sha256(image).hexdigest(),
-    }) + "\n", encoding="utf-8")
-
-    subprocess.run([sys.executable, str(ROOT / "tools" / "make_static.py"),
-                    str(out), "--page", "index.html", "--firmware",
-                    str(build), "--boot-app0", str(boot),
-                    "--parts-dir", "firmware"], check=True)
+    subprocess.run(command, check=True)
 
     # No Jekyll run on GitHub Pages, the files go out as they are
     (out / ".nojekyll").write_text("")

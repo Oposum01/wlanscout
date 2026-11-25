@@ -5,7 +5,7 @@
 """
 Checks the firmware's element parsers against Wireshark.
 
-The parser functions are cut out of wlanscout.ino as they are,
+The parser functions are cut out of the sketch as they are,
 compiled for the host with g++ and fed every beacon, probe
 response, probe request and (re)association request of the given
 captures. tshark decodes the same frames, and every field both
@@ -38,7 +38,18 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SKETCH = os.path.join(HERE, "..", "source", "wlanscout", "wlanscout.ino")
+SKETCH_DIR = os.path.join(HERE, "..", "source", "wlanscout")
+
+
+def sketch_source():
+    """config.h, the main sketch and the tabs, as Arduino joins them."""
+    names = sorted(n for n in os.listdir(SKETCH_DIR)
+                   if n.endswith(".ino") and n != "wlanscout.ino")
+    parts = []
+    for n in ["config.h", "wlanscout.ino"] + names:
+        with open(os.path.join(SKETCH_DIR, n), encoding="utf-8") as f:
+            parts.append(f.read())
+    return "\n".join(parts)
 
 # Functions and definitions taken from the sketch, in order
 PIECES = [
@@ -48,6 +59,8 @@ PIECES = [
     "struct RsnInfo",
     "void appendName(",
     "uint32_t suiteAt(",
+    "struct VendorSuite",
+    "static const VendorSuite vendorSuites[]",
     "const char *vendorSuiteName(",
     "const char *cipherName(",
     "const char *akmName(",
@@ -72,6 +85,7 @@ PIECES = [
     "static bool inList(",
     "#define IN_LIST",
     "bool elementKnown(",
+    "bool elementLengthOk(",
     "void collectUnknownElements(",
 ]
 
@@ -212,7 +226,7 @@ def cut(source, start):
 
 
 def build(workdir):
-    source = open(SKETCH).read()
+    source = sketch_source()
 
     pieces = [cut(source, piece) for piece in PIECES]
 
@@ -440,7 +454,7 @@ def main():
         exe = build(work)
 
         # The firmware's own names, to compare like with like
-        source = open(SKETCH).read()
+        source = sketch_source()
         akm_body = cut(source, "const char *akmName(")
         akm_body = akm_body[akm_body.index("else"):]
         akm_names = {int(n): s for n, s in re.findall(r'case (\d+): +return "([^"]+)"', akm_body)}

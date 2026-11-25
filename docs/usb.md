@@ -19,11 +19,17 @@ over WebUSB. Everything the page shows over Ethernet works the same way.
   the same file the sensor serves; on https it shows a **USB** button
   next to Pause.
 
-**On a Linux PC** Chrome lists the board but cannot open it: the
-device file under `/dev/bus/usb` belongs to root, and the kernel's
-`cdc_acm` driver has taken the board as `/dev/ttyACM…`, which keeps
-WebUSB out. Android has neither problem. Once, as root, a udev rule
-that gives the board to the `plugdev` group (the user has to be in it):
+**On a Linux PC** Chrome lists the board but cannot open it over
+WebUSB: the device file under `/dev/bus/usb` belongs to root, and the
+kernel's `cdc_acm` driver has taken the board as `/dev/ttyACM…`, which
+keeps WebUSB out. Android has neither problem. The simple way round is
+the **Serial** button next to **USB**, shown where the browser has Web
+Serial (Chrome and Edge on a desktop): it opens the same link through
+`/dev/ttyACM…`, needs no root and nothing below. One link at a time;
+the other button closes it and opens its own.
+
+For WebUSB instead, once, as root, a udev rule that gives the board to
+the `plugdev` group (the user has to be in it):
 
 ```
 echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="303a", ATTR{idProduct}=="1001", MODE="0660", GROUP="plugdev"' \
@@ -54,7 +60,8 @@ of a phone is in `3d-printed-housing/`, see [Enclosure](hardware.md#enclosure).
 
 Without a W5500 the start-up log says
 `ETH.begin(): FAILED, no W5500? Running on USB only` and the sensor
-carries on; the sensor id is derived from the chip the way the W5500
+carries on; its sensor id, a MAC address that identifies it in the
+export and the snapshots, is derived from the chip the way the W5500
 driver does, so it stays the same with or without one.
 
 ## The static copy
@@ -102,11 +109,49 @@ next start with a network fetches it.
 `flash.html` writes the firmware to a board on the phone's USB port with
 [esptool-js](https://github.com/espressif/esptool-js), new boards
 included: the chip's USB port is in its ROM, and the reset into the
-download mode goes over the same USB lines, no BOOT button needed. It
-writes the four parts each to its own address, bootloader 0x2000,
-partition table 0x8000, boot selection 0xe000, firmware 0x10000, as the
-Arduino IDE does; not `merged.bin`, which is padded to the full 16 MB
-and would wipe the settings and the IE catalog. The flasher needs a network; it is not kept for offline use.
+download mode goes over the same USB lines, no BOOT button needed. The
+ROM cannot be overwritten, so a write that breaks off, or a firmware
+that no longer starts, is never the end: flash again, and if the board
+does not answer, hold BOOT, press RESET, release BOOT and try once
+more. The flasher needs a network for esptool-js; it is not kept for
+offline use.
+
+It asks three things:
+
+- **Board**: the Waveshare ESP32-C5-WIFI6-KIT (16 MB, `firmware/`) or
+  the Seeed Studio XIAO ESP32-C5 (8 MB, `firmware/xiao/`).
+- **What**: *Update the firmware only* writes 0x10000 and nothing
+  else; *Full install* also writes the bootloader (0x2000), the
+  partition table (0x8000) and the boot selection (0xe000) of the
+  board's release, for a new board or another table. Neither erases:
+  settings, IE catalog and snapshots stay where the table keeps them.
+  `merged.bin`, padded to the whole flash, is never written.
+- **Firmware**: the board's release, or a `.bin` file from the phone.
+
+Before anything is written it checks:
+
+| Check | When | Passed anyway with |
+|-------|------|--------------------|
+| an ESP32 image (0xE9), built for the ESP32-C5 (chip id 23) | the file is chosen | *Ignore failed checks* |
+| a wlanscout+ firmware, its version marker | the file is chosen | *Ignore failed checks* |
+| for the chosen board, its `BOARD_ID` marker (none before 2.8.19: the kit's) | the file is chosen | *Ignore failed checks* |
+| no more flash than the board has | the file is chosen | *Ignore failed checks* |
+| newer than the version running, when opened from a sensor | the file is chosen | *Force* |
+| an ESP32-C5 with the flash size of the board | in download mode | *Ignore failed checks* |
+| for an update: the board's partition table, whose first slot holds the image and which fits the flash (a 16 MB table on the 8 MB XIAO asks for a full install) | in download mode | *Ignore failed checks* |
+
+A failed check stops it, nothing written, the board back in its
+firmware. *Force* goes back to an older release or writes the same one
+again; neither option stands in for the other.
+
+**The XIAO** takes updates from the page over USB like the kit;
+*Check for new firmware* asks `firmware/xiao/version.json` for it.
+Built with one firmware slot instead (`ENABLE_OTA` 0, see
+[Hardware](hardware.md#xiao-build)), it offers *Update in download
+mode* in *Settings → Sensor → Firmware* instead of an upload: the page
+lets go of USB and opens `flash.html?board=xiao&running=<version>`,
+set to update its release. After writing, the board restarts in the
+new firmware; press **USB** on the page again.
 
 Tested on an Android tablet and a phone: about 1.4 MB compressed,
 written in about 11 s without a button press, the board then starts
@@ -139,10 +184,8 @@ In the field a short press on the board's BOOT button, or the camera
 button next to the status badge, keeps the moment as a snapshot, the LED
 blinks green; it can be viewed later in
 Settings → Snapshots, see [Snapshots](settings.md#snapshots). Without
-a phone attached the sensor has no clock; to date the snapshots of the
-run, leave the power bank in one USB-C port and plug the phone into the
-other: the sensor keeps running, and the time the page hands over
-dates them.
+a phone attached the sensor has no clock; how its snapshots still get
+a date: [Time](settings.md#time).
 
 The pcap links and *download all* save the file through the page
 instead of a plain link. *Settings → Sensor → Firmware* works over USB
@@ -156,52 +199,5 @@ page are needed for that, only the file.
 
 ## How it works
 
-The firmware answers the same API on the web server and on the chip's
-USB Serial/JTAG port; the handlers do not know which side asked. On USB
-a request is one line, the answer comes framed:
-
-```
-GET /api/networks?range=60000\n
-
-0x02 "200 application/json\n"  <len lo><len hi><bytes> ... 0x00 0x00
-```
-
-The header line holds the status code, the content type and, for
-downloads, a file name. The body follows in chunks of a two-byte length
-(little endian) and the bytes; a chunk of length 0 ends the answer, so
-binary pcap data needs no escaping. One request at a time; the page
-queues them.
-
-A snapshot goes the other way with a `PUT`: the request line with the
-length, then exactly that many bytes, then the answer as above.
-
-```
-PUT /api/snapshotimport?len=95321&epoch=1791896972&uptime=27&name=Hall\n
-<95321 bytes of the snapshot>
-
-0x02 "200 application/json\n"  ... {"ok":1,"seq":12} ... 0x00 0x00
-```
-
-A firmware goes the same way, `PUT /api/ota?len=2548368` and the
-image, with the checks of an update over the network. The bytes go in
-pieces of 2048; after each piece but the last the client waits for the
-byte 0x06 from the sensor, sent once it has written the piece away.
-The USB port has no flow control of its own: what does not fit the
-sensor's receive queue while it writes the flash is lost, and a file
-sent in one go arrived with holes ("USB stalled"). The firmware reads
-the bytes before any further request line; if they stop coming for
-10 s it gives up and answers with an error.
-
-Two details that matter for anyone writing their own client:
-
-- **No reset on connect.** The page sets DTR and leaves RTS off. RTS on
-  resets the chip, which is what a plain serial terminal on Linux does
-  when it opens the port: the first answer then comes about 4 s later,
-  after the boot, and the tables start empty.
-- **Empty packets.** The ESP ends a transfer with a zero-length packet.
-  Google's web-serial-polyfill hands those to its stream, which throws
-  "chunk is empty"; the page reads the USB endpoint itself and skips
-  them.
-
-Measured on a phone: `/api/networks` with 62 networks, 49 kB, in about
-100 ms.
+The page talks to the sensor with the same API as over Ethernet, framed
+for the USB port: [Transport over USB](api.md#transport-over-usb).

@@ -13,7 +13,7 @@ time.
 Everything runs on the device. No cloud, no app store, no external
 dependencies beyond the Arduino core.
 
-![firmware](https://img.shields.io/badge/firmware-2.8.0-blue)
+![firmware](https://img.shields.io/badge/firmware-3.0.0-blue)
 ![licence](https://img.shields.io/badge/licence-GPL--2.0--only_+_linking_exception-blue)
 
 ![Wi-Fi overview](docs/images/01-wifi-overview.png)
@@ -59,22 +59,11 @@ dependencies beyond the Arduino core.
 
 ## Why this project
 
-Range and throughput tests in the office at
-[Simon Wunderlich](https://www.simonwunderlich.de/) kept coming out wrong
-— a run that should have been reproducible drifted from one day to the
-next. The cause turned out to be colleagues bringing up APs for their
-own testing, some with around a hundred clients associated for load
-tests. The number of APs had barely changed, only what was hanging off
-them, and nothing in the test setup showed it. Seeing stations per BSS
-is what made it obvious.
-
-It is built for Wi-Fi professionals working where **not every AP is
-theirs**: apartment blocks, shared office floors, event venues,
-campuses. A management platform shows its own APs in detail and
-everything else as a rogue entry with an RSSI value; this fills in the
-rest — which client sits on which BSS, what each side can do, and where
-the airtime goes. It runs unattended on Ethernet from a fixed position,
-for days, and needs nothing but a browser to look at.
+For Wi-Fi professionals working where **not every AP is theirs**:
+apartment blocks, shared office floors, event venues, campuses. It
+shows which client sits on which BSS, what each side can do and where
+the airtime goes, unattended on Ethernet for days, with nothing but a
+browser to look at.
 
 **This is not a hacker tool.** There is no deauthentication, no
 injection, no frame forging, no handshake capture aimed at cracking, no
@@ -89,20 +78,19 @@ More on the motivation, the intended use and related tools in
 ## Hardware
 
 - **Waveshare ESP32-C5-WIFI6-KIT** with **16 MB flash** and **8 MB
-  PSRAM** ([this one](https://www.amazon.de/dp/B0GDFY22Q1) was used). The flash holds two firmware slots of 6.25 MB for updates and
-  the storage for the IE catalog and the snapshots. The PSRAM is the
-  memory for the capture ring and the tables, about 5 MB of it is
-  allocated at boot; it is mandatory, boards without PSRAM such as the
-  ESP32-C5-Mini do not run this firmware
+  PSRAM** ([this one](https://www.amazon.de/dp/B0GDFY22Q1) was used).
+  PSRAM is required: boards without it, such as the ESP32-C5-Mini, do
+  not run this firmware. The **Seeed Studio XIAO ESP32-C5** (8 MB flash,
+  8 MB PSRAM) takes the [XIAO build](docs/hardware.md#xiao-build):
+  everything but Ethernet, over USB only
 - **W5500 Ethernet module** on SPI (SCLK 23, MOSI 24, MISO 25, CS 26,
   RST 4; [this one](https://www.amazon.de/dp/B0FB94KPVT) was used) — or none, for the board on a phone over USB
 - optional **3D-printed cases** in [`3d-printed-housing/`](3d-printed-housing/):
   one for both boards, and a MagSafe case for the board alone on the
-  back of a phone, see [Hardware](docs/hardware.md#enclosure)
+  back of a phone, also as a variant for the XIAO ESP32-C5, see
+  [Hardware](docs/hardware.md#enclosure)
 
-The W5500 has no auto-MDI/MDI-X: use a straight cable to a switch, a
-crossover cable to a PC. Wiring, pin table and details in
-[Hardware](docs/hardware.md).
+Wiring, memory and Ethernet cabling in [Hardware](docs/hardware.md).
 
 ![The Ethernet sensor in its case, closed and open](docs/images/02-hardware.jpg)
 
@@ -137,8 +125,8 @@ or again from the flasher. Details in
 2. Wire up the W5500 as in the [pin table](docs/hardware.md) and connect
    it to a switch.
 3. Power the board over USB-C and read the address off the serial
-   console (115200 baud). Without a DHCP server the sensor falls back to
-   `192.168.1.1` by itself.
+   console (115200 baud); without DHCP it is `192.168.1.1`
+   ([First start](docs/install.md#first-start)).
 4. Open `http://<address>/` in a browser.
 
 ### Building from source
@@ -146,8 +134,9 @@ or again from the flasher. Details in
 Install **esp32 by Espressif Systems** (3.3.0 or later) in the Arduino
 Boards Manager, open `source/wlanscout/wlanscout.ino`, select **ESP32C5
 Dev Module** with Flash Size **16MB (128Mb)** and PSRAM **Enabled**,
-then upload. Step by step, with the reasons behind each setting, in
-[Installation](docs/install.md).
+then upload. Step by step in [Installation](docs/install.md), with
+arduino-cli, the XIAO build and releases in
+[arduino-cli and releases](docs/install.md#arduino-cli-and-releases).
 
 ---
 
@@ -157,12 +146,16 @@ then upload. Step by step, with the reasons behind each setting, in
 wlanscout/
   source/wlanscout/      the Arduino sketch (the folder carries the
                          sketch's name, an Arduino rule):
-    wlanscout.ino          firmware
+    wlanscout.ino          firmware: includes, settings, setup() and loop()
+    NN_*.ino               the rest of the firmware, one file per part
+    config.h               the board and what is built in
     index_html.h           web interface, the source of the page
     index_html_gz.h        the same packed, as the sensor serves it
                            (tools/make_page_gz.py)
     oui_table.h            vendor table, generated from the IEEE registries
     partitions.csv         partition table, used instead of the menu
+    partitions_xiao.csv    the same for 8 MB flash (Seeed Studio XIAO ESP32-C5)
+    partitions_xiao_1slot.csv  8 MB flash, one firmware slot (option)
   firmware/              the built images of the current version and
                          FLASH.txt (which file goes where)
   index.html             the page as a static, installable copy for a
@@ -171,6 +164,7 @@ wlanscout/
                          from firmware/ (docs/usb.md); at the top so
                          GitHub Pages can publish the repository
   tools/make_release.py  fills firmware/ and the page from a build
+  tools/build_xiao.sh    builds the XIAO firmware (8 MB, USB only)
   tools/make_static.py   builds the page alone
   tools/make_page_gz.py  packs index_html.h into index_html_gz.h
   tools/make_oui.py      regenerates oui_table.h
@@ -182,27 +176,13 @@ wlanscout/
   docs/                  documentation and screenshots
   LICENSE                GPL-2.0
   LINKING-EXCEPTION      permission to link with ESP-IDF / arduino-esp32
+  LICENSING.md           why the exception, SPDX tags, the vendor data
 ```
 
 `oui_table.h` is generated but kept in the repository, so the sketch
-builds without any extra step; `tools/make_oui.py` refreshes it from the
-current IEEE listing. `firmware/` and the page at the top always hold
-the version in `wlanscout.ino`: after a build,
-
-```sh
-MAP="-ffile-prefix-map=$HOME/.arduino15=~/.arduino15"
-arduino-cli compile \
-    --fqbn esp32:esp32:esp32c5:FlashSize=16M,PartitionScheme=custom,PSRAM=enabled \
-    --build-property "upload.maximum_size=6553600" \
-    --build-property "compiler.c.extra_flags=$MAP" \
-    --build-property "compiler.cpp.extra_flags=$MAP" \
-    --build-path build source/wlanscout
-python3 tools/make_release.py build
-```
-
-refreshes both. The prefix map keeps the builder's home directory out
-of the images: the core's source file names end up in its log
-messages.
+builds without any extra step. The release site (`firmware/`, the static
+page and the flasher) is generated by `tools/make_release.py` and kept
+in git, see [arduino-cli and releases](docs/install.md#arduino-cli-and-releases).
 
 ---
 
@@ -231,8 +211,10 @@ messages.
   multi-sensor export
 - [Tuning and troubleshooting](docs/tuning.md) — limits, memory, common
   problems
-- [Tests](docs/testing.md) — browser tests for the web page, no sensor
-  needed
+- [Tests](docs/testing.md) — tests for the page and the firmware, no
+  sensor needed
+- [Internals](docs/internals.md) — the sketch's files, for changing the
+  firmware
 
 ---
 
@@ -250,12 +232,8 @@ Nothing here is promised; the details are in [Outlook](docs/outlook.md).
 ## How this was built
 
 The firmware, the web interface and this documentation were written with
-[Claude](https://claude.ai), Anthropic's AI assistant, over a long series
-of sessions and tested on real hardware against real access points.
-Several rounds went into correcting things the model had got wrong; the
-likeliest kind of defect left is one that compiles, runs, looks right
-and still differs subtly from the standard. More in
-[Background](docs/background.md#how-this-was-built).
+[Claude](https://claude.ai), Anthropic's AI assistant, and tested on
+real hardware; more in [Background](docs/background.md#how-this-was-built).
 
 **Feedback is very welcome** — issues, corrections, captures that are
 decoded wrongly, and above all cases worth flagging as an anomaly that
@@ -266,67 +244,13 @@ are not in the list yet.
 ## Licence
 
 **GNU General Public License v2.0 only** (GPL-2.0-only) with a linking
-exception for the firmware. The full GPL text is in [`LICENSE`](LICENSE),
-the canonical copy from
-<https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt>; the exception is
-in [`LINKING-EXCEPTION`](LINKING-EXCEPTION).
-
-**Why the exception.** The firmware is linked with ESP-IDF and the
-Arduino core for the ESP32. ESP-IDF is Apache-2.0, which the FSF
-considers incompatible with GPLv2, and both ship binary-only libraries,
-the Wi-Fi driver and the Bluetooth controller among them, whose source
-is not available to pass on. Without the exception, a built firmware image could not be
-distributed under GPLv2 at all. The exception permits exactly that
-combination and nothing more: everything else in the firmware stays
-under the plain GPL-2.0-only terms. It is the same construction as the
-well-known OpenSSL exceptions in other GPLv2 projects.
+exception for the firmware, so it may be linked with ESP-IDF and the
+Arduino core: [`LICENSE`](LICENSE),
+[`LINKING-EXCEPTION`](LINKING-EXCEPTION). The MagSafe and XIAO
+cases are CC BY-NC-SA 4.0. Why the exception, the SPDX tags, contributions and the
+vendor table's data: [`LICENSING.md`](LICENSING.md).
 
 Copyright (C) 2026 Dr.-Ing. Simon Wunderlich Systementwicklung &
 Beratung (<https://www.simonwunderlich.de/>). Written by Jan Fuchs
 <jf [at] simonwunderlich . de> as work for Simon Wunderlich. Source:
 <https://github.com/Oposum01/wlanscout>.
-
-**Except the MagSafe case.** `3d-printed-housing/esp32-c5-magsafe-case-v6.scad`
-and its two STLs are adapted from
-[Biscuit – DIY MagSafe case, ESP32-C5 Waveshare](https://makerworld.com/de/models/2590419-biscuit-diy-magsafe-case-esp32-c5-waveshare)
-by [Dtmcnamara](https://makerworld.com/de/@Dtmcnamara) and, like it, licensed under
-[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/),
-not the GPL. Their SPDX tag says so.
-
-Every source file carries the licence as an
-[SPDX](https://spdx.org/licenses/GPL-2.0-only.html) tag instead of the
-long notice. The firmware sources (`source/wlanscout/wlanscout.ino`,
-`index_html.h`)
-name the exception:
-
-```
-// SPDX-License-Identifier: GPL-2.0-only WITH AdditionRef-wlanscout-linking-exception
-// SPDX-FileCopyrightText: 2026 Dr.-Ing. Simon Wunderlich Systementwicklung & Beratung
-// SPDX-FileContributor: Jan Fuchs <jf [at] simonwunderlich . de>
-```
-
-`tools/make_oui.py` and the Ethernet case in `3d-printed-housing/` are
-not linked with anything and carry plain `GPL-2.0-only`; the MagSafe
-case carries `CC-BY-NC-SA-4.0`, see above.
-
-The exception can only be granted by whoever holds the copyright.
-Contributions from outside therefore have to accept it as well, or the
-firmware they touch could no longer be distributed as a built image.
-
-"Only" rather than "or later" means GPL-3.0 code, such as
-[esp-sdr](docs/outlook.md), cannot be merged into this firmware as it
-stands.
-
-**Vendor table.** `oui_table.h` is generated by `tools/make_oui.py` from
-the IEEE public listings: MA-L (<https://standards-oui.ieee.org/oui/oui.csv>),
-MA-M (<https://standards-oui.ieee.org/oui28/mam.csv>), MA-S
-(<https://standards-oui.ieee.org/oui36/oui36.csv>) and IAB
-(<https://standards-oui.ieee.org/iab/iab.csv>).
-Like Wireshark's generated `manuf-data.c`, it carries the licence of the
-code it is linked into and names the listing as its source in the file
-header. IEEE does not assert any copyright in the public listings or
-restrict its distribution; Debian ships the same data as public domain
-in its `ieee-data` package. IEEE asks users to fetch the list from them
-and update it regularly — see
-[Updating the vendor table](docs/install.md#updating-the-vendor-table).
-The raw CSV downloads are not part of the repository.

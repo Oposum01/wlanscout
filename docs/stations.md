@@ -11,7 +11,8 @@ browser keeps the tab last chosen.
 
 **Order.** Both live tables start sorted by station address, the
 association history by the newest association. A click on a column
-head sorts all three by that column.
+head sorts all three by that column, a second click reverses the
+order.
 
 **The tooltip** has the same layout as the one for APs: under the
 address, vendor and AP come channel, RSSI and age, then the sections
@@ -30,7 +31,7 @@ carries a MIC) is marked as such in the BSS changes and counted under
 *Roamed*.
 Sections without content are left out.
 
-**The notes column** (⚠) in all three tables boils the NOTES down to
+**The notes column** (headed ⚠) in all three tables boils the NOTES down to
 symbols as in the network table: a pink `?` per element this sensor does
 not decode (an unknown element in a probe or association request), an
 amber `!` for something odd: the AP rejected the last association (with
@@ -132,24 +133,16 @@ table that are not there.
 **Excessive probing** is flagged as a rate rather than a count, since a
 station seen for an hour naturally has more probes than one seen for a
 minute. Above twenty probe requests a minute without an association the
-sensor can see, the tooltip says so. *That threshold is an estimate, not
-a measurement — if ordinary devices trip it where you are, say so and it
-can be adjusted.* It is usually a device whose
+sensor can see, the tooltip says so. It is usually a device whose
 network is out of range, a captive-portal check on a loop, or a client
-stuck on a profile it will never find.
+stuck on a profile it will never find. The threshold is an estimate; if
+ordinary devices trip it where you are, say so.
 
 **Roaming** is tracked per station with the last eight BSS changes and
 their timestamps. A change needs three consecutive frames to be
-accepted, since a station appearing to jump between two BSSIDs that
-differ in a single bit is usually a corrupted frame. Frames that fail
-the FCS are dropped outright, so are management and data frames whose
-transmitter address has the group bit set — no real sender has one,
-it is noise that slipped past the FCS and would otherwise show up as
-a phantom station or made-up elements in the IE catalog — and frames
-with ToDS and FromDS both clear
-are ignored for BSS assignment — TDLS, Wi-Fi Direct and mesh traffic all
-carry those bits and produced stations whose BSSID was their own
-address.
+accepted, so a corrupted frame does not make a roam, and traffic
+between stations (TDLS, Wi-Fi Direct, mesh) does not assign one to a
+BSS.
 
 **The association history** keeps a full copy of the station record for
 every station whose association or reassociation request was decoded,
@@ -183,7 +176,8 @@ a client announces, decoded the same way as for APs — see
 management and the other Extended Capabilities bits already come with probe requests. The
 RM Enabled Capabilities element is only sent in association and
 reassociation requests, so the measurement list stays empty until the
-station has joined while the sensor was listening. Whatever is read is
+station has joined while the sensor was listening (see [Catching an
+association request](#catching-an-association-request)). Whatever is read is
 collected over all requests seen and kept in the association history.
 
 ### AWDL (Apple devices talking directly)
@@ -251,15 +245,19 @@ addresses, so the tooltip of the main entry lists them under
 Features column, with a pointer to the entry that holds the
 capabilities.
 
-Each per-STA profile carries the full capability set of its link, so
-the element outgrows the 255 octets an element can hold and continues
-in Fragment elements behind it. The sensor puts those back together
-before reading the profiles; in the request above the 2.4 GHz profile
-sat entirely in the fragment. A Fragment element right behind a full
-element is not an unknown element of its own and does not go into the
-IE catalog.
+The element usually continues in Fragment elements, which the sensor
+puts back together before reading the profiles; they do not go into
+the IE catalog.
 
-To catch a station's request, lock the sweep to the channel of one of
-the AP's links and make the station reconnect. The request is kept whole
-in the association ring and the association history, and opens in
-Wireshark from the station's pcap link.
+### Catching an association request
+
+A station sends its association request once, when it joins, so
+waiting for one can take a while. Force it: click the BSS in the
+spectrum view (or the AP node in the station graph) and *scan only
+channel …* in its tooltip to lock the sweep to its channel, then make
+the client reconnect — toggle its Wi-Fi, or walk it out of range and
+back. The request lands straight away, and with the sweep parked there
+it will not be missed. For a multi-link station the channel of any of
+the AP's links will do. The request is kept whole in the association
+ring and the association history, and opens in Wireshark from the
+station's pcap link.

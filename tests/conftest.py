@@ -18,6 +18,8 @@ pytest-playwright).
 import json
 import pathlib
 import re
+import subprocess
+import sys
 
 import pytest
 from playwright.sync_api import sync_playwright
@@ -53,6 +55,65 @@ def pytest_addoption(parser):
                      help="browser engine for the page tests")
     parser.addoption("--browser-path", default=None,
                      help="browser executable instead of Playwright's")
+
+
+# Tests whose timing does not hold up beside a dozen other browsers:
+# with -n they are left out of the parallel run and run on their own
+# right after it
+SERIAL = ["test_eventlog.py", "test_graph_pin.py", "test_graphs.py"]
+
+
+def parallel(config):
+    return bool(getattr(config.option, "numprocesses", None))
+
+
+def serial_files(config):
+    """The SERIAL files among what the run was asked for."""
+    here = pathlib.Path(__file__).resolve().parent
+    asked = [pathlib.Path(a.split("::")[0]).resolve() for a in config.args]
+
+    return [str(here / f) for f in SERIAL
+            if any(a == here / f or a == here or a in (here / f).parents
+                   for a in asked)]
+
+
+def pytest_collection_modifyitems(config, items):
+    # Only in an xdist worker; the run without -n keeps them
+    if not hasattr(config, "workerinput"):
+        return
+
+    keep = [i for i in items if i.path.name not in SERIAL]
+
+    config.hook.pytest_deselected(
+        items=[i for i in items if i.path.name in SERIAL])
+    items[:] = keep
+
+
+def pytest_sessionfinish(session, exitstatus):
+    config = session.config
+
+    if hasattr(config, "workerinput") or not parallel(config):
+        return
+
+    files = serial_files(config)
+
+    if not files:
+        return
+
+    command = [sys.executable, "-m", "pytest", "-q", "-p",
+               "no:cacheprovider", "--engine",
+               config.getoption("--engine")]
+
+    if config.getoption("--browser-path"):
+        command += ["--browser-path", config.getoption("--browser-path")]
+
+    print("\nOn their own after the parallel run: " +
+          ", ".join(pathlib.Path(f).name for f in files), flush=True)
+
+    result = subprocess.run(command + files)
+
+    if result.returncode != 0:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 @pytest.fixture(scope="session")

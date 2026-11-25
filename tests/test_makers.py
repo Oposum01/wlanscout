@@ -112,6 +112,19 @@ def test_no_header_without_a_guess(opened):
     # TI's ACX chips in early 11g routers
     ([["080028", 1, "Texas Instruments"]], "", ["Chip: Texas Instruments"]),
     ([["001D0F", 1, "TP-LINK TECHNOLOGIES"]], "", ["Manufacturer: TP-Link"]),
+    # The registry's TP-LINK, as TP-Link writes itself
+    ([["000AEB", 10, "TP-LINK"]], "", ["Manufacturer: TP-Link"]),
+    ([["5C628B", 1, "TP-LINK"]], "", ["Manufacturer: TP-Link"]),
+    ([["000E58", 15, "Sonos"]], "", ["Manufacturer: Sonos"]),
+    # The catalog's short names, the same for every OUI of a maker
+    ([["003192", 1, "TP-Link Systems"]], "", ["Manufacturer: TP-Link"]),
+    ([["AC853D", 32, "HUAWEI TECHNOLOGIES"]], "", ["Manufacturer: HUAWEI"]),
+    ([["0000F0", 12, "Samsung Electronics"]], "",
+     ["Manufacturer: Samsung"]),
+    ([["0050F2", 17, "MICROSOFT"]], "", ["Manufacturer: Microsoft"]),
+    ([["000456", 2, "Cambium Networks Lim"]], "",
+     ["Manufacturer: Cambium"]),
+    ([["00A057", 8, "LANCOM Systems"]], "", ["Manufacturer: LANCOM"]),
     # Intel's driver element: the chip, also for stations
     ([["001735", 8, "Intel Wireless Netwo"]], "", ["Chip: Intel"]),
     # hostapd's QCA elements say nothing about chip or maker

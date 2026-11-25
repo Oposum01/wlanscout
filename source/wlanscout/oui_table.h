@@ -49278,7 +49278,7 @@ static const char *const ouiMamNames[] = {
     "Semsotec",
     "trilogik",
     "Sichuan Zhongguang L",
-    "Watts A\S",
+    "Watts A\\S",
     "Guangzhou Duge Techn",
     "S Labs sp. z o.o.",
     "RTDS",

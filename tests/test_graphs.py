@@ -156,13 +156,10 @@ def test_a_recording_started_anew_replaces_the_old_one(app):
 
 
 def test_times_with_a_clock(opened):
-    # 2026-10-21 12:00:00 UTC, sample 6 starts a minute later
-    text = opened.js("""graphTimeText({epoch: 1792584000, step: 10,
-        next: 7}, 6)""")
-    expected = opened.js("""new Date((1792584000 + 60) * 1000)
-        .toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})""")
-
-    assert text == expected
+    # 2026-10-21 12:00:00 UTC, sample 6 starts a minute later; the
+    # sensor's UTC+02:00 rather than the browser's zone
+    assert opened.js("""graphTimeText({epoch: 1792584000, step: 10,
+        next: 7}, 6)""") == "14:01"
     assert opened.js("graphTimeText({epoch: 0, step: 10, next: 7}, 4)") == \
         "−30 s"
 

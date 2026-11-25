@@ -309,3 +309,53 @@ def test_netgear_and_belkin(opened):
     # Both reviewed, no longer catalogued; Belkin named short
     assert opened.js("[0x00146C03, 0x08863B00].map(vendorIeName)") == [
         "NETGEAR proprietary", "Belkin (Linksys) proprietary"]
+
+
+def test_lancom_elements_named(opened):
+    names = opened.js("""[0x00A05704, 0x00A05708].map(vendorIeName)""")
+
+    assert names == ["LANCOM device UUID", "LANCOM AP name"]
+
+
+def test_reads_vendor_names_from_the_233_november_catalog(opened):
+    names = opened.js("""[0x000AEB0A, 0x000E580F].map(vendorIeName)""")
+
+    assert names == ["TP-Link proprietary", "Sonos proprietary"]
+
+
+def test_magsafe_snapshot_vendor_types_reviewed():
+    """Meraki 5, Qualcomm 2, Arlo 0 and 02:4D:52 type 1 are no longer
+    catalogued; Meraki and Qualcomm still name maker and chip from
+    their OUI."""
+    from sketch import sketch_text
+
+    src = sketch_text()
+    reviewed = src[src.index("static const uint32_t reviewedVendor[]"):]
+    reviewed = reviewed[:reviewed.index("};")]
+
+    for key in ["0x00180A05", "0x8CFDF002", "0xA4116200", "0x024D5201"]:
+        assert key in reviewed
+
+
+def test_meraki_maker_and_qualcomm_chip(opened):
+    assert opened.js("""[VENDOR_IE_MAKERS["00180A"], VENDOR_IE_MAKERS["A41162"],
+        WIFI_CHIP_OUIS["8CFDF0"]]""") == ["Cisco Meraki", "Arlo", "Qualcomm"]
+
+
+def test_cckm_named(opened):
+    html = opened.js("""catalogReadsHTML({dec: [], decx: [], part: [],
+        pass: [], passx: [], vend: [], vpart: [], vrev: [],
+        akm: [[0x00409600, "CCKM"]], cipher: []})""")
+
+    assert "00:40:96 0 CCKM" in html
+
+
+def test_cckm_is_known_and_counts_as_802_1x():
+    from sketch import sketch_text
+
+    src = sketch_text()
+
+    assert '{ 0x00409600u, true,  "CCKM" }' in src
+
+    rsn = src[src.index("// CCKM roams within an 802.1X network"):]
+    assert "info.eap = true;" in rsn[:200]

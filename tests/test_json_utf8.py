@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 import pytest
+from sketch import sketch_text
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKETCH = ROOT / "source" / "wlanscout" / "wlanscout.ino"
@@ -59,7 +60,7 @@ def outjson(tmp_path_factory):
     if not shutil.which("g++"):
         pytest.skip("no g++")
 
-    src = SKETCH.read_text(encoding="utf-8")
+    src = sketch_text()
     a = src.index("/*\n * Length of the UTF-8 sequence at p")
     b = src.index("    if (outBuf.length() >= 1024)", a)
 

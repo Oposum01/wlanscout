@@ -73,6 +73,12 @@ def clean_name(name, max_len):
     return name.strip().rstrip(",").strip()
 
 
+def c_string(name):
+    """A name as the inside of a C string literal: a backslash in it
+    ("Watts A\\S") would start an escape sequence."""
+    return name.replace("\\", "\\\\")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("csvfiles", nargs="+")
@@ -144,7 +150,7 @@ def main():
     out.write("static const char *const ouiFullNames[] = {\n")
 
     for key in keys:
-        out.write('    "%s",\n' % entries[key])
+        out.write('    "%s",\n' % c_string(entries[key]))
 
     out.write("};\n\n")
 
@@ -233,7 +239,7 @@ def write_blocks(out, prefix, ctype, fmt, entries):
     out.write("static const char *const %sNames[] = {\n" % prefix)
 
     for key in keys:
-        out.write('    "%s",\n' % entries[key])
+        out.write('    "%s",\n' % c_string(entries[key]))
 
     out.write("};\n\n")
 

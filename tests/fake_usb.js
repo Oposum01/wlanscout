@@ -10,6 +10,10 @@
  *
  * window.__usbRequests  every request line received
  * window.__usbControl   the last control transfer (DTR/RTS)
+ * window.__usbDamage   "end" or "middle": the next answer to a request
+ *                      with "damage" in it loses its two end bytes, or
+ *                      20 bytes in its middle, as when the firmware's
+ *                      flush() dropped what was queued
  * window.__usbUnplug()  fires the disconnect event
  * window.__usbPlugIn()  fires the connect event
  *
@@ -151,6 +155,20 @@
             bytes = frame(200, "application/json", "",
                           new TextEncoder().encode(JSON.stringify(json)));
         }
+
+        const damage = line.includes("damage") ? window.__usbDamage : null;
+
+        if (damage === "end")
+            bytes = bytes.slice(0, bytes.length - 2);
+        else if (damage === "middle")
+        {
+            const mid = bytes.length >> 1;
+            bytes = new Uint8Array([...bytes.slice(0, mid),
+                                    ...bytes.slice(mid + 20)]);
+        }
+
+        if (damage)
+            window.__usbDamage = null;
 
         for (let i = 0; i < bytes.length; i += 50)
         {

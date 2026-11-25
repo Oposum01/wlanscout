@@ -9,6 +9,7 @@ import shutil
 import subprocess
 
 import pytest
+from sketch import sketch_text
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "source" / "wlanscout"
@@ -61,7 +62,7 @@ def lookup(tmp_path_factory):
     if not shutil.which("g++"):
         pytest.skip("no g++")
 
-    src = SKETCH.read_text(encoding="utf-8")
+    src = sketch_text()
     a = src.index("const char *lookupVendor(")
     vendor = src[a:src.index("\n}\n", a) + 3]
     b = src.index("const char *lookupBssidVendor(")
@@ -186,3 +187,36 @@ def test_filter_by_block(opened):
         return [hit, miss]; }""", FLEX)
 
     assert found == [True, False]
+
+
+def test_a_backslash_in_a_name_is_escaped(tmp_path):
+    # "Watts A\S" in the IEEE list once made oui_table.h an unknown
+    # escape sequence
+    if not shutil.which("g++"):
+        pytest.skip("no g++")
+
+    csv = tmp_path / "oui.csv"
+    csv.write_text("Registry,Assignment,Organization Name,Organization Address\n"
+                   "MA-L,0011AA,Watts A\\S,Somewhere\n"
+                   "MA-L,0011AB,Plain Corp,Elsewhere\n")
+    out = subprocess.run(["python3", str(ROOT / "tools" / "make_oui.py"),
+                          str(csv)], capture_output=True, text=True,
+                         check=True).stdout
+    assert '"Watts A\\\\S"' in out
+
+    header = tmp_path / "oui_table.h"
+    header.write_text(out.replace("#include <Arduino.h>\n", ""))
+    (tmp_path / "t.cpp").write_text(
+        '#include <cstdint>\n#include <cstdio>\n#include "oui_table.h"\n'
+        'int main() { puts(ouiFullNames[0]); }\n')
+    subprocess.run(["g++", "-Wall", "-Werror", "-o", str(tmp_path / "t"),
+                    str(tmp_path / "t.cpp")], check=True)
+    assert subprocess.run([str(tmp_path / "t")], capture_output=True,
+                          text=True).stdout == "Watts A\\S\n"
+
+
+def test_the_shipped_table_has_no_stray_backslash():
+    import re
+    text = (SOURCE / "oui_table.h").read_text(encoding="utf-8")
+    # Every backslash in a name is a doubled one
+    assert not re.search(r'(?<!\\)\\(?![\\"])', text)

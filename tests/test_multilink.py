@@ -261,6 +261,31 @@ def test_he_details_and_colour_collision(opened):
     assert not any("colour collision" in n for n in notes("0A:33:00:00:00:01"))
 
 
+def test_colour_0_is_no_colour(opened):
+    opened.js("""networks.push(
+        Object.assign({}, networks[0], {bssid: '0A:44:00:00:00:01',
+            ssid: 'Zero', channel: 6, color: [0, 0]}),
+        Object.assign({}, networks[0], {bssid: '0A:55:00:00:00:01',
+            ssid: 'ZeroToo', channel: 6, color: [0, 0]}))""")
+
+    def notes(bssid):
+        return opened.js("""b => networkNotes(networks.find(n => n.bssid === b))
+            .map(n => n[0] + ' ' + n[1])""", bssid)
+
+    zero = notes("0A:44:00:00:00:01")
+    # Two BSSs without a colour do not collide
+    assert not any("colour collision" in n for n in zero)
+    assert "#7aaed0 BSS colour 0: the AP uses no colour, so stations " \
+        "cannot tell its frames from others' by colour and spatial " \
+        "reuse stays off" in zero
+    assert opened.js("bssColorText({color: [0, 0]})") == "0 (none)"
+    # Disabled is its own text and no note
+    assert opened.js("bssColorText({color: [0, 1]})") == "0 (disabled)"
+    assert not any("BSS colour 0" in n for n in opened.js(
+        """networkNotes(Object.assign({}, networks[0], {color: [0, 1]}))
+            .map(n => n[1])"""))
+
+
 def test_vht_details(opened):
     # An AP: Wave 2 with MU-MIMO, Wave 1 with the SU beamformer
     assert opened.js("vhtCapText({vhtcap: 32 | 16 | 1 | 4}, false)") == \

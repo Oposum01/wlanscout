@@ -12,6 +12,7 @@ import subprocess
 import pytest
 
 from test_tooltip import tooltip
+from sketch import sketch_text
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKETCH = ROOT / "source" / "wlanscout" / "wlanscout.ino"
@@ -101,7 +102,7 @@ def xbox(tmp_path_factory):
     if not shutil.which("g++"):
         pytest.skip("no g++")
 
-    src = SKETCH.read_text(encoding="utf-8")
+    src = sketch_text()
     a = src.index("const uint8_t *findVendorIE(")
     find = src[a:src.index("\n}\n", a) + 3]
     b = src.index("bool xboxWirelessCost(")
@@ -130,7 +131,7 @@ def pdt(tmp_path_factory):
     if not shutil.which("g++"):
         pytest.skip("no g++")
 
-    src = SKETCH.read_text(encoding="utf-8")
+    src = sketch_text()
     a = src.index("static void primaryDeviceType(")
     helper = src[a:src.index("\n}\n", a) + 3]
 
@@ -495,3 +496,105 @@ def test_fiat_from_the_model_and_its_name(opened):
     assert "Device: Car (head unit, Fiat)" in tooltip(
         opened, {"ssid": "My Fiat SJ806696"})
     assert "Manufacturer: Fiat" in tooltip(opened, {"ssid": "My Fiat SJ806696"})
+
+
+# A wireless CarPlay box (ch 36) named after the car it sits in,
+# Apple's Device IE "CAR" / "Magic" / "AutoBox", no Wi-Fi Direct
+AUTOBOX = {"ssid": "VOLVO S9082", "iw": "000A01",
+           "acc": ["CAR", "Magic", "AutoBox"],
+           "voui": [["00A040", 0, "Apple"], ["001018", 2, "Broadcom"]]}
+
+
+def test_carplay_adapter(opened):
+    assert "Device: Vehicle (wireless CarPlay adapter, Magic AutoBox)" in \
+        tooltip(opened, AUTOBOX)
+
+    plain = dict(AUTOBOX)
+    del plain["iw"]
+    assert "Device: Car (wireless CarPlay adapter, Magic AutoBox)" in \
+        tooltip(opened, plain)
+
+    # Another model is no adapter
+    assert "Device: Car" not in tooltip(
+        opened, dict(plain, acc=["CAR", "Magic", "Box2"]))
+
+
+# Alpine's head unit (ch 149): wireless Android Auto, a vehicle by
+# Interworking
+ALPINE = {"ssid": "AndroidAuto_aaa2", "bssid": "30:DF:17:08:AA:A2",
+          "iw": "000A01"}
+
+
+def test_android_auto_head_unit(opened):
+    assert "Device: Vehicle (wireless Android Auto)" in \
+        tooltip(opened, ALPINE)
+
+    # From Alpine's OUI without Interworking too, not from another's
+    plain = dict(ALPINE)
+    del plain["iw"]
+    assert "Device: Car (head unit, wireless Android Auto)" in \
+        tooltip(opened, plain)
+    assert "Android Auto" not in tooltip(
+        opened, dict(plain, bssid="02:11:22:33:44:56"))
+
+
+def test_visteon_module_on_a_vehicle(opened):
+    assert "Module: Visteon (telematics)" in tooltip(
+        opened, {"ssid": "HotspotU667", "bssid": "F8:55:CD:94:A6:F0",
+                 "iw": "000A01"})
+
+
+# A Toyota's head unit (ch 6) by Panasonic Automotive: Apple's Device IE
+# "CAR MULTIMEDIA" / "Toyota Multimedia", a vehicle by Interworking
+TOYOTA = {"ssid": "Smartphone_connect_849ee2", "bssid": "B0:D8:88:84:9E:E2",
+          "iw": "040A01",
+          "acc": ["CAR MULTIMEDIA", "Toyota Multimedia", "CN-ST2CE47X"]}
+
+
+def test_toyota_by_name_and_oui(opened):
+    text = tooltip(opened, TOYOTA)
+
+    assert "Module: Panasonic Automotive (head unit)" in text
+    assert "Device: Vehicle (wireless CarPlay)" in text
+    assert "Manufacturer: Toyota Multimedia" in text
+
+    plain = {"ssid": TOYOTA["ssid"], "bssid": TOYOTA["bssid"]}
+    assert "Device: Car (head unit, Toyota)" in tooltip(opened, plain)
+    assert "Manufacturer: Toyota" in tooltip(opened, plain)
+
+    # The name alone from another OUI is no Toyota
+    assert "Toyota" not in tooltip(
+        opened, dict(plain, bssid="02:11:22:33:44:57"))
+
+
+MAZDA = {"ssid": "Mazda_c5e263c6cc57_SPL", "bssid": "CC:57:63:C6:C5:E2",
+         "iw": "040A01", "acc": ["", "", ""],
+         "voui": [["00A040", 0, "Apple"]]}
+
+
+def test_mazda_by_name_with_its_bssid(opened):
+    text = tooltip(opened, MAZDA)
+
+    assert "Manufacturer: Mazda" in text
+    assert "Module: Panasonic Automotive (head unit)" in text
+    assert "Device: Vehicle (wireless CarPlay)" in text
+
+    plain = {"ssid": MAZDA["ssid"], "bssid": MAZDA["bssid"]}
+    assert "Device: Car (head unit, Mazda)" in tooltip(opened, plain)
+
+    # Another BSSID in the name is no Mazda
+    assert "Mazda" not in tooltip(
+        opened, dict(plain, bssid="02:11:22:33:44:57")).replace(
+            MAZDA["ssid"], "")
+
+
+def test_marelli_by_its_oui_alone(opened):
+    net = {"ssid": "SomeName", "bssid": "00:14:09:98:38:8D"}
+    text = tooltip(opened, net)
+
+    assert "Device: Car (head unit, Magneti Marelli)" in text
+    assert "Module: Magneti Marelli (head unit)" in text
+    assert "Manufacturer:" not in text
+
+    assert "Marelli" not in tooltip(
+        opened, dict(net, bssid="02:11:22:33:44:57"))

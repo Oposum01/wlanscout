@@ -4,12 +4,17 @@ Ideas that are not built, in no particular order. None of them is
 promised; they are written down so they are not lost, and because
 someone else may want one of them badly enough to do it.
 
-**A spectrum front end.** A second C5 running
-[esp-sdr](https://github.com/ESPARGOS/esp-sdr) as a dedicated SDR,
-connected over UART, to cover the one thing this cannot do: see energy
-that is not an 802.11 frame. It cannot live in the same chip, as the
-[Wi-Fi views](wifi-views.md#the-four-wi-fi-views) explain, but two of them would be a complete picture for
-about forty euros.
+**A spectrum front end.** The Wi-Fi views show only decoded 802.11
+frames, so energy that is not one (a microwave oven, a video sender)
+is invisible there, see [Wi-Fi views](wifi-views.md#rssi-spectrum).
+[ESPARGOS/esp-sdr](https://github.com/ESPARGOS/esp-sdr) gets an actual
+spectrum off an ESP32-C5: it drives the PHY directly for snapshot FFTs
+of 256 to 2048 bins at up to 80 MS/s, including the 5 GHz path. It
+cannot live in the same chip as this firmware: it needs a full 128 KiB
+SRAM bank reserved at link time, which this firmware does not have
+left over. A second C5 running esp-sdr as a dedicated front end,
+connected over UART, would cover it; two of them would be a complete
+picture for about forty euros.
 
 **Something that consumes the export.** `/api/export` was designed for
 merging several sensors covering one area, and nothing has ever been

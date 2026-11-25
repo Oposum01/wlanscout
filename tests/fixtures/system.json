@@ -97,7 +97,7 @@
   },
   {
    "name": "pcap ring",
-   "bytes": 3168000,
+   "bytes": 131072,
    "psram": 1
   },
   {
@@ -107,12 +107,7 @@
   },
   {
    "name": "assoc ring",
-   "bytes": 696000,
-   "psram": 1
-  },
-  {
-   "name": "pcap index",
-   "bytes": 12920,
+   "bytes": 65536,
    "psram": 1
   },
   {
@@ -148,16 +143,21 @@
  },
  "pcap": {
   "count": 241,
-  "cap": 6000,
+  "bytes": 40985,
+  "mem": 131072,
+  "max": 5242880,
   "total": 241,
+  "dropped": 0,
+  "assoc": 0,
+  "assocbytes": 0,
+  "assocmem": 65536,
+  "assocmax": 1572864,
+  "assoctotal": 0,
+  "assocdropped": 0,
   "beacons": 55,
   "beaconslots": 160,
   "beacontotal": 10246,
-  "assoc": 0,
-  "assoccap": 300,
-  "assoctotal": 0,
-  "bytes": 40985,
-  "slot": 528,
+  "chunk": 65536,
   "enabled": 1,
   "mask": 15
  }

@@ -13,19 +13,29 @@ https://espressif.github.io/arduino-esp32/package_esp32_index.json
 ```
 
 2. The sketch is `source/wlanscout/` in the repository; open
-   `wlanscout.ino` there:
+   `wlanscout.ino` there. The IDE opens the numbered files next to it
+   as tabs of the same sketch:
 
 ```
 source/wlanscout/
-  wlanscout.ino            <- the sketch
+  wlanscout.ino            <- the sketch: includes, settings, setup() and loop()
+  01_heap_probe.ino ...    <- the rest, one file per part, see below
+  37_ble_capture.ino
+  config.h                 <- the board and what is built in, see below
   index_html.h             <- the web interface
   oui_table.h              <- vendor table, see below
   partitions.csv           <- partition table, see below
+  partitions_xiao.csv      <- the same for 8 MB flash
+  partitions_xiao_1slot.csv <- 8 MB flash, one firmware slot (option)
 ```
 
+Which file holds what, and why they are numbered:
+[Internals](internals.md#the-sketchs-files).
+
 The folder has to carry the same name as the sketch; that is an Arduino
-rule, not a choice here. Built images of the current version are in
-`firmware/` as well, with `FLASH.txt`, for flashing without building.
+rule, not a choice here. Ready-built images come with each
+[release](https://github.com/Oposum01/wlanscout/releases/latest), with
+`FLASH.txt` saying which file goes where.
 
 3. The vendor table `oui_table.h` comes with the repository, generated
    from the IEEE registries: MA-L (24-bit OUIs) and the small blocks
@@ -33,9 +43,8 @@ rule, not a choice here. Built images of the current version are in
    so an address from such a block is named after its holder, not
    after "IEEE Registration Authority". They are sorted tables with a
    binary search over them, with the usual legal suffixes trimmed from
-   company names. Together about 59000 entries, they land at roughly
-   1.3 MB in flash, which is why the large app partition below is
-   needed. To pick up newer assignments, regenerate it — see
+   company names. Together about 59000 entries, they take about 1 MB
+   of the firmware. To pick up newer assignments, regenerate it — see
    [Updating the vendor table](#updating-the-vendor-table).
 
 4. Select the board **ESP32C5 Dev Module** under *Tools → Board →
@@ -48,16 +57,45 @@ rule, not a choice here. Built images of the current version are in
 | PSRAM | **Enabled** — without it the allocations fail at boot and nothing comes up |
 
    The partition table is `partitions.csv` next to the sketch, which
-   Arduino uses instead of the menu choice. It is the core's 16 MB
-   default: two firmware slots of 6.25 MB for updates over the network,
-   3.4 MB LittleFS for the IE catalog, NVS and `otadata` where
-   every other scheme has them. With arduino-esp32 3.3.12 the sketch
-   compiles to about 3.1 MB, roughly 1 MB of it the vendor table and
-   170 kB the web interface. The compiler still checks the size against
-   the menu's scheme: "Custom" allows up to 16 MB, while "Huge APP"
-   (3 MB) refuses the build as too large. With arduino-cli,
-   `--build-property upload.maximum_size=6553600` checks against the
-   real slot of 6.25 MB.
+   Arduino uses instead of the menu choice; its layout is under
+   [Memory](hardware.md#memory). With arduino-esp32 3.3.12 the sketch
+   compiles to about 3.1 MB, about 1 MB of it the vendor table and
+   170 kB the web interface. The IDE still checks the size against the
+   menu's scheme: "Custom" allows up to 16 MB, "Huge APP" (3 MB) refuses
+   the build as too large.
+
+5. **`config.h`** says what the board has and what is built in. Its
+   defaults are for the Waveshare kit with a W5500; nothing there
+   depends on the board picked in the IDE.
+
+| Define | Default | What |
+|--------|---------|------|
+| `BOARD_NAME` | Waveshare ESP32-C5-WIFI6-KIT | shown in Settings → Sensor |
+| `BOARD_ID` | kit | carried in the image for the flasher's check, and the release folder |
+| `ENABLE_ETHERNET` | 1 | W5500, DHCP, NTP, the web server and the page; 0: USB only |
+| `ENABLE_OTA` | 1 | updates from the page; needs two firmware slots (`partitions.csv`, `partitions_xiao.csv`) |
+| `ENABLE_IEEE802154` | 1 | 0 if the link step misses `esp_ieee802154_*` |
+| `W5500_SCLK` ... `W5500_RST` | 23, 24, 25, 26, 4 | the W5500 pins |
+| `BOOT_BUTTON` | 28 | the snapshot button |
+| `STATUS_LED`, `STATUS_LED_TYPE` | 27, `LED_RGB` | `LED_PLAIN_HIGH`, `LED_PLAIN_LOW` for a single-colour LED, `LED_NONE` |
+
+   Each can be changed in the file or given as an extra compiler flag
+   (`-DENABLE_OTA=0`). A build with PSRAM disabled or USB CDC On Boot
+   enabled stops with an error saying which setting to change.
+
+   **Seeed Studio XIAO ESP32-C5:** `tools/build_xiao.sh` builds it, see
+   below. In the IDE: put the XIAO values from the comment in
+   `config.h` in front of its defaults, copy `partitions_xiao.csv` over
+   `partitions.csv`, and pick the board **XIAO_ESP32C5** with PSRAM
+   **Enabled** and USB CDC On Boot **Disabled** (its menu starts on
+   Enabled; `Serial` would then share the USB port with the API). With
+   the 16 MB table the bootloader rejects the partitions ("exceeds
+   flash chip size") and nothing starts. The build is about 2.75 MB;
+   the IDE checks it against its own 8 MB scheme (3.2 MB), close to the
+   slot of 3.25 MB. Its pins 23 to 26 carry I2C and the battery
+   divider: leaving `ENABLE_ETHERNET` on would drive them as the
+   W5500's. What differs on the XIAO, the option with one slot
+   included, is under [XIAO build](hardware.md#xiao-build).
 
 The web interface has to stay in `index_html.h` rather than move into
 the sketch. The sensor serves it gzip-packed from `index_html_gz.h`,
@@ -68,6 +106,35 @@ python3 tools/make_page_gz.py
 ```
 
 The sketch refuses to build while the packed copy is of another page.
+
+### arduino-cli and releases
+
+```sh
+MAP="-ffile-prefix-map=$HOME/.arduino15=~/.arduino15"
+arduino-cli compile \
+    --fqbn esp32:esp32:esp32c5:FlashSize=16M,PartitionScheme=custom,PSRAM=enabled \
+    --build-property "upload.maximum_size=6553600" \
+    --build-property "compiler.c.extra_flags=$MAP" \
+    --build-property "compiler.cpp.extra_flags=$MAP" \
+    --build-path build source/wlanscout
+
+# The XIAO: the sketch with the values from config.h's comment and
+# partitions_xiao.csv
+tools/build_xiao.sh build-xiao
+
+python3 tools/make_release.py build --xiao build-xiao
+```
+
+`upload.maximum_size` checks the image against the real slot of
+6.25 MB. The prefix map keeps the builder's home directory out of the
+images, where the core's source file names end up in its log messages.
+`make_release.py` writes the release site at the top of the checkout,
+or with `--out DIR` elsewhere for publishing: `firmware/` with the
+images, `FLASH.txt` and `version.json`, `firmware/xiao/` the same for
+the XIAO, and next to them the static page and the flasher
+([Sensor on a phone over USB](usb.md)). These files are generated but
+kept in git, so `firmware/` and the page at the top always hold the
+version in `wlanscout.ino`.
 
 ### Updating the vendor table
 
@@ -116,10 +183,11 @@ it like a chosen file, after the same question. Pages may serve the
 old files for some minutes after a release, a size that does not match
 is refused with "try again in a minute".
 
-The sensor refuses a file that is not an ESP32-C5 image or does not
-carry the wlanscout+ version marker, and checks length and SHA-256
-before it boots the new slot. There is no password yet: anyone who can
-reach the web interface can replace the firmware.
+The sensor refuses an image the flasher would refuse too (another chip,
+no wlanscout+ marker, another board, more flash than it has; see
+[Flashing from the phone](usb.md#flashing-from-the-phone)) and checks
+length and SHA-256 before it boots the new slot. There is no password
+yet: anyone who can reach the web interface can replace the firmware.
 
 A new firmware starts out unconfirmed. It confirms itself once
 Ethernet has held an IP address for 30 s or it has answered a
@@ -166,15 +234,5 @@ device has no address:
        drops mgmt 0 data 0 fcs 0  eth up/dhcp  mode wifi
 ```
 
-Time comes from NTP once an address is up, re-synced every 15 minutes.
-Until then the browser hands over its own clock: the sensor's page when
-it opens, the static copy on a phone when it connects over USB (see
-[Sensor on a phone over USB](usb.md)). A sensor with neither
-— running on its own, without Ethernet — takes the time from an AP that
-sends a Time Advertisement element (69): set once two frames of the same
-AP agree, renewed after two minutes and then every 15 minutes from the
-median of all APs heard. NTP outranks the browser, the browser outranks an AP; the settings page
-shows which one the clock came from. Only the offset between
-the wall clock and the boot timer is taken from NTP — every captured
-frame keeps its own microsecond timestamp, so intervals within a capture
-stay exact regardless of how coarse the network time is.
+Time comes from NTP once an address is up; where else it can come
+from is under [Time](settings.md#time).

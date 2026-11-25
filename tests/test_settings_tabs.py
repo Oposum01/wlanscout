@@ -145,3 +145,80 @@ def test_boxes_one_below_the_other(opened):
     assert len(boxes) == 4
     assert len({left for left, _ in boxes}) == 1
     assert [top for _, top in boxes] == sorted(top for _, top in boxes)
+
+
+def rows_of(app, table, **sys):
+    app.api["system"] = dict(app.api["system"], **sys)
+    app.open()
+    settings(app)
+
+    return app.js("""t => Object.fromEntries([...document.querySelectorAll(
+        '#' + t + ' tr')].map(r => [r.cells[0].innerText,
+        r.cells[1].innerText]))""", table)
+
+
+def test_sensor_id_also_without_a_name(app):
+    rows = rows_of(app, "sysTable", sensor="",
+                   net=dict(app.api["system"]["net"], eth=1))
+
+    assert rows["Sensor id"] == "02:00:00:00:00:FF (MAC of the W5500)"
+    assert rows["Sensor name"] == "not set"
+
+
+def test_sensor_id_without_a_w5500(app):
+    net = dict(app.api["system"]["net"], eth=0)
+
+    assert rows_of(app, "sysTable", net=net)["Sensor id"] == \
+        "02:00:00:00:00:FF, derived from the chip, no W5500"
+    assert app.js("""[...document.querySelectorAll('tr')].find(r =>
+        r.cells[0] && r.cells[0].innerText === 'MAC').cells[1].innerText""") \
+        == "no W5500"
+
+
+def test_sensor_id_from_older_firmware(app):
+    assert rows_of(app, "sysTable")["Sensor id"] == "02:00:00:00:00:FF"
+
+
+def test_oui_entries_with_the_blocks(app):
+    rows = rows_of(app, "memTable", oui=58881, oui28=6655, oui36=11822)
+
+    assert rows["OUI entries"] == \
+        "58881 (MA-L 40404, MA-M 6655, MA-S/IAB 11822)"
+
+
+def test_oui_entries_from_older_firmware(app):
+    assert rows_of(app, "memTable")["OUI entries"] == "40316"
+
+
+def test_board_with_its_flash_and_psram(app):
+    mem = dict(app.api["system"].get("mem", {}), psramtotal=8388608)
+    rows = rows_of(app, "sysTable", board="Waveshare ESP32-C5-WIFI6-KIT",
+                   flash=16777216, mem=mem)
+
+    assert rows["Board"] == \
+        "Waveshare ESP32-C5-WIFI6-KIT, 16 MB flash, 8 MB PSRAM"
+
+
+def test_board_without_psram(app):
+    mem = dict(app.api["system"].get("mem", {}), psramtotal=0)
+    rows = rows_of(app, "sysTable", board="Seeed Studio XIAO ESP32-C5",
+                   flash=8388608, mem=mem)
+
+    assert rows["Board"] == "Seeed Studio XIAO ESP32-C5, 8 MB flash, no PSRAM"
+
+
+def test_no_board_row_from_older_firmware(app):
+    assert "Board" not in rows_of(app, "sysTable")
+
+
+def test_ntp_server_from_dhcp(app):
+    rows = rows_of(app, "timeTable", ntpserver="192.168.1.1", ntpdhcp=1,
+                   ntpinterval=900)
+
+    assert rows["NTP server"] == "192.168.1.1 from DHCP (option 42), " \
+        "the public servers as fallback, asked every 15 min"
+
+
+def test_ntp_server_without_dhcp(app):
+    assert rows_of(app, "timeTable", ntpinterval=900)["NTP server"] == \
+        "pool.ntp.org, asked every 15 min"

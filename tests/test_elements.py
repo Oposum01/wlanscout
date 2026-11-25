@@ -212,3 +212,22 @@ def test_vendor_firmware_version(opened):
 
     # Nothing sent, no line
     assert "Firmware:" not in tooltip_text(opened, "<hidden>")
+
+
+def test_lancom_uuid(opened):
+    opened.js("""networks.find(n => n.ssid === 'Hall').uuid =
+        'bb06d47b-2142-5d2f-b3a8-f344c21acfeb'""")
+
+    text = tooltip_text(opened, "Hall")
+
+    # Under the AP name
+    assert "AP name: Hall-3UUID: bb06d47b-2142-5d2f-b3a8-f344c21acfeb" \
+        in text
+
+    # BSSID, RSSI and age first, then name and UUID
+    bssid = opened.js("networks.find(n => n.ssid === 'Hall').bssid")
+    assert text.index(bssid) < text.index("last seen") < \
+        text.index("AP name")
+    assert matches(opened, "f344c21acfeb") == \
+        opened.js("networks.filter(n => n.ssid === 'Hall').map(n => n.bssid)")
+    assert "UUID:" not in tooltip_text(opened, "<hidden>")

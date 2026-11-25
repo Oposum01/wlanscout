@@ -894,3 +894,102 @@ def test_clear_all_with_nothing_there(app):
     app.page.wait_for_timeout(400)
 
     assert dialogs == ["There are no snapshots on the sensor"]
+
+
+# ---- IE catalog frames in a snapshot -------------------------------------
+
+def catalog_frames():
+    """A pcap header and two frames as writeSnapshotFrames() puts them:
+    one carrying element 73, one vendor 000AEB type 10."""
+    import base64
+
+    def b64(data):
+        return base64.b64encode(data).decode()
+
+    hdr = b"\xd4\xc3\xb2\xa1" + b"\x01" * 20
+    first = b"\x00" * 16 + b"frame-73"
+    second = b"\x00" * 16 + b"frame-vendor"
+
+    return hdr, first, second, {
+        "hdr": b64(hdr),
+        "frames": [[b64(first), [0, 73]], [b64(second), [2, 715530]]],
+        "cut": 1}
+
+
+def open_catalog_of(app, doc, tmp_path):
+    open_file(app, doc, tmp_path)
+    app.tab("IE catalog")
+    app.page.evaluate("updateCatalog()")
+    app.page.wait_for_function(
+        "() => document.querySelectorAll('#catalogTable a.dl').length >= 4")
+
+
+def download(app, locator):
+    downloads = []
+    app.page.on("download", lambda d: downloads.append(d))
+    app.click_until(locator, lambda: downloads, wait_ms=5000)
+
+    return downloads[0]
+
+
+def test_catalog_frames_come_from_the_snapshot(opened, tmp_path):
+    hdr, first, second, kept = catalog_frames()
+    doc = snapshot_doc(opened.api)
+    doc["catalogframes"] = kept
+
+    # The sensor is not asked: it would answer with other frames
+    asked = []
+    opened.page.route(opened.base + "/api/catalog.pcap*", lambda r: (
+        asked.append(r.request.url), r.fulfill(status=500, body="asked")))
+
+    open_catalog_of(opened, doc, tmp_path)
+
+    one = download(opened, opened.page.locator(
+        "#catalogTable a.dl[href='/api/catalog.pcap?k=0&id=73']"))
+    assert one.suggested_filename == \
+        "element-ie73-20-40-bss-intolerant-channel-report.pcap"
+    assert open(one.path(), "rb").read() == hdr + first
+
+    every = download(opened, opened.page.get_by_role(
+        "button", name="Download all frames"))
+    assert every.suggested_filename == "element-catalog.pcap"
+    assert open(every.path(), "rb").read() == hdr + first + second
+
+    assert asked == []
+    assert "this snapshot keeps 2 frames, 1 left out" in opened.js(
+        "document.getElementById('catalogStore').innerText")
+
+
+def test_catalog_entry_without_frames_in_the_snapshot(opened, tmp_path):
+    doc = snapshot_doc(opened.api)
+    doc["catalogframes"] = catalog_frames()[3]
+
+    open_catalog_of(opened, doc, tmp_path)
+
+    dialogs = []
+    opened.page.on("dialog", lambda d: (dialogs.append(d.message),
+                                        d.accept()))
+    opened.click_until(opened.page.locator(
+        "#catalogTable a.dl[href='/api/catalog.pcap?k=0&id=75']"),
+        lambda: dialogs, wait_ms=5000)
+
+    assert dialogs[0] == "No frames for this entry in this snapshot."
+
+
+def test_older_snapshot_asks_the_sensor_and_says_why(opened, tmp_path):
+    open_catalog_of(opened, snapshot_doc(opened.api), tmp_path)
+
+    opened.page.route(opened.base + "/api/catalog.pcap*", lambda r: r.fulfill(
+        status=404, content_type="text/plain", body="No frames for this entry."))
+
+    dialogs = []
+    opened.page.on("dialog", lambda d: (dialogs.append(d.message),
+                                        d.accept()))
+    opened.click_until(opened.page.locator(
+        "#catalogTable a.dl[href='/api/catalog.pcap?k=0&id=73']"),
+        lambda: dialogs, wait_ms=5000)
+
+    assert dialogs[0].startswith("No frames for this entry.")
+    assert "This snapshot keeps no catalog frames" in dialogs[0]
+    assert "this snapshot keeps" not in opened.js(
+        "document.getElementById('catalogStore').innerText")

@@ -48,7 +48,8 @@ def test_folders(tmp_path):
     image = (out / "firmware" / "wlanscout.ino.bin").read_bytes()
 
     assert info == {"version": version(), "size": len(image),
-                    "sha256": hashlib.sha256(image).hexdigest()}
+                    "sha256": hashlib.sha256(image).hexdigest(),
+                    "board": "kit"}
 
     flash = (out / "firmware" / "FLASH.txt").read_text()
 
@@ -65,7 +66,7 @@ def test_folders(tmp_path):
     flasher = (out / "flash.html").read_text()
 
     assert 'const PARTS_DIR = "firmware/";' in flasher
-    assert "fetch(PARTS_DIR + part.file" in flasher
+    assert "fetch(PARTS_DIR + board.dir + file" in flasher
     assert not (out / "wlanscout.ino.bin").exists()
     assert not (out / "boot_app0.bin").exists()
     assert not (out / "site").exists()

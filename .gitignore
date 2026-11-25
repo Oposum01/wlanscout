@@ -8,3 +8,6 @@ iab.csv
 __pycache__/
 .pytest_cache/
 .venv/
+
+# Case variants without lettering, for Thingiverse, not for the repository
+3d-printed-housing/plain/

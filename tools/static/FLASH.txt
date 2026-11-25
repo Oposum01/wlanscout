@@ -1,11 +1,11 @@
 wlanscout firmware @VERSION@ (ESP32-C5, 16 MB flash, PSRAM enabled)
 
 Partition table: two 6.25 MB firmware slots (app0/app1) for updates over
-the network, 3.4 MB LittleFS for the IE catalog and the snapshots
-(source/wlanscout/partitions.csv).
+the network, 3.4 MB LittleFS for the IE catalog, the snapshots and the
+event log (source/wlanscout/partitions.csv).
 
 A) Sensor already running wlanscout: update over the network
-   Settings -> Firmware update -> choose firmware/wlanscout.ino.bin ->
+   Settings -> Sensor -> Firmware -> choose firmware/wlanscout.ino.bin ->
    "Upload and restart". Settings, IE catalog and snapshots stay (rows
    of elements the new firmware decodes are removed with their frames).
 
@@ -31,7 +31,7 @@ D) From a phone, without a PC: flash.html of the repository published
 Older esptool (v4): use "esptool.py" and "write_flash" instead of "esptool" / "write-flash".
 The esptool shipped with arduino-esp32 is in ~/.arduino15/packages/esp32/tools/esptool_py/<version>/.
 
-Alternatively build source/wlanscout/wlanscout.ino in the Arduino IDE:
+Alternatively build source/wlanscout/ (open wlanscout.ino) in the Arduino IDE:
 board "ESP32C5 Dev Module", Flash Size 16MB, PSRAM enabled. partitions.csv
 next to the sketch is used automatically; set the Partition Scheme menu
 to "Custom", the size check of "Huge APP" (3 MB) is too small.

@@ -88,3 +88,19 @@ def test_hover_says_what_a_click_does(opened):
     opened.js("setGraphBand('24')")
     assert hover("24")[0].startswith("Show both bands again")
     assert hover("5")[0].startswith("Show only 5 GHz")
+
+
+def test_count_red_once_the_table_is_full(opened):
+    opened.js("setGraphBand('')")
+    total = opened.js("networks.length")
+    red = lambda: opened.js("""(() => { updateNetworkTable();
+        const s = document.querySelector('#filterInfo .atCap');
+        return s ? [s.innerText, getComputedStyle(s).color] : null; })()""")
+
+    opened.js("n => { liveData = {...(liveData || {}), netcap: n}; }", total)
+    assert red() == [str(total), "rgb(224, 80, 80)"]
+    assert opened.js("document.getElementById('filterInfo').innerText") \
+        .startswith("%d networks, %d slots" % (total, total))
+
+    opened.js("n => { liveData = {...(liveData || {}), netcap: n}; }", total + 1)
+    assert red() is None

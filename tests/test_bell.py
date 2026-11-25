@@ -270,13 +270,12 @@ def test_time_of_a_change_on_hover(app):
 
     title = app.page.locator("#changesPanel .chg").first \
         .locator("span[title]").first.get_attribute("title")
-    expect = app.js("""(() => { const d = new Date(cfgFetchAt - 30000);
-        const two = x => String(x).padStart(2, '0');
-        return d.getHours() + ':' + two(d.getMinutes()) + ':' +
-            two(d.getSeconds()) + ' ' + two(d.getDate()) + '.' +
-            two(d.getMonth() + 1) + '.' + d.getFullYear(); })()""")
+    # In the sensor's timezone, not the browser's
+    expect = app.js("deviceTimeText(Math.round((cfgFetchAt - 30000) / 1000))")
 
     assert title == expect
+    # The fixture's sensor is two hours ahead of UTC
+    assert app.js("deviceTimeText(0)") == "1970-01-01 02:00:00"
 
 
 RADIO = {"boot": 7, "seq": 5, "changes": [

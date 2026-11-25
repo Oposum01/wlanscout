@@ -1,9 +1,16 @@
 <!doctype html>
 <!--
   wlanscout+ flasher: writes the firmware to an ESP32-C5 on the
-  phone's USB-C port with esptool-js over WebUSB. Copied next to
-  the static page by tools/make_static.py --firmware, which also
-  puts the four firmware parts beside it and fills in 2.8.0.
+  phone's USB-C port with esptool-js over WebUSB, through the chip's
+  download mode (its ROM, which no firmware can break). Copied next to
+  the static page by tools/make_static.py --firmware, which also puts
+  the firmware parts beside it and fills in the version.
+
+  Two ways in: as a page of its own (a new board: full install), or
+  from Settings -> Sensor -> "Update in download mode" of a sensor
+  without updates from the page (the Seeed Studio XIAO ESP32-C5), which opens
+  flash.html?board=<BOARD_ID>&running=<version>: only the firmware is
+  written, bootloader, partition table and stored data stay.
 -->
 <html lang="en">
 <head>
@@ -19,6 +26,7 @@
     --dim: #888;
     --ok: #8fbf8f;
     --bad: #d08080;
+    --warn: #d0b070;
     --bar: #2f7ea6;
 }
 
@@ -45,6 +53,20 @@ h1 {
     border-radius: 6px;
     padding: 12px;
     margin: 12px 0;
+}
+
+.row {
+    margin: 6px 0;
+}
+
+label {
+    display: block;
+    margin: 4px 0;
+}
+
+select, input[type=file] {
+    max-width: 100%;
+    font-size: 14px;
 }
 
 button {
@@ -75,12 +97,39 @@ button:disabled {
     background: var(--bar);
 }
 
-#state.ok {
+#state.ok, .ok {
     color: var(--ok);
 }
 
-#state.bad {
+#state.bad, .bad {
     color: var(--bad);
+}
+
+.warn {
+    color: var(--warn);
+}
+
+#checks {
+    list-style: none;
+    padding: 0;
+    margin: 6px 0;
+}
+
+#checks li::before {
+    display: inline-block;
+    width: 1.4em;
+}
+
+#checks li.ok::before {
+    content: "\2713";
+}
+
+#checks li.bad::before {
+    content: "\2717";
+}
+
+#checks li.warn::before {
+    content: "!";
 }
 
 pre {
@@ -95,21 +144,59 @@ pre {
 </head>
 <body>
 
-<h1>wlanscout+ flasher <span class="dim">v2.8.0</span></h1>
+<h1>wlanscout+ flasher <span class="dim">v3.0.0</span></h1>
 <div class="dim">
-Writes wlanscout+ to an ESP32-C5: bootloader, partition table, boot
-selection and firmware, each to its own address as the Arduino IDE
-does. Settings and the IE catalog on the board stay. Plug the board's
-USB-C port marked <b>USB</b> (not UART) into the phone. A new board
-needs no button; if it does not connect, hold BOOT while plugging it
-in.
+Writes wlanscout+ to an ESP32-C5 through its download mode. Plug the
+board's USB-C port marked <b>USB</b> (not UART) into the phone. It
+needs no button; if it does not connect, hold BOOT and press RESET,
+then try again. The same gets a board back whose firmware no longer
+starts.
 </div>
 
 <div class="box">
+
+<div class="row">
+<b>Board</b><br>
+<select id="board"></select>
+</div>
+
+<div class="row">
+<b>What</b>
+<label><input type="radio" name="mode" value="update">
+Update the firmware only: bootloader, partition table, settings, IE
+catalog and snapshots stay</label>
+<label><input type="radio" name="mode" value="full">
+Full install: bootloader, partition table, boot selection and firmware,
+for a new board or another partition table; settings and stored data
+stay where the table keeps them</label>
+</div>
+
+<div class="row">
+<b>Firmware</b>
+<label><input type="radio" name="source" value="release" checked>
+<span id="releaseText">the release for this board</span></label>
+<label><input type="radio" name="source" value="file">
+a file: <input type="file" id="file" accept=".bin"></label>
+</div>
+
+<div class="row">
+<b>Checks</b>
+<ul id="checks"></ul>
+<label><input type="checkbox" id="ignore">
+Ignore failed checks (another board, an unknown image, too large)</label>
+<label><input type="checkbox" id="force">
+Force: write it even if it is not newer than the running firmware</label>
+</div>
+
 <button id="flash">Flash firmware</button>
 <div>State: <span id="state">idle</span></div>
 <div id="bar"><div></div></div>
 <div class="dim" id="detail"></div>
+<div id="back" style="display:none">
+<a href="./">Back to wlanscout+</a>: press <b>USB</b> there to connect
+again.
+</div>
+
 </div>
 
 <div class="box">
@@ -118,21 +205,262 @@ in.
 </div>
 
 <script type="module">
-import { ESPLoader, Transport }
-    from "https://cdn.jsdelivr.net/npm/esptool-js@0.7.0/bundle.js";
-
 const $ = id => document.getElementById(id);
 
-// The parts and where they go, as in FLASH.txt
+const VERSION = "3.0.0";
+
 // Where the parts lie, next to this page or in a folder of their own
 const PARTS_DIR = "firmware/";
+
+/*
+ * The boards with a release: BOARD_ID (config.h, carried in every
+ * image), the folder of its parts below PARTS_DIR, its flash.
+ */
+const BOARDS = {
+    "kit": { name: "Waveshare ESP32-C5-WIFI6-KIT",
+                          dir: "", flashMB: 16, release: true },
+    "xiao":     { name: "Seeed Studio XIAO ESP32-C5",
+                          dir: "xiao/", flashMB: 8, release: true }
+};
+
+// The parts and where they go, as in FLASH.txt
+const APP = { file: "wlanscout.ino.bin", address: 0x10000 };
 
 const PARTS = [
     { file: "wlanscout.ino.bootloader.bin", address: 0x2000 },
     { file: "wlanscout.ino.partitions.bin", address: 0x8000 },
     { file: "boot_app0.bin",                address: 0xe000 },
-    { file: "wlanscout.ino.bin",            address: 0x10000 }
+    APP
 ];
+
+const CHIP_ID_ESP32C5 = 23;
+const PARTITION_TABLE = 0x8000;
+
+// ---- Checks, without the board: what the image says about itself ----
+
+const encoder = new TextEncoder();
+
+// The text between a marker's prefix and its 0x02, see FW_MARKER_PREFIX
+// in the firmware; the prefix alone (as the firmware's own scanner
+// keeps it) is followed by a 0 and does not count
+function findMarker(bytes, prefix, allowed)
+{
+    const p = encoder.encode(prefix);
+
+    for (let i = 0; i + p.length < bytes.length; i++)
+    {
+        let k = 0;
+
+        while (k < p.length && bytes[i + k] === p[k])
+            k++;
+
+        if (k < p.length)
+            continue;
+
+        let text = "";
+        let j = i + p.length;
+
+        while (j < bytes.length && j - i < p.length + 40 &&
+               allowed.test(String.fromCharCode(bytes[j])))
+            text += String.fromCharCode(bytes[j++]);
+
+        if (text && bytes[j] === 0x02)
+            return text;
+    }
+
+    return null;
+}
+
+// "2.10.0" after "2.9.3"
+function versionNewer(a, b)
+{
+    const x = String(a).split(".").map(Number);
+    const y = String(b).split(".").map(Number);
+
+    for (let i = 0; i < Math.max(x.length, y.length); i++)
+        if ((x[i] || 0) !== (y[i] || 0))
+            return (x[i] || 0) > (y[i] || 0);
+
+    return false;
+}
+
+// The image header's flash size, upper half of byte 3
+const FLASH_SIZES_MB = [1, 2, 4, 8, 16, 32, 64, 128];
+
+/*
+ * One check: kind "check" (a failure needs Ignore failed checks) or
+ * "version" (an older or the same version needs Force); level ok,
+ * bad, or warn (said, blocks nothing).
+ */
+const check = (kind, level, text) => ({ kind, level, text });
+
+function checkImage(bytes, boardId, running)
+{
+    const checks = [];
+    const board = BOARDS[boardId];
+    const info = { version: null, board: null };
+
+    if (bytes.length < 24 || bytes[0] !== 0xE9)
+    {
+        checks.push(check("check", "bad",
+            "not an ESP32 firmware image (no 0xE9 header)"));
+        return { checks, info };
+    }
+
+    const chip = bytes[12] | (bytes[13] << 8);
+
+    checks.push(chip === CHIP_ID_ESP32C5
+        ? check("check", "ok", "an image for the ESP32-C5")
+        : check("check", "bad", "an image for another chip (id " + chip +
+                                ", the ESP32-C5 is " + CHIP_ID_ESP32C5 + ")"));
+
+    info.version = findMarker(bytes, "\x01wlanscout-fw:", /[0-9.]/);
+    info.board = findMarker(bytes, "\x01wlanscout-board:", /[a-z0-9-]/);
+
+    checks.push(info.version
+        ? check("check", "ok", "wlanscout+ v" + info.version)
+        : check("check", "bad", "not a wlanscout+ firmware (no version " +
+                                "marker)"));
+
+    // Firmware before 2.8.19 names no board and was all for the kit,
+    // as the sensor itself takes it
+    const imageBoard = info.board || "kit";
+    const older = info.board ? "" : " (no board in the image, firmware " +
+                                    "before 2.8.19)";
+
+    if (imageBoard === boardId)
+        checks.push(check("check", "ok", "built for the " + board.name +
+                                         older));
+    else
+        checks.push(check("check", "bad", "built for " +
+            (BOARDS[imageBoard] ? "the " + BOARDS[imageBoard].name
+                                : imageBoard) +
+            ", not the " + board.name + older));
+
+    const imageMB = FLASH_SIZES_MB[bytes[3] >> 4];
+
+    if (imageMB && imageMB > board.flashMB)
+        checks.push(check("check", "bad", "built for " + imageMB +
+            " MB flash, the " + board.name + " has " + board.flashMB +
+            " MB"));
+
+    if (running && info.version)
+        checks.push(versionNewer(info.version, running)
+            ? check("version", "ok", "newer than the running v" + running)
+            : check("version", "bad", "v" + info.version + " is not newer " +
+                    "than the running v" + running));
+
+    return { checks, info };
+}
+
+// ---- Checks on the board, in download mode ----
+
+// The partition table: 32-byte entries starting with 0xAA 0x50
+function parsePartitions(bytes)
+{
+    const table = [];
+    const view = new DataView(bytes.buffer, bytes.byteOffset,
+                              bytes.byteLength);
+
+    for (let at = 0; at + 32 <= bytes.length; at += 32)
+    {
+        if (bytes[at] !== 0xAA || bytes[at + 1] !== 0x50)
+            break;
+
+        let name = "";
+
+        for (let k = 12; k < 28 && bytes[at + k]; k++)
+            name += String.fromCharCode(bytes[at + k]);
+
+        table.push({ name, type: bytes[at + 2], subtype: bytes[at + 3],
+                     offset: view.getUint32(at + 4, true),
+                     size: view.getUint32(at + 8, true) });
+    }
+
+    return table;
+}
+
+function checkDevice(chipName, flashText, table, imageSize, boardId, mode)
+{
+    const checks = [];
+    const board = BOARDS[boardId];
+
+    checks.push(/ESP32-C5/i.test(chipName || "")
+        ? check("check", "ok", "the board is an " + chipName)
+        : check("check", "bad", "the board is an " + (chipName || "unknown " +
+                                "chip") + ", not an ESP32-C5"));
+
+    const flashMB = parseInt(flashText, 10);
+
+    if (!flashMB)
+        checks.push(check("check", "warn", "flash size not detected"));
+    else if (flashMB < board.flashMB)
+        checks.push(check("check", "bad", "the board has " + flashMB +
+            " MB flash, the " + board.name + " " + board.flashMB +
+            " MB: another board chosen?"));
+    else
+        checks.push(check("check", "ok", flashMB + " MB flash"));
+
+    if (mode !== "update")
+        return checks;
+
+    // An update keeps the board's partition table: the image has to
+    // fit its first slot, and the table its flash
+    const app = table.find(p => p.type === 0 && p.offset === APP.address);
+
+    if (!app)
+    {
+        checks.push(check("check", "bad", "no firmware slot at 0x10000 " +
+            "on the board: choose Full install"));
+        return checks;
+    }
+
+    checks.push(imageSize <= app.size
+        ? check("check", "ok", "fits its slot " + app.name + " of " +
+                (app.size / 1048576).toFixed(2) + " MB")
+        : check("check", "bad", "larger than its slot " + app.name + " (" +
+                Math.round(imageSize / 1024) + " of " +
+                Math.round(app.size / 1024) + " kB)"));
+
+    const end = Math.max(...table.map(p => p.offset + p.size));
+
+    if (flashMB && end > flashMB * 1048576)
+        checks.push(check("check", "bad", "the board's partition table " +
+            "needs " + Math.round(end / 1048576) + " MB, the flash has " +
+            flashMB + ": choose Full install"));
+
+    return checks;
+}
+
+// What stops the writing: failed checks without Ignore, an older or the
+// same version without Force
+function blockedBy(checks, ignore, force)
+{
+    if (!ignore && checks.some(c => c.kind === "check" && c.level === "bad"))
+        return "a check failed; tick Ignore failed checks to write it " +
+               "anyway";
+
+    if (!force && checks.some(c => c.kind === "version" && c.level === "bad"))
+        return "not newer than the running firmware; tick Force to write " +
+               "it anyway";
+
+    return null;
+}
+
+// For the tests, which run without esptool-js and without a board
+window.wlanscoutFlash = { checkImage, checkDevice, parsePartitions,
+                          blockedBy, findMarker };
+
+// ---- The page ----
+
+const params = new URLSearchParams(location.search);
+
+// From a sensor's page: its board and version
+const running = /^[0-9.]+$/.test(params.get("running") || "")
+                ? params.get("running") : null;
+
+let imageChecks = [];
+let deviceChecks = [];
 
 function log(text)
 {
@@ -147,6 +475,119 @@ function setState(text, cls)
 }
 
 const errText = e => (e && e.message) || String(e);
+
+const boardId = () => $("board").value;
+const mode = () => document.querySelector("input[name=mode]:checked").value;
+const source = () =>
+    document.querySelector("input[name=source]:checked").value;
+
+function showChecks()
+{
+    const list = $("checks");
+
+    list.innerHTML = "";
+
+    imageChecks.concat(deviceChecks).forEach(c =>
+    {
+        const li = document.createElement("li");
+
+        li.className = c.level;
+        li.textContent = c.text;
+        list.appendChild(li);
+    });
+}
+
+for (const [id, b] of Object.entries(BOARDS))
+{
+    const option = document.createElement("option");
+
+    option.value = id;
+    option.textContent = b.name + " (" + b.flashMB + " MB flash)" +
+        (b.release ? "" : ", no release here");
+    $("board").appendChild(option);
+}
+
+$("board").value = BOARDS[params.get("board")] ? params.get("board")
+                                               : Object.keys(BOARDS)[0];
+
+// Opened from a sensor: an update; on its own: a new board
+document.querySelector("input[name=mode][value=" +
+    (params.get("board") ? "update" : "full") + "]").checked = true;
+
+async function releasePart(file)
+{
+    const board = BOARDS[boardId()];
+
+    if (!board.release)
+        throw new Error("no release for the " + board.name + " here; " +
+                        "choose a file");
+
+    const response = await fetch(PARTS_DIR + board.dir + file,
+                                 { cache: "no-store" });
+
+    if (!response.ok)
+        throw new Error(file + ": HTTP " + response.status);
+
+    return new Uint8Array(await response.arrayBuffer());
+}
+
+// The firmware image, from the release or the chosen file
+async function loadImage()
+{
+    if (source() === "file")
+    {
+        const file = $("file").files[0];
+
+        if (!file)
+            throw new Error("choose a file first");
+
+        return new Uint8Array(await file.arrayBuffer());
+    }
+
+    return releasePart(APP.file);
+}
+
+// The checks the image allows, shown as soon as it is chosen
+async function precheck()
+{
+    deviceChecks = [];
+
+    const board = BOARDS[boardId()];
+
+    $("releaseText").textContent = board.release
+        ? "the release v" + VERSION + " for the " + board.name
+        : "no release for the " + board.name + " here";
+
+    try
+    {
+        const image = await loadImage();
+
+        imageChecks = checkImage(image, boardId(), running).checks;
+        setState(blockedBy(imageChecks, $("ignore").checked,
+                           $("force").checked) || "ready",
+                 "");
+    }
+    catch (e)
+    {
+        imageChecks = [];
+        setState(errText(e), "bad");
+    }
+
+    showChecks();
+}
+
+// A file chosen is the file meant
+$("file").addEventListener("change", () =>
+{
+    document.querySelector("input[name=source][value=file]").checked = true;
+});
+
+["board", "file", "ignore", "force"].forEach(id =>
+    $(id).addEventListener("change", precheck));
+document.querySelectorAll("input[name=mode], input[name=source]")
+    .forEach(r => r.addEventListener("change", precheck));
+
+precheck();
 
 /*
  * The ESP's own USB port (USB Serial/JTAG) as a Web Serial
@@ -292,55 +733,89 @@ $("flash").onclick = async () =>
     }
 
     $("flash").disabled = true;
+    $("back").style.display = "none";
     $("bar").firstElementChild.style.width = "0";
 
     let transport = null;
+    let loader = null;
 
     try
     {
-        setState("loading the firmware files");
+        setState("loading the firmware");
+
+        const image = await loadImage();
+        const checked = checkImage(image, boardId(), running);
+
+        imageChecks = checked.checks;
+        deviceChecks = [];
+        showChecks();
+
+        let stop = blockedBy(imageChecks, $("ignore").checked,
+                             $("force").checked);
+
+        if (stop)
+            throw new Error(stop);
 
         const fileArray = [];
 
-        for (const part of PARTS)
-        {
-            const response = await fetch(PARTS_DIR + part.file,
-                                         { cache: "no-store" });
+        if (mode() === "full")
+            for (const part of PARTS.slice(0, 3))
+                fileArray.push({ data: await releasePart(part.file),
+                                 address: part.address, file: part.file });
 
-            if (!response.ok)
-                throw new Error(part.file + ": HTTP " + response.status);
+        fileArray.push({ data: image, address: APP.address,
+                         file: APP.file });
 
-            const data = new Uint8Array(await response.arrayBuffer());
+        fileArray.forEach(f => log(f.file + ": " + f.data.length +
+                                   " bytes at 0x" + f.address.toString(16)));
 
-            log(part.file + ": " + data.length + " bytes at 0x" +
-                part.address.toString(16));
+        setState("loading esptool-js");
 
-            fileArray.push({ data, address: part.address });
-        }
+        const { ESPLoader, Transport } = await import(
+            "https://cdn.jsdelivr.net/npm/esptool-js@0.7.0/bundle.js");
 
         setState("choose the board");
 
         const port = await EspUsbPort.request();
 
         transport = new Transport(port, false);
+        loader = new ESPLoader({ transport, baudrate: 115200, terminal });
 
-        const loader = new ESPLoader({
-            transport,
-            baudrate: 115200,
-            terminal
-        });
-
+        // Resets the chip into its download mode over the USB lines
         setState("connecting");
 
         const chip = await loader.main();
+        const flash = await loader.detectFlashSize().catch(() => undefined);
 
-        log("Chip: " + chip);
+        log("Chip: " + chip + ", flash " + (flash || "?"));
+
+        let table = [];
+
+        if (mode() === "update")
+        {
+            table = parsePartitions(await loader.readFlash(PARTITION_TABLE,
+                                                           0xC00));
+            table.forEach(p => log("partition " + p.name + " 0x" +
+                p.offset.toString(16) + " " + p.size + " bytes"));
+        }
+
+        deviceChecks = checkDevice(chip, flash, table, image.length,
+                                   boardId(), mode());
+        showChecks();
+
+        stop = blockedBy(imageChecks.concat(deviceChecks),
+                         $("ignore").checked, $("force").checked);
+
+        if (stop)
+            throw new Error(stop + "; nothing written");
+
         setState("writing");
 
         const t0 = performance.now();
 
         await loader.writeFlash({
-            fileArray,
+            fileArray: fileArray.map(f => ({ data: f.data,
+                                             address: f.address })),
             flashMode: "keep",
             flashFreq: "keep",
             flashSize: "keep",
@@ -350,7 +825,7 @@ $("flash").onclick = async () =>
             {
                 $("bar").firstElementChild.style.width =
                     (100 * written / total).toFixed(1) + "%";
-                $("detail").textContent = PARTS[i].file + ": " +
+                $("detail").textContent = fileArray[i].file + ": " +
                     Math.round(written / 1024) + " of " +
                     Math.round(total / 1024) + " kB";
             }
@@ -359,9 +834,10 @@ $("flash").onclick = async () =>
         log("written in " +
             ((performance.now() - t0) / 1000).toFixed(1) + " s");
 
-        await loader.after("hard_reset");
-
-        setState("done: the board restarts with wlanscout+", "ok");
+        setState("done: the board restarts with wlanscout+" +
+                 (checked.info.version ? " v" + checked.info.version : ""),
+                 "ok");
+        $("back").style.display = "";
     }
     catch (e)
     {
@@ -370,6 +846,17 @@ $("flash").onclick = async () =>
     }
     finally
     {
+        // Back into the firmware, written or not; a failed write leaves
+        // the download mode for another try, BOOT + RESET if need be
+        try
+        {
+            if (loader)
+                await loader.after("hard_reset");
+        }
+        catch (e)
+        {
+        }
+
         try
         {
             if (transport)

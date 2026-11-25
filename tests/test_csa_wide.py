@@ -16,6 +16,7 @@ SKETCH = ROOT / "source" / "wlanscout" / "wlanscout.ino"
 
 sys.path.insert(0, str(ROOT / "tools"))
 import check_against_tshark as tshark  # noqa: E402
+from sketch import sketch_text
 
 MAIN = r"""
 static int hexval(char c)
@@ -47,7 +48,7 @@ def wide(tmp_path_factory):
     if not shutil.which("g++"):
         pytest.skip("no g++")
 
-    src = SKETCH.read_text(encoding="utf-8")
+    src = sketch_text()
     text = "\n".join(["#include <cstdint>", "#include <cstring>",
                       "#include <cstdio>",
                       tshark.cut(src, "const uint8_t *findIE("),
@@ -118,7 +119,7 @@ def switch_time(tmp_path_factory):
     if not shutil.which("g++"):
         pytest.skip("no g++")
 
-    src = SKETCH.read_text(encoding="utf-8")
+    src = sketch_text()
     text = "\n".join(["#include <cstdint>", "#include <cstring>",
                       "#include <cstdio>",
                       tshark.cut(src, "const uint8_t *findExtendedIE("),

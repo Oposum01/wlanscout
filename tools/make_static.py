@@ -11,7 +11,8 @@ starts offline.
 
 Usage:
     python3 tools/make_static.py OUTDIR [--page app.html]
-                                 [--firmware BUILDDIR [--parts-dir DIR]]
+                                 [--firmware BUILDDIR [--parts-dir DIR]
+                                  [--firmware-xiao BUILDDIR]]
 
 Writes into OUTDIR:
     index.html (or --page)    the page from index_html.h
@@ -31,9 +32,12 @@ to arduino-cli --build-path) also the flasher:
                               not merged.bin, which is padded to the
                               full flash and would wipe settings
                               and the IE catalog
+With --firmware-xiao (the build for the Seeed Studio XIAO ESP32-C5, BOARD_ID
+"xiao") its parts go into xiao/ next to them, and the flasher
+offers both boards.
 With --parts-dir the flasher loads the parts from that folder, given
 relative to OUTDIR, and they are not copied (tools/make_release.py puts
-them in firmware/).
+them in firmware/ and firmware/xiao/).
 The flasher needs a network (esptool-js and the firmware are not
 kept by the service worker).
 
@@ -183,27 +187,64 @@ def boot_app0():
     return pathlib.Path(found[-1])
 
 
-def add_flasher(out, build, version, boot, parts_dir=None):
-    for name in FIRMWARE_PARTS:
+# The boards with a release of their own: BOARD_ID and the folder of
+# its parts below the firmware folder; the first one is the default
+BOARDS = [("kit", ""), ("xiao", "xiao/")]
+BOARD_MARKER = re.compile(rb"\x01wlanscout-board:([a-z0-9-]+)\x02")
+
+
+def board_of(image):
+    """BOARD_ID from the image's marker, None for a build without one
+    (before 2.8.19)."""
+    match = BOARD_MARKER.search(image)
+
+    return match.group(1).decode() if match else None
+
+
+def check_build(build, version, board, parts=FIRMWARE_PARTS,
+                need_marker=False):
+    for name in parts:
         if not (build / name).is_file():
             sys.exit("%s missing in %s" % (name, build))
 
-    if version.encode() not in (build / "wlanscout.ino.bin").read_bytes():
+    image = (build / "wlanscout.ino.bin").read_bytes()
+
+    if version.encode() not in image:
         sys.exit("wlanscout.ino.bin in %s is not v%s: build it first"
                  % (build, version))
 
+    found = board_of(image)
+
+    if found != board and (found or need_marker):
+        sys.exit("wlanscout.ino.bin in %s is built for %s, not %s: set "
+                 "BOARD_ID in config.h" % (build, found or "no board", board))
+
+
+def add_flasher(out, build, version, boot, parts_dir=None, xiao=None):
+    check_build(build, version, BOARDS[0][0])
+
+    if xiao:
+        check_build(xiao, version, BOARDS[1][0], need_marker=True)
+
     # Next to the page, unless they have a folder of their own
     if not parts_dir:
-        for name in FIRMWARE_PARTS:
-            shutil.copyfile(build / name, out / name)
+        for board_build, folder in ((build, ""), (xiao, "xiao/")):
+            if not board_build:
+                continue
 
-        shutil.copyfile(boot, out / "boot_app0.bin")
+            (out / folder).mkdir(parents=True, exist_ok=True)
+
+            for name in FIRMWARE_PARTS:
+                shutil.copyfile(board_build / name, out / folder / name)
+
+            shutil.copyfile(boot, out / folder / "boot_app0.bin")
 
     page = (ROOT / "tools" / "static" / "flash.html").read_text(
         encoding="utf-8")
 
     page = page.replace("@VERSION@", version).replace(
         "@PARTS_DIR@", parts_dir.rstrip("/") + "/" if parts_dir else "")
+    page = page.replace('"@XIAO@"', "true" if xiao else "false")
 
     (out / "flash.html").write_text(page, encoding="utf-8")
 
@@ -219,6 +260,9 @@ def main():
     parser.add_argument("--boot-app0", metavar="FILE",
                         help="boot_app0.bin (default: from the installed "
                              "esp32 core)")
+    parser.add_argument("--firmware-xiao", metavar="BUILDDIR",
+                        help="the build for the Seeed Studio XIAO ESP32-C5, its "
+                             "parts in xiao/")
     parser.add_argument("--parts-dir", metavar="DIR",
                         help="the flasher loads the parts from DIR, "
                              "relative to OUTDIR, instead of copies "
@@ -253,7 +297,9 @@ def main():
         boot = pathlib.Path(args.boot_app0) if args.boot_app0 else boot_app0()
 
         add_flasher(out, pathlib.Path(args.firmware), version, boot,
-                    args.parts_dir)
+                    args.parts_dir,
+                    pathlib.Path(args.firmware_xiao)
+                    if args.firmware_xiao else None)
 
         print("flasher: flash.html, parts %s" %
               ("in " + args.parts_dir if args.parts_dir else

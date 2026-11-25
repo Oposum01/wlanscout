@@ -5,11 +5,11 @@ the detail, roughly in the order you need them.
 
 **Getting started**
 
-- [Hardware](hardware.md) — board, W5500 wiring, PSRAM, Ethernet cabling
+- [Hardware](hardware.md) — boards, W5500 wiring, memory, Ethernet cabling
 - [Installation](install.md) — board package, Arduino settings, vendor
   table, first start
 - [Sensor on a phone over USB](usb.md) — without Ethernet, from Chrome
-  over WebUSB, and the USB protocol
+  over WebUSB, and the flasher
 
 **Wi-Fi**
 
@@ -23,18 +23,22 @@ the detail, roughly in the order you need them.
 
 **Other radio modes**
 
-- [BLE](ble.md) — advertising scan, passive and active
+- [BLE](ble.md) — advertising scan, passive and active, devices seen
+  most, pcap
 - [IEEE 802.15.4](ieee802154.md) — frame capture and energy waterfall
 
 **Operation**
 
-- [Settings and persistence](settings.md) — what survives a reboot, snapshots
-- [HTTP API and export](api.md) — endpoints, control parameters,
-  multi-sensor JSON export
+- [Settings and persistence](settings.md) — what survives a reboot, the
+  clock, snapshots
+- [HTTP API and export](api.md) — endpoints, the USB transport, file
+  formats, multi-sensor JSON export
 - [Tuning and troubleshooting](tuning.md) — limits, memory, common
   problems
-- [Tests](testing.md) — browser tests for the web page, run without a
-  sensor
+- [Tests](testing.md) — tests for the page and the firmware, run
+  without a sensor
+- [Internals](internals.md) — the sketch's files and design notes, for
+  changing the firmware
 
 **Background**
 

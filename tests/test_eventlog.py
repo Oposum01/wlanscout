@@ -93,3 +93,44 @@ def test_one_page_needs_no_choice(opened):
     rows(opened)
 
     assert log_page(opened)["pages"] == []
+
+
+def ages_at(app, t, ago=None):
+    """The ages shown at second t of a stopped page clock, after an
+    answer sent then with the newest entry ago seconds old"""
+    app.js("t => { performance.now = () => t * 1000; }", t)
+
+    if ago is not None:
+        app.api["log"] = {"total": 1, "entries": [
+            {"at": "2026-10-29 11:25:20", "ago": ago, "boot": 130,
+             "who": "system", "text": "lease"}]}
+        app.js("updateLog()")
+        app.page.wait_for_function("""a => document.querySelector(
+            '#logTable tr') && logEntries[0].ago === a""", arg=ago)
+
+    app.js("tickAll()")
+
+    return app.js("document.querySelector('#logTable tr').cells[1]"
+                  ".textContent")
+
+
+def test_age_ticks_by_one_second(opened):
+    assert ages_at(opened, 1000, ago=15) == "0 min 15 s ago"
+    assert ages_at(opened, 1001) == "0 min 16 s ago"
+    assert ages_at(opened, 1002) == "0 min 17 s ago"
+
+
+def test_age_kept_across_answers(opened):
+    ages_at(opened, 1000, ago=15)
+
+    # 17.8 s later cut to 17 by the sensor: no step back, no step of two
+    assert ages_at(opened, 1002.3, ago=17) == "0 min 17 s ago"
+    assert ages_at(opened, 1003) == "0 min 18 s ago"
+
+    assert opened.errors == []
+
+
+def test_age_set_anew_when_far_off(opened):
+    ages_at(opened, 1000, ago=15)
+
+    assert ages_at(opened, 1010, ago=100) == "1 min 40 s ago"

@@ -1,0 +1,14 @@
+# wlanscout partition table for the XIAO build (8 MB flash, Seeed
+# Studio XIAO ESP32-C5). Two 3.25 MB firmware slots for updates from
+# the page (over USB) and 1.4 MB LittleFS for the element catalog,
+# the event log and the snapshots. nvs and otadata sit where the
+# 16 MB table has them. tools/build_xiao.sh puts it next to the
+# sketch as partitions.csv; partitions_xiao_1slot.csv is the one
+# without updates from the page and with more LittleFS.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x340000,
+app1,     app,  ota_1,   0x350000,0x340000,
+spiffs,   data, spiffs,  0x690000,0x160000,
+coredump, data, coredump,0x7F0000,0x10000,

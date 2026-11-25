@@ -1,5 +1,7 @@
 """The page as a static copy talking to the sensor over WebUSB."""
 
+import pytest
+
 
 def connect(usb):
     usb.page.click("#usbBtn")
@@ -291,6 +293,27 @@ def test_usb_request_gives_up_with_its_signal(usb):
     assert result == "aborted"
 
 
+@pytest.mark.parametrize("damage", ["end", "middle"])
+def test_a_damaged_answer_does_not_hold_up_the_next(usb, damage):
+    # Bytes lost on the way (the firmware's flush() did that until
+    # 2.8.53): that request runs into its timeout, the parser starts
+    # afresh, and the next request is answered as usual
+    connect(usb)
+    result = usb.js("""async (damage) => {
+        window.__usbDamage = damage;
+        let first;
+        try { await usbLink.request('/api/system?damage=1', null,
+                                    {timeout: 1000});
+              first = 'answered'; }
+        catch (e) { first = e.message; }
+        const r = await usbLink.request('/api/system', null,
+                                        {timeout: 3000});
+        return [first, (await r.json()).version]; }""", damage)
+
+    assert result[0] == "USB: no answer for /api/system?damage=1"
+    assert result[1] == usb.api["system"]["version"]
+
+
 def test_closed_link_refuses_requests(usb):
     connect(usb)
     result = usb.js("""async () => { const link = usbLink;
@@ -300,3 +323,90 @@ def test_closed_link_refuses_requests(usb):
         return 'answered'; }""")
 
     assert result == "USB link closed"
+
+
+def test_a_local_copy_counts_as_static(opened):
+    # http://localhost is a secure context too: WebUSB works there. The
+    # page's own location cannot be changed here, so check the rule.
+    src = opened.js("isStaticPage.toString()")
+    assert all(h in src for h in ("localhost", "127.0.0.1", "[::1]"))
+    assert opened.js("isStaticPage()") is False      # http://wlanscout.test
+
+
+SERIAL_FAKE = """async () => {
+    // The board held by the system's serial driver: WebUSB cannot
+    // claim it, Web Serial reaches the same bytes
+    const dev = await navigator.usb.requestDevice({ filters: [] });
+    dev.claimInterface = async () => {
+        throw new DOMException("Unable to claim interface.", "NetworkError");
+    };
+    window.__serialSignals = null;
+    Object.defineProperty(navigator, "serial", { configurable: true, value: {
+        addEventListener() { },
+        async requestPort(options) {
+            window.__serialFilters = options.filters;
+            return {
+                async open() { },
+                async setSignals(s) { window.__serialSignals = s; },
+                readable: new ReadableStream({ async pull(c) {
+                    const r = await dev.transferIn(1, 4096);
+                    if (r.status !== "ok") { c.close(); return; }
+                    c.enqueue(new Uint8Array(r.data.buffer, r.data.byteOffset,
+                                             r.data.byteLength));
+                } }),
+                writable: new WritableStream({ async write(chunk) {
+                    await dev.transferOut(2, chunk);
+                } }),
+                async close() { }
+            };
+        } } });
+}"""
+
+
+def test_serial_driver_holds_the_board(usb):
+    usb.js(SERIAL_FAKE)
+
+    # WebUSB refused: the page points to the Serial button
+    usb.page.click("#usbBtn")
+    usb.page.wait_for_function(
+        "() => document.getElementById('status').innerText"
+        ".includes('use Serial instead')")
+    assert usb.js("usbLink") is None
+
+    # The Serial button: Web Serial, DTR on and RTS off, the same answers
+    usb.js("toggleSerial()")
+    usb.page.wait_for_function("() => usbLink instanceof SerialLink")
+    assert usb.js("__serialSignals") == {"dataTerminalReady": True,
+                                         "requestToSend": False}
+    assert usb.js("__serialFilters") == [{"usbVendorId": 0x303a}]
+    usb.page.wait_for_function("() => networks.length > 0")
+    assert usb.js("serialBtn.innerText") == "Serial \u2713"
+    assert usb.js("usbBtn.innerText") == "USB"
+
+    # Serial again: closed
+    usb.js("toggleSerial()")
+    usb.page.wait_for_function("() => usbLink === null")
+    assert usb.js("serialBtn.innerText") == "Serial"
+
+
+def test_one_link_at_a_time(usb):
+    usb.js(SERIAL_FAKE.replace(
+        'dev.claimInterface = async () => {\n'
+        '        throw new DOMException("Unable to claim interface.", "NetworkError");\n'
+        '    };', ''))
+
+    connect(usb)
+    assert usb.js("usbBtn.innerText") == "USB \u2713"
+
+    # The other button closes the link that is up and opens its own
+    usb.js("toggleSerial()")
+    usb.page.wait_for_function("() => usbLink instanceof SerialLink")
+    assert usb.js("usbBtn.innerText") == "USB"
+    assert usb.js("serialBtn.innerText") == "Serial \u2713"
+
+
+def test_serial_button_only_with_web_serial(usb, opened):
+    # Shown where the browser has Web Serial, on a static copy only
+    has = usb.js("'serial' in navigator")
+    assert (usb.js("getComputedStyle(serialBtn).display") != "none") == has
+    assert opened.js("getComputedStyle(serialBtn).display") == "none"

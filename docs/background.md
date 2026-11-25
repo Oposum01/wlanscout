@@ -33,12 +33,8 @@ and keeps the record after they have gone quiet. When a roaming problem
 comes down to "does this handset even support 802.11r", that is the
 difference between an afternoon of guessing and a glance at a table.
 
-Waiting for a station to join by itself can take a while, so force it:
-click the BSS in the spectrum view and *scan only channel …* in its
-tooltip to lock the sweep to its channel,
-then make the client reconnect — toggle its Wi-Fi, or walk it out of
-range and back. The association request lands straight away, and with
-the sweep parked there it will not be missed.
+To catch a client's association request on purpose, see
+[Catching an association request](stations.md#catching-an-association-request).
 
 **Context rather than raw frames.** Wireshark will show you everything
 and tell you nothing. The point here is the arrangement: the anomaly
@@ -72,9 +68,9 @@ is one you reach for after the problem, not before it, and by then the
 thing you wanted to see has usually stopped happening.
 
 It works as a portable tool too: hang it off a laptop's Ethernet port
-and carry both to wherever the complaint is. Nothing to configure — with
-no DHCP server answering it falls back to a static address by itself, it
-only takes a moment.
+and carry both to wherever the complaint is. Nothing to configure: with
+no DHCP server answering it falls back to a static address, see
+[Installation](install.md).
 
 **Why build it at all.** Nothing comparable turned up for the ESP32-C5
 — there are scanners and sniffers for the older ESP32 parts, but none
